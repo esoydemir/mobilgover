@@ -23,14 +23,15 @@ export default function RootLayout() {
     JetBrainsMono_400Regular, JetBrainsMono_500Medium, JetBrainsMono_600SemiBold,
   });
   const win = useWindowDimensions();
-  const framed = Platform.OS === 'web' && win.width > 520 && win.height > PHONE.height;
-  const [size, setSize] = useState(framed ? PHONE : { width: win.width, height: win.height });
+  const framed = Platform.OS === 'web' && win.width > 520;
+  const frame = { width: PHONE.width, height: Math.min(PHONE.height, win.height - 40) };
+  const [size, setSize] = useState(framed ? frame : { width: win.width, height: win.height });
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
 
   const app = (
     <View
-      style={framed ? { ...PHONE, borderRadius: 46, overflow: 'hidden', backgroundColor: C.bg, boxShadow: '0 0 0 11px #0a0a0a, 0 0 0 13px #1c1c1c, 0 60px 120px rgba(0,0,0,0.7)' } : { flex: 1, backgroundColor: C.bg }}
+      style={framed ? { ...frame, borderRadius: 46, overflow: 'hidden', backgroundColor: C.bg, boxShadow: '0 0 0 11px #0a0a0a, 0 0 0 13px #1c1c1c, 0 60px 120px rgba(0,0,0,0.7)' } : { flex: 1, backgroundColor: C.bg }}
       onLayout={e => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
     >
       <Stack
