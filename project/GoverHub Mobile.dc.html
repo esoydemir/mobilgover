@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400..800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#080808;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-wrap:pretty}
+a{color:#C6FF3D;text-decoration:none}a:hover{color:#CFFF04}
+::-webkit-scrollbar{width:0;height:0}
+@keyframes gh-fade{from{opacity:0}to{opacity:1}}
+@keyframes gh-rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes gh-sheet{from{transform:translateY(103%)}to{transform:translateY(0)}}
+@keyframes gh-pulse{50%{opacity:.3}}
+@keyframes gh-ring{from{stroke-dashoffset:var(--p)}to{stroke-dashoffset:0}}
+@keyframes gh-scan{0%{transform:translateY(0)}100%{transform:translateY(232px)}}
+@keyframes gh-shimmer{0%{opacity:.35}50%{opacity:.9}100%{opacity:.35}}
+</style></helmet>
+<div style="min-height:100vh;display:flex;align-items:flex-start;justify-content:center;gap:32px;padding:56px 24px 80px;background:radial-gradient(ellipse at 50% -10%,#121608 0%,#080808 55%,#050505 100%)">
+
+<div style="width:196px;flex:none;position:sticky;top:56px;display:flex;flex-direction:column;gap:26px;padding-top:8px">
+<div>
+<div style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:rgba(245,245,242,0.32)">GOVERHUB · PROTOTİP</div>
+<div style="margin-top:8px;font-family:'Outfit',sans-serif;font-size:26px;font-weight:600;letter-spacing:-0.035em;color:#F5F5F2;line-height:1.05">Business Mobile</div>
+<div style="margin-top:8px;font-size:12.5px;line-height:1.5;color:rgba(245,245,242,0.55)">Aynı iş grafiği, dört farklı rol. Aşağıdan rol değiştir, telefonda gez.</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:rgba(245,245,242,0.32);margin-bottom:2px">ROL / PERSONA</div>
+<sc-for list="{{ personas }}" as="p" hint-placeholder-count="4">
+<button onClick="{{ p.pick }}" style="display:flex;flex-direction:column;gap:2px;text-align:left;padding:11px 13px;border-radius:14px;cursor:pointer;border:1px solid {{ p.bd }};background:{{ p.bg }};transition:border-color .12s cubic-bezier(.2,.7,.2,1)">
+<span style="font-size:13px;font-weight:600;letter-spacing:-0.01em;color:{{ p.fg }}">{{ p.tr }}</span>
+<span style="font-size:10.5px;color:rgba(245,245,242,0.32)">{{ p.en }}</span>
+</button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.07)">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:rgba(245,245,242,0.32);padding-top:16px">AKIŞLARA ATLA</div>
+<sc-for list="{{ jumps }}" as="j" hint-placeholder-count="6">
+<button onClick="{{ j.go }}" style="text-align:left;font-size:12.5px;font-weight:500;color:rgba(245,245,242,0.55);background:none;border:none;padding:3px 0;cursor:pointer;transition:color .12s" style-hover="color:#C6FF3D">{{ j.label }}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="width:390px;height:844px;flex:none;position:relative;border-radius:46px;background:#050505;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 0 0 11px #0a0a0a,0 0 0 13px #1c1c1c,0 60px 120px rgba(0,0,0,0.7),0 0 60px rgba(198,255,61,0.05)">
+
+<div style="flex:none;height:52px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 30px 7px;font-size:13px;font-weight:600;color:#F5F5F2;z-index:3">
+<span style="font-family:'JetBrains Mono',monospace">09:41</span>
+<span style="display:flex;gap:5px;align-items:center"><svg width="17" height="11" viewBox="0 0 17 11" fill="#F5F5F2"><rect y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" width="3" height="11" rx="1"/></svg><svg width="24" height="11" viewBox="0 0 24 11" fill="none"><rect x="0.5" y="0.5" width="19" height="10" rx="3" stroke="rgba(245,245,242,0.45)"/><rect x="2" y="2" width="14" height="7" rx="1.6" fill="#C6FF3D"/><path d="M21.5 4v3c1.2-.3 1.2-2.7 0-3z" fill="rgba(245,245,242,0.45)"/></svg></span>
+</div>
+
+<sc-if value="{{ chromeBrand }}" hint-placeholder-val="{{ true }}">
+<div style="flex:none;display:flex;align-items:center;gap:11px;padding:4px 22px 14px">
+<div style="width:44px;height:44px;flex:none;border-radius:15px;background:linear-gradient(150deg,#C6FF3D 0%,#9BD718 100%);display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-weight:800;font-size:20px;color:#0A1500;box-shadow:0 6px 22px rgba(198,255,61,0.28)">G</div>
+<div style="flex:1;min-width:0">
+<div style="font-size:11px;font-weight:500;color:rgba(245,245,242,0.55)">{{ greeting }}</div>
+<div style="font-size:16px;font-weight:700;letter-spacing:-0.015em;color:#F5F5F2;margin-top:2px">{{ orgName }}</div>
+</div>
+<button onClick="{{ openSearch }}" style="width:40px;height:40px;flex:none;border:1px solid rgba(255,255,255,0.09);border-radius:999px;background:#141414;color:rgba(245,245,242,0.6);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .12s cubic-bezier(.2,.7,.2,1)" style-hover="border-color:rgba(255,255,255,0.18)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+<button onClick="{{ openNotif }}" style="width:40px;height:40px;flex:none;position:relative;border:1px solid rgba(255,255,255,0.09);border-radius:999px;background:#141414;color:rgba(245,245,242,0.6);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .12s cubic-bezier(.2,.7,.2,1)" style-hover="border-color:rgba(255,255,255,0.18)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6M10.5 20a2 2 0 0 0 3 0"/></svg><span style="position:absolute;top:4px;right:5px;width:8px;height:8px;border-radius:999px;background:#C6FF3D;border:1.5px solid #050505;animation:gh-pulse 2.4s infinite"></span></button>
+</div>
+</sc-if>
+
+<sc-if value="{{ chromeSub }}" hint-placeholder-val="{{ false }}">
+<div style="flex:none;display:flex;align-items:center;gap:12px;padding:4px 22px 14px">
+<button onClick="{{ goBack }}" style="width:36px;height:36px;flex:none;border:1px solid rgba(255,255,255,0.07);border-radius:999px;background:#161616;color:#F5F5F2;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l-6 6 6 6"/></svg></button>
+<div style="flex:1;min-width:0">
+<div style="font-size:16px;font-weight:700;letter-spacing:-0.015em;color:#F5F5F2">{{ subTitle }}</div>
+<div style="font-size:10.5px;color:rgba(245,245,242,0.32);margin-top:1px">{{ subTitleEn }}</div>
+</div>
+</div>
+</sc-if>
+
+<div style="flex:1;overflow-y:auto;padding:0 22px 142px;position:relative;scrollbar-width:none">
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:13px;animation:gh-fade .24s cubic-bezier(.4,0,.2,1)">
+
+<div style="position:relative;border:1px solid rgba(198,255,61,0.14);border-radius:32px;padding:22px;overflow:hidden;background:radial-gradient(120% 90% at 88% 0%,rgba(198,255,61,0.16) 0%,rgba(198,255,61,0.03) 42%,transparent 70%),linear-gradient(165deg,#171d09 0%,#0b0d05 55%,#080808 100%)">
+<div style="display:flex;align-items:center;gap:18px">
+<div style="position:relative;width:96px;height:96px;flex:none">
+<svg width="96" height="96" viewBox="0 0 96 96" style="display:block;transform:rotate(-90deg)">
+<circle cx="48" cy="48" r="41" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"></circle>
+<circle cx="48" cy="48" r="41" fill="none" stroke="#C6FF3D" stroke-width="7" stroke-linecap="round" stroke-dasharray="{{ ringDash }}"></circle>
+</svg>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+<span style="font-family:'Outfit',sans-serif;font-size:30px;font-weight:600;letter-spacing:-0.04em;line-height:1;color:#F5F5F2">{{ doneCount }}</span>
+<span style="font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;color:rgba(245,245,242,0.32)">/5</span>
+</div>
+</div>
+<div style="flex:1;min-width:0">
+<div style="font-size:10.5px;font-weight:600;letter-spacing:0.13em;text-transform:uppercase;color:rgba(245,245,242,0.32)">BUGÜN · 25.08 PAZ</div>
+<div style="font-family:'Outfit',sans-serif;font-size:21px;font-weight:600;letter-spacing:-0.03em;line-height:1.15;color:#F5F5F2;margin-top:9px">{{ remainLabel }}</div>
+<div style="font-size:13px;line-height:1.4;color:rgba(245,245,242,0.55);margin-top:5px">Hiçbiri iki dakikadan uzun değil.</div>
+</div>
+</div>
+<div style="display:flex;justify-content:space-between;gap:6px;margin-top:22px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.07)">
+<sc-for list="{{ week }}" as="d" hint-placeholder-count="7">
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px">
+<span style="width:34px;height:34px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;border:2px solid {{ d.ring }};background:{{ d.bg }};color:{{ d.fg }};box-shadow:{{ d.glow }}">{{ d.mark }}</span>
+<span style="font-size:10px;font-weight:600;letter-spacing:0.04em;color:{{ d.labelFg }}">{{ d.label }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;gap:12px">
+<button onClick="{{ goScore }}" style="flex:1;text-align:left;border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px;cursor:pointer;transition:border-color .12s cubic-bezier(.2,.7,.2,1)" style-hover="border-color:rgba(255,255,255,0.14)">
+<div style="display:flex;align-items:center;gap:7px">
+<span style="width:22px;height:22px;flex:none;border-radius:999px;background:rgba(198,255,61,0.14);color:#C6FF3D;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">◎</span>
+<span style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">UYUM SKORU</span>
+</div>
+<div style="display:flex;align-items:baseline;gap:4px;margin-top:12px">
+<span style="font-family:'Outfit',sans-serif;font-size:34px;font-weight:600;letter-spacing:-0.04em;line-height:1;color:#F5F5F2">{{ score }}</span>
+<span style="font-size:14px;color:rgba(245,245,242,0.32)">/100</span>
+</div>
+<div style="height:5px;border-radius:999px;background:rgba(255,255,255,0.08);margin-top:14px;overflow:hidden"><div style="width:58%;height:100%;border-radius:999px;background:#C6FF3D"></div></div>
+<div style="font-size:11px;font-weight:600;color:#C6FF3D;margin-top:9px">▲ +4 bu hafta</div>
+</button>
+<sc-if value="{{ showRisk }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;border:1px solid rgba(248,113,113,0.22);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="display:flex;align-items:center;gap:7px">
+<span style="width:22px;height:22px;flex:none;border-radius:999px;background:rgba(248,113,113,0.14);color:#F87171;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">₺</span>
+<span style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">CEZA RİSKİ</span>
+</div>
+<div style="display:flex;align-items:baseline;gap:3px;margin-top:12px">
+<span style="font-family:'Outfit',sans-serif;font-size:34px;font-weight:600;letter-spacing:-0.04em;line-height:1;color:#F87171">₺29</span>
+<span style="font-size:14px;color:rgba(248,113,113,0.6)">k</span>
+</div>
+<div style="display:flex;gap:4px;margin-top:14px">
+<span style="flex:1;height:5px;border-radius:999px;background:rgba(248,113,113,0.75)"></span>
+<span style="flex:1;height:5px;border-radius:999px;background:rgba(248,113,113,0.4)"></span>
+<span style="flex:1;height:5px;border-radius:999px;background:rgba(255,255,255,0.08)"></span>
+</div>
+<div style="font-size:11px;color:rgba(245,245,242,0.32);margin-top:9px">2 açık kalem</div>
+</div>
+</sc-if>
+</div>
+
+<div style="border:1px solid rgba(248,113,113,0.3);border-radius:26px;background:linear-gradient(160deg,#1a0b0b 0%,#110d0d 45%,#111111 100%);padding:18px 19px 16px;margin-top:5px">
+<div style="display:flex;align-items:center;gap:7px">
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2.3" stroke-linecap="round"><path d="M12 3 2 20h20L12 3zM12 9.5v4.5M12 17.4v.6"/></svg>
+<span style="font-size:10px;font-weight:700;letter-spacing:0.11em;text-transform:uppercase;color:#F87171">KRİTİK · 3 GÜN KALDI</span>
+</div>
+<div style="font-size:16.5px;font-weight:600;letter-spacing:-0.015em;color:#F5F5F2;margin-top:9px;line-height:1.3">Yangın tüpü periyodik kontrolü süresi doluyor</div>
+<div style="font-size:13px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:6px">Bugün yapmazsan denetimde eksik sayılır. Belgeyi yenilemen veya servis çağırman gerekiyor.</div>
+<div style="display:flex;gap:8px;margin-top:14px">
+<button onClick="{{ goExperts }}" style="flex:1;height:44px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25)">Servis bul</button>
+<button onClick="{{ openWhy }}" style="height:44px;padding:0 18px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:13.5px;font-weight:600;cursor:pointer">Neden?</button>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">
+<span style="font-size:10.5px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(245,245,242,0.32)">BUGÜNÜN GÖREVLERİ</span>
+<button onClick="{{ goTasks }}" style="background:none;border:none;font-size:11px;font-weight:600;letter-spacing:0.08em;color:rgba(245,245,242,0.55);cursor:pointer">TÜMÜ →</button>
+</div>
+<sc-for list="{{ homeTasks }}" as="t" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:13px;border:1px solid rgba(255,255,255,0.07);border-radius:24px;background:#111111;padding:16px 17px">
+<button onClick="{{ t.toggle }}" style="width:28px;height:28px;flex:none;border-radius:999px;cursor:pointer;border:2px solid {{ t.ringColor }};background:{{ t.fill }};display:flex;align-items:center;justify-content:center;padding:0"><span style="font-size:12px;font-weight:800;color:#0A1500;opacity:{{ t.tickOpacity }}">✓</span></button>
+<button onClick="{{ t.open }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;cursor:pointer;padding:0">
+<div style="font-size:14.5px;font-weight:600;letter-spacing:-0.01em;color:#F5F5F2;text-decoration:{{ t.strike }}">{{ t.title }}</div>
+<div style="font-size:12px;color:rgba(245,245,242,0.32);margin-top:3px">{{ t.meta }}</div>
+</button>
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.08em;padding:4px 8px;border-radius:999px;color:{{ t.sevFg }};background:{{ t.sevBg }}">{{ t.sevLabel }}</span>
+</div>
+</sc-for>
+
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px;margin-top:12px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">YAKLAŞAN TAKVİM</div>
+<div style="display:flex;flex-direction:column;gap:0;margin-top:12px">
+<sc-for list="{{ timeline }}" as="e" hint-placeholder-count="3">
+<div style="display:flex;gap:13px;align-items:flex-start">
+<div style="width:52px;flex:none;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:rgba(245,245,242,0.55);padding-top:1px">{{ e.date }}</div>
+<div style="width:9px;flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:7px;height:7px;border-radius:999px;background:{{ e.dot }};margin-top:4px"></span><span style="flex:1;width:1px;background:rgba(255,255,255,0.07)"></span></div>
+<div style="flex:1;padding-bottom:16px">
+<div style="font-size:13.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ e.title }}</div>
+<div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ e.meta }}</div>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+
+<button onClick="{{ goOnb }}" style="text-align:left;border:1px dashed rgba(198,255,61,0.32);border-radius:22px;background:rgba(198,255,61,0.04);padding:16px 18px;margin-top:4px;cursor:pointer">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:#C6FF3D">KURULUM · %62</span>
+<span style="font-size:13px;color:rgba(245,245,242,0.55)">→</span>
+</div>
+<div style="font-size:14.5px;font-weight:600;color:#F5F5F2;margin-top:8px;letter-spacing:-0.01em">3 soruyu daha yanıtla, 6 yükümlülük netleşsin</div>
+<div style="height:3px;border-radius:999px;background:rgba(255,255,255,0.09);margin-top:12px;overflow:hidden"><div style="width:62%;height:100%;background:#C6FF3D"></div></div>
+</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isTasks }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;animation:gh-fade .24s">
+<div style="display:flex;gap:7px;padding-bottom:2px">
+<sc-for list="{{ taskFilters }}" as="f" hint-placeholder-count="3">
+<button onClick="{{ f.pick }}" style="height:34px;padding:0 15px;border-radius:999px;cursor:pointer;font-size:12.5px;font-weight:600;border:1px solid {{ f.bd }};background:{{ f.bg }};color:{{ f.fg }}">{{ f.label }}</button>
+</sc-for>
+</div>
+<sc-for list="{{ visibleTasks }}" as="t" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:13px;border:1px solid rgba(255,255,255,0.07);border-radius:24px;background:#111111;padding:16px 17px">
+<button onClick="{{ t.toggle }}" style="width:28px;height:28px;flex:none;border-radius:999px;cursor:pointer;border:2px solid {{ t.ringColor }};background:{{ t.fill }};display:flex;align-items:center;justify-content:center;padding:0"><span style="font-size:12px;font-weight:800;color:#0A1500;opacity:{{ t.tickOpacity }}">✓</span></button>
+<button onClick="{{ t.open }}" style="flex:1;min-width:0;text-align:left;background:none;border:none;cursor:pointer;padding:0">
+<div style="font-size:14.5px;font-weight:600;letter-spacing:-0.01em;color:#F5F5F2;text-decoration:{{ t.strike }}">{{ t.title }}</div>
+<div style="font-size:12px;color:rgba(245,245,242,0.32);margin-top:3px">{{ t.meta }}</div>
+</button>
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.08em;padding:4px 8px;border-radius:999px;color:{{ t.sevFg }};background:{{ t.sevBg }}">{{ t.sevLabel }}</span>
+</div>
+</sc-for>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.32);padding:8px 4px 0">Sıralama son teslim tarihine göre değil; yasal ağırlık, sağlık riski, gecikme süresi ve tekrar geçmişine göre yapılır.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isTaskDetail }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:13px;animation:gh-rise .24s cubic-bezier(.16,1,.3,1)">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.09em;padding:5px 9px;border-radius:999px;color:{{ dTask.sevFg }};background:{{ dTask.sevBg }}">{{ dTask.sevLabel }}</span>
+<span style="font-size:11.5px;color:rgba(245,245,242,0.32)">{{ dTask.due }}</span>
+</div>
+<div style="font-family:'Outfit',sans-serif;font-size:27px;font-weight:600;letter-spacing:-0.035em;line-height:1.1;color:#F5F5F2">{{ dTask.title }}</div>
+<div style="font-size:14.5px;line-height:1.5;color:rgba(245,245,242,0.55)">{{ dTask.what }}</div>
+
+<button onClick="{{ openWhy }}" style="display:flex;align-items:center;gap:10px;text-align:left;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:14px 16px;cursor:pointer">
+<span style="width:26px;height:26px;flex:none;border-radius:999px;background:rgba(198,255,61,0.14);color:#C6FF3D;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">?</span>
+<span style="flex:1"><span style="display:block;font-size:13.5px;font-weight:600;color:#F5F5F2">Bunu neden yapmam gerekiyor?</span><span style="display:block;font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">Why does this apply to me?</span></span>
+<span style="color:rgba(245,245,242,0.32);font-size:14px">›</span>
+</button>
+
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">KANIT · ZORUNLU</span>
+<span style="font-size:10px;font-weight:600;letter-spacing:0.08em;color:#FCD34D">2 ALAN</span>
+</div>
+
+<div style="margin-top:16px">
+<div style="font-size:13px;font-weight:600;color:#F5F5F2">Ölçülen sıcaklık (°C)</div>
+<div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:3px">Kabul aralığı: 0 – 4 °C</div>
+<div style="display:flex;gap:8px;margin-top:10px">
+<sc-for list="{{ tempChoices }}" as="c" hint-placeholder-count="4">
+<button onClick="{{ c.pick }}" style="flex:1;height:52px;border-radius:14px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;border:1px solid {{ c.bd }};background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</button>
+</sc-for>
+</div>
+</div>
+
+<sc-if value="{{ tempWarn }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:10px;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);border-radius:14px;padding:13px 14px;margin-top:12px;animation:gh-rise .2s">
+<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F87171" stroke-width="2.2" stroke-linecap="round" style="flex:none;margin-top:1px"><path d="M12 3 2 20h20L12 3zM12 9.5v4.5M12 17.4v.6"/></svg>
+<div><div style="font-size:13px;font-weight:600;color:#F87171">Limit aşıldı — uygunsuzluk açılacak</div><div style="font-size:11.5px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:3px">12 °C, 4 °C limitinin üzerinde. Kaydı tamamladığında düzeltici faaliyet otomatik açılır.</div></div>
+</div>
+</sc-if>
+
+<div style="margin-top:18px">
+<div style="font-size:13px;font-weight:600;color:#F5F5F2">Fotoğraf</div>
+<div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:3px">Termometre ekranı görünecek şekilde</div>
+<button onClick="{{ takePhoto }}" style="width:100%;height:96px;margin-top:10px;border-radius:14px;cursor:pointer;border:1px dashed {{ photoBd }};background:{{ photoBg }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:{{ photoFg }}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2 2 0 0 1 5 6.5h1.5l1.2-2h8.6l1.2 2H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8.5z"/><circle cx="12" cy="12.8" r="3.2"/></svg>
+<span style="font-size:12.5px;font-weight:600">{{ photoLabel }}</span>
+</button>
+</div>
+</div>
+
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:15px 16px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">GEÇMİŞ</div>
+<div style="display:flex;gap:5px;margin-top:12px">
+<sc-for list="{{ history }}" as="h" hint-placeholder-count="14"><span title="{{ h.label }}" style="flex:1;height:26px;border-radius:5px;background:{{ h.bg }}"></span></sc-for>
+</div>
+<div style="font-size:11.5px;color:rgba(245,245,242,0.55);margin-top:10px">Son 14 gün · 2 uygunsuzluk. Bu ünite ayda 4. kez limit aştı.</div>
+</div>
+
+<button onClick="{{ completeTask }}" style="height:52px;border:none;border-radius:999px;background:{{ cta.bg }};color:{{ cta.fg }};font-size:14.5px;font-weight:700;cursor:{{ cta.cursor }};opacity:{{ cta.opacity }};box-shadow:0 4px 24px rgba(198,255,61,0.22);margin-top:2px">{{ cta.label }}</button>
+<div style="font-size:11.5px;text-align:center;color:rgba(245,245,242,0.32)">Kanıt tamamlanmadan görev kapatılamaz</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDocs }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;animation:gh-fade .24s">
+<button onClick="{{ goScan }}" style="display:flex;align-items:center;gap:13px;border:none;border-radius:22px;background:#C6FF3D;padding:17px 18px;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25);text-align:left">
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#0A1500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M3 12h18"/></svg>
+<span style="flex:1"><span style="display:block;font-size:15px;font-weight:700;color:#0A1500;letter-spacing:-0.01em">Belge tara</span><span style="display:block;font-size:11.5px;color:rgba(10,21,0,0.6);margin-top:2px">Tarih, numara ve kurumu kendisi okur</span></span>
+</button>
+<div style="display:flex;gap:7px;margin-top:4px">
+<sc-for list="{{ docFilters }}" as="f" hint-placeholder-count="3">
+<button onClick="{{ f.pick }}" style="height:34px;padding:0 14px;border-radius:999px;cursor:pointer;font-size:12.5px;font-weight:600;border:1px solid {{ f.bd }};background:{{ f.bg }};color:{{ f.fg }}">{{ f.label }}</button>
+</sc-for>
+</div>
+<sc-for list="{{ visibleDocs }}" as="d" hint-placeholder-count="6">
+<div style="display:flex;align-items:center;gap:13px;border:1px solid {{ d.bd }};border-radius:22px;background:#111111;padding:14px 16px">
+<span style="width:38px;height:38px;flex:none;border-radius:12px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-size:17px">{{ d.icon }}</span>
+<div style="flex:1;min-width:0">
+<div style="font-size:14px;font-weight:600;letter-spacing:-0.01em;color:#F5F5F2">{{ d.title }}</div>
+<div style="font-size:11.5px;color:{{ d.metaFg }};margin-top:3px">{{ d.meta }}</div>
+</div>
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.07em;padding:4px 8px;border-radius:999px;color:{{ d.stFg }};background:{{ d.stBg }}">{{ d.status }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isScan }}" hint-placeholder-val="{{ false }}">
+<div style="animation:gh-fade .24s">
+<div style="position:relative;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,0.07);background:#0B0B0B;height:300px">
+<div style="position:absolute;inset:26px;border-radius:8px;background:#141414;border:1px solid rgba(255,255,255,0.06);padding:22px 20px;display:flex;flex-direction:column;gap:9px">
+<div style="height:9px;width:58%;border-radius:3px;background:rgba(245,245,242,0.18)"></div>
+<div style="height:6px;width:36%;border-radius:3px;background:rgba(245,245,242,0.1)"></div>
+<div style="height:1px;background:rgba(255,255,255,0.07);margin:6px 0"></div>
+<sc-for list="{{ scanLines }}" as="l" hint-placeholder-count="7"><div style="height:5px;border-radius:3px;background:rgba(245,245,242,0.08);width:{{ l.w }}"></div></sc-for>
+</div>
+<div style="position:absolute;left:26px;right:26px;top:26px;height:2px;background:linear-gradient(90deg,transparent,#C6FF3D,transparent);box-shadow:0 0 24px 6px rgba(198,255,61,0.35);animation:gh-scan 1.6s cubic-bezier(.4,0,.2,1) infinite alternate"></div>
+<sc-for list="{{ corners }}" as="c" hint-placeholder-count="4"><span style="position:absolute;width:22px;height:22px;border:2px solid #C6FF3D;border-radius:3px;{{ c.pos }}"></span></sc-for>
+</div>
+<div style="text-align:center;margin-top:22px">
+<div style="font-size:16px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ scanStatus }}</div>
+<div style="font-size:12.5px;color:rgba(245,245,242,0.32);margin-top:5px">Belgeyi çerçevenin içinde sabit tut</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:9px;margin-top:24px">
+<sc-for list="{{ scanSteps }}" as="s" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:11px;font-size:13px;color:{{ s.fg }};opacity:{{ s.op }}">
+<span style="width:18px;height:18px;flex:none;border-radius:999px;border:1.5px solid {{ s.ring }};background:{{ s.fill }};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#0A1500">{{ s.tick }}</span>
+<span style="font-weight:500">{{ s.label }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isScanConfirm }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-rise .3s cubic-bezier(.16,1,.3,1)">
+<div style="border:1px solid rgba(198,255,61,0.28);border-radius:22px;background:linear-gradient(155deg,#131d04 0%,#050505 70%);padding:18px">
+<div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:999px;background:#C6FF3D;color:#0A1500;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">✓</span><span style="font-size:10px;font-weight:700;letter-spacing:0.11em;text-transform:uppercase;color:#C6FF3D">OKUNDU · İŞLETME KAYIT BELGESİ</span></div>
+<div style="font-size:14px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:10px">7 alan çıkarıldı. Kritik alanları onaylamadan kaydetmiyoruz.</div>
+</div>
+<sc-for list="{{ ocrFields }}" as="f" hint-placeholder-count="5">
+<div style="border:1px solid {{ f.bd }};border-radius:22px;background:#111111;padding:14px 16px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">{{ f.label }}</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;color:{{ f.confFg }}">{{ f.conf }}</span>
+</div>
+<div style="font-size:15px;font-weight:600;color:#F5F5F2;margin-top:7px;letter-spacing:-0.01em">{{ f.value }}</div>
+<sc-if value="{{ f.needsCheck }}" hint-placeholder-val="{{ false }}">
+<div style="font-size:11.5px;color:#FCD34D;margin-top:6px">Düşük güven — kontrol et</div>
+</sc-if>
+</div>
+</sc-for>
+<div style="border:1px solid rgba(147,197,253,0.24);border-radius:18px;background:rgba(147,197,253,0.06);padding:14px 16px">
+<div style="font-size:13.5px;font-weight:600;color:#93C5FD">Bu belge 3 yükümlülüğü etkiliyor</div>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:5px">Onayladığında geçerlilik takibi, yenileme görevi ve 14.02.2027 hatırlatması otomatik kurulur.</div>
+</div>
+<button onClick="{{ confirmOcr }}" style="height:52px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:14.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25);margin-top:4px">Onayla ve kasaya kaydet</button>
+<button onClick="{{ goBack }}" style="height:48px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:13.5px;font-weight:600;cursor:pointer">Elle düzelt</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isExperts }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(255,255,255,0.13);border-radius:26px;background:#111111;padding:16px 17px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">NEYE İHTİYACIN VAR?</div>
+<div style="font-size:16px;font-weight:600;color:#F5F5F2;margin-top:10px;letter-spacing:-0.015em">"{{ proQuery }}"</div>
+<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:14px">
+<sc-for list="{{ proQueries }}" as="q" hint-placeholder-count="3">
+<button onClick="{{ q.pick }}" style="height:31px;padding:0 13px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:500;border:1px solid rgba(255,255,255,0.07);background:#1E1E1E;color:rgba(245,245,242,0.55)">{{ q.label }}</button>
+</sc-for>
+</div>
+</div>
+<div style="border:1px solid rgba(198,255,61,0.22);border-radius:18px;background:rgba(198,255,61,0.04);padding:13px 15px">
+<div style="font-size:12.5px;line-height:1.5;color:rgba(245,245,242,0.55)">Meslek adı bilmene gerek yok. GoverHub sorunu <strong style="color:#C6FF3D;font-weight:600">soğutma teknik servisi</strong> ihtiyacına çevirdi ve işletmene uygun 3 sağlayıcı buldu.</div>
+</div>
+<sc-for list="{{ pros }}" as="p" hint-placeholder-count="3">
+<button onClick="{{ p.open }}" style="display:flex;gap:13px;text-align:left;border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:16px;cursor:pointer">
+<span style="width:46px;height:46px;flex:none;border-radius:14px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-size:17px;font-weight:700;color:rgba(245,245,242,0.55)">{{ p.initials }}</span>
+<span style="flex:1;min-width:0">
+<span style="display:flex;align-items:center;gap:6px"><span style="font-size:14.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ p.name }}</span><svg width="13" height="13" viewBox="0 0 24 24" fill="{{ p.badgeFill }}" style="flex:none"><path d="M12 2l2.4 1.7 2.9-.2 1 2.7 2.4 1.6-.8 2.8.8 2.8-2.4 1.6-1 2.7-2.9-.2L12 21.5l-2.4-1.7-2.9.2-1-2.7L3.3 15.7l.8-2.8-.8-2.8 2.4-1.6 1-2.7 2.9.2z"/><path d="M8.6 12.2l2.2 2.2 4.4-4.4" stroke="#0A1500" stroke-width="2" fill="none" stroke-linecap="round"/></svg></span>
+<span style="display:block;font-size:12px;color:rgba(245,245,242,0.55);margin-top:3px">{{ p.role }}</span>
+<span style="display:flex;gap:12px;margin-top:8px;font-size:11.5px;color:rgba(245,245,242,0.32)"><span style="color:#C6FF3D;font-weight:600">★ {{ p.rating }}</span><span>{{ p.jobs }} iş</span><span>{{ p.dist }}</span></span>
+</span>
+<span style="flex:none;align-self:center;text-align:right"><span style="display:block;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;color:#F5F5F2">{{ p.price }}</span><span style="display:block;font-size:10.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ p.eta }}</span></span>
+</button>
+</sc-for>
+<div style="font-size:11.5px;line-height:1.5;color:rgba(245,245,242,0.32);padding:2px 4px">Sıralama; sorun uyumu, doğrulanmış yetkinlik, mesafe, yanıt hızı ve tamamlanan iş sayısına göre. Sponsorlu içerik ayrıca etiketlenir.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPro }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-rise .26s cubic-bezier(.16,1,.3,1)">
+<div style="display:flex;gap:14px;align-items:center">
+<span style="width:64px;height:64px;flex:none;border-radius:20px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-size:23px;font-weight:700;color:rgba(245,245,242,0.55)">MY</span>
+<div style="flex:1">
+<div style="font-family:'Outfit',sans-serif;font-size:21px;font-weight:600;letter-spacing:-0.03em;color:#F5F5F2">Murat Yıldız</div>
+<div style="font-size:12.5px;color:rgba(245,245,242,0.55);margin-top:3px">Soğutma teknik servisi · 11 yıl</div>
+</div>
+</div>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">DOĞRULAMA · NE KONTROL EDİLDİ</div>
+<div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+<sc-for list="{{ verifications }}" as="v" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:10px">
+<span style="width:19px;height:19px;flex:none;border-radius:999px;background:{{ v.bg }};color:{{ v.fg }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">{{ v.mark }}</span>
+<span style="flex:1;font-size:13.5px;font-weight:500;color:#F5F5F2">{{ v.label }}</span>
+<span style="font-size:11px;color:{{ v.stFg }}">{{ v.status }}</span>
+</div>
+</sc-for>
+</div>
+<div style="font-size:11.5px;line-height:1.45;color:rgba(245,245,242,0.32);margin-top:14px;padding-top:13px;border-top:1px solid rgba(255,255,255,0.07)">Oda yetki belgesi doğrulanmadı. Bu sağlayıcı "GoverHub Onaylı Uzman" değil.</div>
+</div>
+<div style="display:flex;gap:11px">
+<sc-for list="{{ proStats }}" as="s" hint-placeholder-count="3">
+<div style="flex:1;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:14px 15px">
+<div style="font-family:'Outfit',sans-serif;font-size:21px;font-weight:600;color:#F5F5F2;letter-spacing:-0.03em">{{ s.value }}</div>
+<div style="font-size:10px;font-weight:600;letter-spacing:0.09em;text-transform:uppercase;color:rgba(245,245,242,0.32);margin-top:5px">{{ s.label }}</div>
+</div>
+</sc-for>
+</div>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">HİZMET PAKETLERİ</div>
+<sc-for list="{{ services }}" as="s" hint-placeholder-count="2">
+<div style="display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,0.07)">
+<div style="flex:1"><div style="font-size:13.5px;font-weight:600;color:#F5F5F2">{{ s.name }}</div><div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ s.scope }}</div></div>
+<div style="font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;color:#F5F5F2">{{ s.price }}</div>
+</div>
+</sc-for>
+<div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:12px">Uzman geldiğinde işletme QR'ını okutur; giriş–çıkış ve teslim edilen rapor kanıt zincirine yazılır.</div>
+</div>
+<button onClick="{{ bookPro }}" style="height:52px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:14.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25)">{{ bookLabel }}</button>
+<button onClick="{{ openQuote }}" style="height:48px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:13.5px;font-weight:600;cursor:pointer">3 teklif topla</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isScore }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+<div>
+<div style="display:flex;align-items:center;gap:8px">
+<span style="width:8px;height:8px;flex:none;border-radius:999px;background:#FCD34D"></span>
+<span style="font-size:10.5px;font-weight:700;letter-spacing:0.13em;text-transform:uppercase;color:#FCD34D">İZLEME GEREKTİRİYOR</span>
+</div>
+<div style="font-family:'Outfit',sans-serif;font-size:26px;font-weight:600;letter-spacing:-0.035em;line-height:1.12;color:#F5F5F2;margin-top:7px">Beş süreç,<br>tek skor</div>
+</div>
+<div style="flex:none;text-align:right">
+<div style="display:flex;align-items:baseline;gap:3px;justify-content:flex-end">
+<span style="font-family:'Outfit',sans-serif;font-size:46px;font-weight:600;letter-spacing:-0.045em;line-height:.9;color:#F5F5F2">58</span>
+<span style="font-size:17px;font-weight:600;color:rgba(245,245,242,0.32)">/100</span>
+</div>
+<div style="font-size:11.5px;font-weight:600;color:#C6FF3D;margin-top:6px">▲ +4 bu hafta</div>
+</div>
+</div>
+
+<div style="position:relative;width:346px;height:356px;margin:12px 0 0 -3px">
+<svg width="346" height="356" viewBox="0 0 346 356" style="display:block;position:absolute;left:0;top:0">
+<defs>
+<path id="ghOuterTxt" d="M180,14 A176,176 0 0 1 356,190" fill="none"></path>
+<path id="ghInnerTxt" d="M20,190 A160,160 0 0 0 180,350" fill="none"></path>
+</defs>
+<path d="M180,40 A150,150 0 0 1 330,190 A150,150 0 1 1 30,190" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="23" stroke-linecap="round"></path>
+<path d="M180,68 A122,122 0 0 1 302,190 A122,122 0 1 1 58,190" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="23" stroke-linecap="round"></path>
+<path d="M180,96 A94,94 0 0 1 274,190 A94,94 0 1 1 86,190" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="23" stroke-linecap="round"></path>
+<path d="M180,124 A66,66 0 0 1 246,190 A66,66 0 1 1 114,190" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="23" stroke-linecap="round"></path>
+<path d="M180,152 A38,38 0 0 1 218,190 A38,38 0 1 1 142,190" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="23" stroke-linecap="round"></path>
+<path d="M180,40 A150,150 0 0 1 330,190 A150,150 0 1 1 30,190" pathLength="1" fill="none" stroke="#C6FF3D" stroke-width="23" stroke-linecap="round" stroke-dasharray="0.82 1" style="--p:0.82;animation:gh-ring 1.05s cubic-bezier(.16,1,.3,1) 0.08s both"></path>
+<path d="M180,68 A122,122 0 0 1 302,190 A122,122 0 1 1 58,190" pathLength="1" fill="none" stroke="#FCD34D" stroke-width="23" stroke-linecap="round" stroke-dasharray="0.75 1" style="--p:0.75;animation:gh-ring 1.05s cubic-bezier(.16,1,.3,1) 0.14s both"></path>
+<path d="M180,96 A94,94 0 0 1 274,190 A94,94 0 1 1 86,190" pathLength="1" fill="none" stroke="#FCD34D" stroke-width="23" stroke-linecap="round" stroke-dasharray="0.75 1" style="--p:0.75;animation:gh-ring 1.05s cubic-bezier(.16,1,.3,1) 0.2s both"></path>
+<path d="M180,124 A66,66 0 0 1 246,190 A66,66 0 1 1 114,190" pathLength="1" fill="none" stroke="#C6FF3D" stroke-width="23" stroke-linecap="round" stroke-dasharray="0.85 1" style="--p:0.85;animation:gh-ring 1.05s cubic-bezier(.16,1,.3,1) 0.26s both"></path>
+<path d="M180,152 A38,38 0 0 1 218,190 A38,38 0 1 1 142,190" pathLength="1" fill="none" stroke="#F87171" stroke-width="23" stroke-linecap="round" stroke-dasharray="0.43 1" style="--p:0.43;animation:gh-ring 1.05s cubic-bezier(.16,1,.3,1) 0.32s both"></path>
+<text font-size="9.5" font-weight="700" letter-spacing="4.4" fill="rgba(245,245,242,0.28)" font-family="Inter, sans-serif"><textPath href="#ghOuterTxt" startOffset="17%">TAM UYUM</textPath></text>
+<text font-size="9.5" font-weight="700" letter-spacing="4.4" fill="rgba(245,245,242,0.2)" font-family="Inter, sans-serif"><textPath href="#ghInnerTxt" startOffset="12%">EKSİK İŞ</textPath></text>
+</svg>
+<sc-for list="{{ arcLabels }}" as="a" hint-placeholder-count="5">
+<div style="position:absolute;left:0;top:{{ a.top }};width:180px;height:28px;display:flex;align-items:center;padding:0 14px 0 12px;background:#0A0A0A;border-top:3px solid {{ a.color }};border-radius:0 14px 0 0;pointer-events:none">
+<span style="flex:1;text-align:left;font-size:12.5px;font-weight:800;letter-spacing:0.02em;color:#F5F5F2;white-space:nowrap">{{ a.label }}</span>
+<span style="width:42px;flex:none;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:{{ a.color }}">{{ a.value }}</span>
+<span style="width:30px;flex:none;text-align:right;font-size:10px;font-weight:700;color:rgba(245,245,242,0.32)">{{ a.unit }}</span>
+</div>
+</sc-for>
+</div>
+
+<button onClick="{{ openCalc }}" style="align-self:center;display:flex;align-items:center;gap:7px;background:none;border:none;cursor:pointer;color:#C6FF3D;font-size:12.5px;font-weight:600;padding:2px 0 6px">
+<span style="width:15px;height:15px;border-radius:999px;border:1px solid #C6FF3D;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700">i</span>Nasıl hesaplanır?
+</button>
+
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:2px">
+<sc-for list="{{ arcLabels }}" as="a" hint-placeholder-count="5">
+<button onClick="{{ a.go }}" style="display:flex;align-items:center;gap:12px;height:52px;padding:0 16px;border:1px solid rgba(255,255,255,0.07);border-radius:18px;background:#111111;cursor:pointer;transition:border-color .12s cubic-bezier(.2,.7,.2,1)" style-hover="border-color:rgba(255,255,255,0.14)">
+<span style="width:4px;height:22px;flex:none;border-radius:999px;background:{{ a.color }}"></span>
+<span style="flex:1;text-align:left;font-size:14px;font-weight:600;letter-spacing:-0.01em;color:#F5F5F2">{{ a.label }}</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:{{ a.color }}">{{ a.value }}</span>
+<span style="font-size:11px;font-weight:600;color:rgba(245,245,242,0.32);min-width:26px;text-align:right">{{ a.unit }}</span>
+<span style="color:rgba(245,245,242,0.32);font-size:15px">›</span>
+</button>
+</sc-for>
+</div>
+
+<div style="font-size:14px;line-height:1.55;color:#F5F5F2">Skor bu hafta 4 puan arttı — hijyen eğitimi tamamlandı. En dış halka belgeler, en iç halka ekipman bakımı. Yay ne kadar kısaysa o süreçte iş o kadar birikmiş. Şu an en zayıf halka <strong style="color:#F87171;font-weight:600">ekipman bakımı</strong>: 14 kalemde 6'sı tamam.</div>
+
+<button onClick="{{ goEquipFix }}" style="display:flex;align-items:center;gap:13px;text-align:left;border:1px solid rgba(248,113,113,0.28);border-radius:26px;background:linear-gradient(160deg,#1a0b0b 0%,#111111 60%);padding:16px 17px;cursor:pointer;margin-top:2px">
+<span style="width:38px;height:38px;flex:none;border-radius:999px;background:rgba(248,113,113,0.14);color:#F87171;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800">!</span>
+<span style="flex:1"><span style="display:block;font-size:14.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">Ekipman halkasını kapat</span><span style="display:block;font-size:12px;color:rgba(245,245,242,0.55);margin-top:3px">2 gecikmiş kontrol · tahmini +11 puan</span></span>
+<span style="color:rgba(245,245,242,0.32);font-size:15px">›</span>
+</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMore }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;animation:gh-fade .24s">
+<sc-for list="{{ moreItems }}" as="m" hint-placeholder-count="6">
+<button onClick="{{ m.go }}" style="display:flex;align-items:center;gap:13px;text-align:left;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:15px 16px;cursor:pointer">
+<span style="width:36px;height:36px;flex:none;border-radius:12px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-size:16px">{{ m.icon }}</span>
+<span style="flex:1"><span style="display:block;font-size:14px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ m.label }}</span><span style="display:block;font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ m.sub }}</span></span>
+<sc-if value="{{ m.badge }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:999px;background:rgba(248,113,113,0.14);color:#F87171">{{ m.badgeText }}</span></sc-if>
+<span style="color:rgba(245,245,242,0.32);font-size:15px">›</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPersonnel }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(252,211,77,0.26);border-radius:18px;background:rgba(252,211,77,0.05);padding:14px 16px">
+<div style="font-size:13.5px;font-weight:600;color:#FCD34D">2 personelin hijyen eğitimi eksik</div>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:4px">Eğitim kanunu bilmene gerek yok — tek dokunuşla ata.</div>
+<button onClick="{{ openTraining }}" style="height:40px;padding:0 16px;margin-top:12px;border:none;border-radius:999px;background:#FCD34D;color:#1A1400;font-size:12.5px;font-weight:700;cursor:pointer">İkisine de ata</button>
+</div>
+<sc-for list="{{ staff }}" as="s" hint-placeholder-count="4">
+<div style="display:flex;gap:12px;align-items:center;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:14px 16px">
+<span style="width:40px;height:40px;flex:none;border-radius:13px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;color:rgba(245,245,242,0.55)">{{ s.initials }}</span>
+<div style="flex:1;min-width:0">
+<div style="font-size:14px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ s.name }}</div>
+<div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ s.role }}</div>
+<div style="display:flex;gap:6px;margin-top:8px">
+<sc-for list="{{ s.chips }}" as="c" hint-placeholder-count="2"><span style="font-size:10px;font-weight:600;padding:3px 7px;border-radius:999px;color:{{ c.fg }};background:{{ c.bg }}">{{ c.label }}</span></sc-for>
+</div>
+</div>
+<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(245,245,242,0.32)">{{ s.tasks }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEquip }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;animation:gh-fade .24s">
+<sc-for list="{{ equipment }}" as="e" hint-placeholder-count="4">
+<div style="border:1px solid {{ e.bd }};border-radius:26px;background:#111111;padding:16px">
+<div style="display:flex;gap:12px;align-items:center">
+<span style="width:40px;height:40px;flex:none;border-radius:13px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-size:17px">{{ e.icon }}</span>
+<div style="flex:1;min-width:0">
+<div style="font-size:14.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ e.name }}</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:rgba(245,245,242,0.32);margin-top:3px">{{ e.serial }}</div>
+</div>
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.07em;padding:4px 8px;border-radius:999px;color:{{ e.stFg }};background:{{ e.stBg }}">{{ e.status }}</span>
+</div>
+<div style="display:flex;gap:8px;margin-top:14px">
+<button onClick="{{ goQr }}" style="flex:1;height:40px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:12.5px;font-weight:600;cursor:pointer">QR göster</button>
+<button onClick="{{ e.fault }}" style="flex:1;height:40px;border:1px solid rgba(248,113,113,0.3);border-radius:999px;background:rgba(248,113,113,0.08);color:#F87171;font-size:12.5px;font-weight:600;cursor:pointer">Arıza bildir</button>
+</div>
+<div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:11px">{{ e.next }}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isQr }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;align-items:center;animation:gh-fade .24s;padding-top:14px">
+<div style="width:236px;height:236px;border-radius:26px;background:#F5F5F2;padding:18px;display:flex;flex-wrap:wrap;gap:0;box-shadow:0 20px 60px rgba(0,0,0,0.6)">
+<sc-for list="{{ qrCells }}" as="q" hint-placeholder-count="100"><span style="width:10%;height:10%;background:{{ q.bg }}"></span></sc-for>
+</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(245,245,242,0.32);margin-top:20px">GH-EQ-4471-KDK</div>
+<div style="font-size:17px;font-weight:600;color:#F5F5F2;margin-top:12px;letter-spacing:-0.015em">Buzdolabı · Mutfak arka</div>
+<div style="font-size:13px;line-height:1.5;color:rgba(245,245,242,0.55);text-align:center;margin-top:8px;max-width:270px">Personel okuttuğunda günün kontrolleri açılır. Uzman okuttuğunda ziyaret giriş kaydı oluşur.</div>
+<div style="width:100%;display:flex;flex-direction:column;gap:9px;margin-top:26px">
+<sc-for list="{{ qrActions }}" as="a" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:11px;border:1px solid rgba(255,255,255,0.07);border-radius:20px;background:#111111;padding:13px 15px">
+<span style="font-size:15px">{{ a.icon }}</span><span style="flex:1;font-size:13.5px;font-weight:500;color:#F5F5F2">{{ a.label }}</span><span style="color:rgba(245,245,242,0.32);font-size:14px">›</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isOnb }}" hint-placeholder-val="{{ false }}">
+<div style="animation:gh-fade .24s">
+<div style="display:flex;gap:5px;margin-bottom:22px">
+<sc-for list="{{ onbSegs }}" as="s" hint-placeholder-count="5"><div style="flex:1;height:3px;border-radius:999px;background:{{ s.bg }}"></div></sc-for>
+</div>
+<div style="font-size:10.5px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#C6FF3D">{{ onb.step }}</div>
+<div style="font-family:'Outfit',sans-serif;font-size:27px;font-weight:600;letter-spacing:-0.035em;line-height:1.12;color:#F5F5F2;margin-top:10px">{{ onb.title }}</div>
+<div style="font-size:14.5px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:10px">{{ onb.body }}</div>
+
+<div style="display:flex;flex-direction:column;gap:10px;margin-top:22px">
+<sc-for list="{{ onb.options }}" as="o" hint-placeholder-count="3">
+<button onClick="{{ o.pick }}" style="display:flex;align-items:center;gap:12px;text-align:left;border:1px solid {{ o.bd }};border-radius:18px;background:{{ o.bg }};padding:16px;cursor:pointer">
+<sc-if value="{{ o.hasIcon }}" hint-placeholder-val="{{ true }}"><span style="width:34px;height:34px;flex:none;border-radius:11px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-size:16px">{{ o.icon }}</span></sc-if>
+<span style="flex:1"><span style="display:block;font-size:14.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ o.label }}</span><span style="display:block;font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:3px">{{ o.sub }}</span></span>
+<sc-if value="{{ o.picked }}" hint-placeholder-val="{{ false }}"><span style="width:21px;height:21px;flex:none;border-radius:999px;background:#C6FF3D;color:#0A1500;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">✓</span></sc-if>
+</button>
+</sc-for>
+</div>
+
+<sc-if value="{{ onb.isResult }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;margin-top:20px">
+<sc-for list="{{ onbResults }}" as="r" hint-placeholder-count="4">
+<div style="display:flex;gap:12px;align-items:center;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:15px 16px;animation:gh-rise .4s cubic-bezier(.16,1,.3,1)">
+<span style="font-family:'Outfit',sans-serif;font-size:23px;font-weight:600;letter-spacing:-0.03em;color:#C6FF3D;min-width:34px">{{ r.n }}</span>
+<span style="flex:1"><span style="display:block;font-size:13.5px;font-weight:600;color:#F5F5F2">{{ r.label }}</span><span style="display:block;font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ r.sub }}</span></span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<button onClick="{{ onbNext }}" style="width:100%;height:52px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:14.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25);margin-top:24px">{{ onb.cta }}</button>
+<button onClick="{{ onbSkip }}" style="width:100%;height:46px;border:none;background:none;color:rgba(245,245,242,0.32);font-size:13px;font-weight:500;cursor:pointer;margin-top:2px">{{ onb.skip }}</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isHq }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:28px;background:linear-gradient(155deg,#1a2207 0%,#0a0d04 60%,#050505 100%);padding:20px">
+<div style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(245,245,242,0.32)">7 ŞUBE · MERKEZ GÖRÜNÜMÜ</div>
+<div style="display:flex;align-items:baseline;gap:6px;margin-top:12px"><span style="font-family:'Outfit',sans-serif;font-size:52px;font-weight:600;letter-spacing:-0.04em;line-height:.9;color:#F5F5F2">68</span><span style="font-size:22px;color:rgba(245,245,242,0.32)">/100</span></div>
+<div style="font-size:14px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:9px">ortalama uyum. <strong style="color:#F87171;font-weight:600">Bostancı</strong> iki haftadır geriliyor.</div>
+</div>
+<sc-for list="{{ branches }}" as="b" hint-placeholder-count="5">
+<div style="display:flex;align-items:center;gap:12px;border:1px solid {{ b.bd }};border-radius:22px;background:#111111;padding:14px 16px">
+<span style="width:5px;height:34px;flex:none;border-radius:999px;background:{{ b.fg }}"></span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ b.name }}</div><div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:3px">{{ b.meta }}</div></div>
+<span style="font-family:'Outfit',sans-serif;font-size:19px;font-weight:600;color:{{ b.fg }};letter-spacing:-0.03em">{{ b.score }}</span>
+</div>
+</sc-for>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:15px 16px">
+<div style="font-size:13.5px;font-weight:600;color:#F5F5F2">Şube standardını kopyala</div>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:5px">"Kafe Standardı" şablonu: 14 görev, 6 form, 9 belge beklentisi. Yeni şubeye tek dokunuşla uygula.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isEmployee }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:32px;background:#111111;padding:20px">
+<div style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(245,245,242,0.32)">VARDİYA · 09:00 – 17:00</div>
+<div style="font-family:'Outfit',sans-serif;font-size:24px;font-weight:600;letter-spacing:-0.03em;color:#F5F5F2;margin-top:12px">Günaydın, Elif</div>
+<div style="font-size:14px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:6px">Sana atanmış <strong style="color:#F5F5F2;font-weight:600">3 kontrol</strong> var. Hepsi 2 dakikadan kısa.</div>
+<button onClick="{{ checkIn }}" style="width:100%;height:48px;margin-top:16px;border:none;border-radius:999px;background:{{ checkinBg }};color:{{ checkinFg }};font-size:13.5px;font-weight:700;cursor:pointer">{{ checkinLabel }}</button>
+</div>
+<sc-for list="{{ empTasks }}" as="t" hint-placeholder-count="3">
+<button onClick="{{ t.open }}" style="display:flex;align-items:center;gap:13px;text-align:left;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:15px 16px;cursor:pointer">
+<span style="width:36px;height:36px;flex:none;border-radius:12px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-size:16px">{{ t.icon }}</span>
+<span style="flex:1"><span style="display:block;font-size:14px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ t.title }}</span><span style="display:block;font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ t.meta }}</span></span>
+<span style="color:rgba(245,245,242,0.32);font-size:15px">›</span>
+</button>
+</sc-for>
+<div style="font-size:11.5px;line-height:1.5;color:rgba(245,245,242,0.32);padding:4px">Personel yalnızca kendisine atanan işi, kendi belgelerini ve eğitimlerini görür. Ceza tutarı, skor ve diğer personelin verisi görünmez.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isProvider }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:32px;background:#111111;padding:20px">
+<div style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(245,245,242,0.32)">BUGÜN · 3 İŞ</div>
+<div style="font-family:'Outfit',sans-serif;font-size:24px;font-weight:600;letter-spacing:-0.03em;color:#F5F5F2;margin-top:12px">Sıradaki: Kahve Durağı</div>
+<div style="font-size:14px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:6px">Soğutma arızası · Kadıköy · 11:30. Vardığında işletme QR'ını okut.</div>
+<button onClick="{{ goQr }}" style="width:100%;height:48px;margin-top:16px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25)">QR ile giriş yap</button>
+</div>
+<div style="border:1px solid rgba(252,211,77,0.26);border-radius:18px;background:rgba(252,211,77,0.05);padding:15px 16px">
+<div style="font-size:13.5px;font-weight:600;color:#FCD34D">Yetki belgen 24 gün sonra doluyor</div>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:5px">Yenilenmezse "Soğutma Bakım Sözleşmesi" paketi satıştan çıkar. Profilin silinmez, yenileme durumuna geçer.</div>
+</div>
+<sc-for list="{{ provRows }}" as="r" hint-placeholder-count="3">
+<div style="display:flex;align-items:center;gap:12px;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:14px 16px">
+<div style="flex:1"><div style="font-size:13.5px;font-weight:600;color:#F5F5F2">{{ r.label }}</div><div style="font-size:11.5px;color:rgba(245,245,242,0.32);margin-top:2px">{{ r.sub }}</div></div>
+<div style="font-family:'Outfit',sans-serif;font-size:17px;font-weight:600;color:#F5F5F2;letter-spacing:-0.03em">{{ r.value }}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+
+<sc-if value="{{ isForm }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="display:flex;align-items:center;justify-content:space-between;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:13px 16px">
+<div><div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">FORM SÜRÜMÜ</div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#F5F5F2;margin-top:5px">HIJ-KTRL v4 · 12.06.2026</div></div>
+<div style="text-align:right"><div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">PUAN</div><div style="font-family:'Outfit',sans-serif;font-size:19px;font-weight:600;color:{{ formScoreFg }};margin-top:3px;letter-spacing:-0.03em">{{ formScore }}</div></div>
+</div>
+<sc-for list="{{ formQs }}" as="q" hint-placeholder-count="4">
+<div style="border:1px solid {{ q.bd }};border-radius:26px;background:#111111;padding:16px 17px">
+<div style="display:flex;gap:8px;align-items:baseline">
+<span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(245,245,242,0.32);flex:none">{{ q.no }}</span>
+<span style="flex:1;font-size:14.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em;line-height:1.35">{{ q.label }}</span>
+<sc-if value="{{ q.required }}" hint-placeholder-val="{{ true }}"><span style="flex:none;font-size:9.5px;font-weight:700;letter-spacing:0.08em;color:#FCD34D">ZORUNLU</span></sc-if>
+</div>
+<sc-if value="{{ q.isCond }}" hint-placeholder-val="{{ false }}">
+<div style="font-size:11.5px;color:#93C5FD;margin-top:7px">"Evet" yanıtı verdiğin için bu soru eklendi</div>
+</sc-if>
+<div style="display:flex;gap:8px;margin-top:13px">
+<sc-for list="{{ q.opts }}" as="o" hint-placeholder-count="2">
+<button onClick="{{ o.pick }}" style="flex:1;height:46px;border-radius:14px;cursor:pointer;font-size:13px;font-weight:600;border:1px solid {{ o.bd }};background:{{ o.bg }};color:{{ o.fg }}">{{ o.label }}</button>
+</sc-for>
+</div>
+<sc-if value="{{ q.flagged }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:9px;align-items:flex-start;border:1px solid rgba(248,113,113,0.3);background:rgba(248,113,113,0.08);border-radius:14px;padding:12px 13px;margin-top:11px;animation:gh-rise .2s">
+<span style="color:#F87171;font-size:12px;font-weight:800;flex:none">!</span>
+<span style="flex:1;font-size:12px;line-height:1.45;color:rgba(245,245,242,0.55)"><strong style="color:#F87171;font-weight:600">Uygunsuzluk açılacak.</strong> Bu yanıt kritik kontrol noktası — formu gönderdiğinde düzeltici faaliyet oluşur.</span>
+</div>
+</sc-if>
+</div>
+</sc-for>
+<button onClick="{{ submitForm }}" style="height:52px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:14.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25);margin-top:4px">Formu gönder</button>
+<div style="font-size:11.5px;line-height:1.5;color:rgba(245,245,242,0.32);text-align:center">Gönderilen form, o anki sürümüne kilitlenir. Sonradan form değişse bile bu kayıt v4 olarak kalır.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isNcr }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(248,113,113,0.3);border-radius:28px;background:linear-gradient(155deg,#1a0a0a 0%,#0a0505 60%,#050505 100%);padding:20px">
+<div style="display:flex;align-items:center;gap:7px">
+<span style="width:8px;height:8px;border-radius:999px;background:#F87171"></span>
+<span style="font-size:10px;font-weight:700;letter-spacing:0.11em;text-transform:uppercase;color:#F87171">KRİTİK · AÇIK · 4. TEKRAR</span>
+</div>
+<div style="font-family:'Outfit',sans-serif;font-size:23px;font-weight:600;letter-spacing:-0.03em;line-height:1.15;color:#F5F5F2;margin-top:12px">Soğuk zincir limit aşımı</div>
+<div style="font-size:13.5px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:8px">Buzdolabı · Mutfak arka · 12 °C ölçüldü (limit 4 °C). Aynı ünitede bu ay 4. kez. Risk seviyesi yükseltildi.</div>
+</div>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">DÜZELTİCİ FAALİYET AKIŞI</div>
+<div style="display:flex;flex-direction:column;margin-top:14px">
+<sc-for list="{{ capa }}" as="c" hint-placeholder-count="5">
+<div style="display:flex;gap:12px;align-items:flex-start">
+<div style="width:22px;flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch">
+<span style="width:22px;height:22px;flex:none;border-radius:999px;border:1.5px solid {{ c.ring }};background:{{ c.fill }};color:{{ c.markFg }};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">{{ c.mark }}</span>
+<span style="flex:1;width:1px;background:rgba(255,255,255,0.07)"></span>
+</div>
+<div style="flex:1;padding-bottom:18px">
+<div style="font-size:13.5px;font-weight:600;color:{{ c.fg }};letter-spacing:-0.01em">{{ c.label }}</div>
+<div style="font-size:11.5px;line-height:1.45;color:rgba(245,245,242,0.32);margin-top:3px">{{ c.meta }}</div>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="font-size:11.5px;line-height:1.5;color:rgba(245,245,242,0.32);padding-top:13px;border-top:1px solid rgba(255,255,255,0.07)">Küçük işletmede akış üç adımda kapanır. Yüksek riskli operasyonda kök neden ve yönetici doğrulaması da istenir.</div>
+</div>
+<button onClick="{{ goExperts }}" style="height:52px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:14.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25)">Teknik servis çağır</button>
+<button onClick="{{ suggestReplace }}" style="height:48px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:13.5px;font-weight:600;cursor:pointer">Ekipman değişimi değerlendir</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRoadmap }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="font-size:14.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">Kafe açılışı · 7 resmî süreç</div>
+<div style="font-size:12.5px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:6px">3'ü tamam, 1'i sürüyor, 3'ü başlamadı. Doğrulanmadan hiçbir adımı "zorunlu" diye göstermiyoruz.</div>
+<div style="display:flex;gap:5px;margin-top:14px">
+<sc-for list="{{ roadSegs }}" as="s" hint-placeholder-count="7"><div style="flex:1;height:4px;border-radius:999px;background:{{ s.bg }}"></div></sc-for>
+</div>
+</div>
+<sc-for list="{{ roadmap }}" as="r" hint-placeholder-count="4">
+<div style="border:1px solid {{ r.bd }};border-radius:26px;background:#111111;padding:16px 17px">
+<div style="display:flex;align-items:center;gap:11px">
+<span style="width:22px;height:22px;flex:none;border-radius:999px;border:1.5px solid {{ r.ring }};background:{{ r.fill }};color:{{ r.markFg }};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800">{{ r.mark }}</span>
+<span style="flex:1;font-size:14.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ r.name }}</span>
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.07em;padding:4px 8px;border-radius:999px;color:{{ r.stFg }};background:{{ r.stBg }}">{{ r.status }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px;margin-top:13px">
+<sc-for list="{{ r.items }}" as="i" hint-placeholder-count="3">
+<div style="display:flex;gap:9px;align-items:baseline"><span style="color:{{ i.fg }};font-size:11px;flex:none">{{ i.mark }}</span><span style="flex:1;font-size:12.5px;line-height:1.4;color:rgba(245,245,242,0.55)">{{ i.label }}</span></div>
+</sc-for>
+</div>
+<div style="display:flex;gap:14px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.07)">
+<span style="font-size:11px;color:rgba(245,245,242,0.32)">{{ r.where }}</span>
+<span style="margin-left:auto;font-size:11px;color:rgba(245,245,242,0.32)">{{ r.dur }}</span>
+</div>
+</div>
+</sc-for>
+<div style="border:1px dashed rgba(198,255,61,0.32);border-radius:22px;background:rgba(198,255,61,0.04);padding:16px 17px">
+<div style="font-size:14px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">Bu süreci benim için yürüt</div>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:5px">Uygun bir danışmanla eşleştirir, evrak takibini GoverHub üzerinden yürütürüz.</div>
+<button onClick="{{ goExperts }}" style="height:42px;padding:0 18px;margin-top:13px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:12.5px;font-weight:700;cursor:pointer">Uygun danışmanları gör</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isTraining }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(147,197,253,0.24);border-radius:18px;background:rgba(147,197,253,0.06);padding:14px 16px">
+<div style="font-size:13px;font-weight:600;color:#93C5FD">İki belge türü aynı şey değil</div>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:5px">GoverHub katılım belgesi eğitimin tamamlandığını gösterir. Resmî sertifika yalnızca yetkili kurumdan alınır — hangisi olduğunu her kartta yazıyoruz.</div>
+</div>
+<sc-for list="{{ courses }}" as="c" hint-placeholder-count="3">
+<div style="border:1px solid {{ c.bd }};border-radius:26px;background:#111111;padding:16px 17px">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.08em;padding:4px 8px;border-radius:999px;color:{{ c.kindFg }};background:{{ c.kindBg }}">{{ c.kind }}</span>
+<span style="font-size:11px;color:rgba(245,245,242,0.32)">{{ c.dur }}</span>
+</div>
+<div style="font-size:15px;font-weight:600;color:#F5F5F2;margin-top:11px;letter-spacing:-0.015em">{{ c.name }}</div>
+<div style="font-size:12.5px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:5px">{{ c.cert }}</div>
+<div style="height:3px;border-radius:999px;background:rgba(255,255,255,0.08);margin-top:14px;overflow:hidden"><div style="width:{{ c.pct }};height:100%;background:#C6FF3D"></div></div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+<span style="flex:1;font-size:11.5px;color:rgba(245,245,242,0.32)">{{ c.progress }}</span>
+<button onClick="{{ c.act }}" style="height:38px;padding:0 16px;border:none;border-radius:999px;background:{{ c.ctaBg }};color:{{ c.ctaFg }};font-size:12.5px;font-weight:700;cursor:pointer">{{ c.cta }}</button>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isQuotes }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="font-size:12.5px;line-height:1.5;color:rgba(245,245,242,0.55);padding:0 2px">Aynı kapsam, aynı alanlar. Dahil olmayan işler ayrı satırda — sürpriz maliyet çıkmasın.</div>
+<sc-for list="{{ quotes }}" as="q" hint-placeholder-count="3">
+<div style="border:1px solid {{ q.bd }};border-radius:26px;background:#111111;padding:16px 17px">
+<div style="display:flex;align-items:center;gap:10px">
+<span style="width:34px;height:34px;flex:none;border-radius:11px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;color:rgba(245,245,242,0.55)">{{ q.initials }}</span>
+<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ q.name }}</div><div style="font-size:11px;color:rgba(245,245,242,0.32);margin-top:2px">{{ q.meta }}</div></div>
+<div style="font-family:'Outfit',sans-serif;font-size:19px;font-weight:600;color:#F5F5F2;letter-spacing:-0.03em">{{ q.price }}</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+<sc-for list="{{ q.rows }}" as="r" hint-placeholder-count="4">
+<div style="display:flex;gap:12px;font-size:12px"><span style="width:96px;flex:none;color:rgba(245,245,242,0.32)">{{ r.k }}</span><span style="flex:1;color:{{ r.fg }};line-height:1.4">{{ r.v }}</span></div>
+</sc-for>
+</div>
+<button onClick="{{ q.accept }}" style="width:100%;height:44px;margin-top:15px;border:none;border-radius:999px;background:{{ q.ctaBg }};color:{{ q.ctaFg }};font-size:13px;font-weight:700;cursor:pointer">{{ q.cta }}</button>
+</div>
+</sc-for>
+<div style="font-size:11.5px;line-height:1.5;color:rgba(245,245,242,0.32);padding:0 2px">Teklif geçerlilik süresi dolduğunda otomatik kapanır. Kabul ettiğinde ödeme ve QR girişli servis kaydı başlar.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isVisit }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<div style="border:1px solid rgba(198,255,61,0.28);border-radius:28px;background:linear-gradient(155deg,#131d04 0%,#050505 70%);padding:20px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:#C6FF3D">SERVİS · TAMAMLANDI</div>
+<div style="font-family:'Outfit',sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.03em;color:#F5F5F2;margin-top:11px">Murat Yıldız · soğutma onarımı</div>
+<div style="font-size:13px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:7px">Termostat değişti, ünite 3 °C'ye indi. Rapor ve fatura kasaya eklendi.</div>
+</div>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">KANIT ZİNCİRİ</div>
+<div style="display:flex;flex-direction:column;gap:0;margin-top:14px">
+<sc-for list="{{ chain }}" as="c" hint-placeholder-count="5">
+<div style="display:flex;gap:12px;align-items:flex-start">
+<div style="width:52px;flex:none;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:rgba(245,245,242,0.55);padding-top:2px">{{ c.time }}</div>
+<div style="width:9px;flex:none;display:flex;flex-direction:column;align-items:center;align-self:stretch"><span style="width:7px;height:7px;border-radius:999px;background:#C6FF3D;margin-top:5px"></span><span style="flex:1;width:1px;background:rgba(255,255,255,0.07)"></span></div>
+<div style="flex:1;padding-bottom:15px">
+<div style="font-size:13px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ c.label }}</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(245,245,242,0.32);margin-top:3px">{{ c.hash }}</div>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="font-size:11.5px;line-height:1.5;color:rgba(245,245,242,0.32);padding-top:12px;border-top:1px solid rgba(255,255,255,0.07)">Her kayıt öncekinin karmasını taşır. Sonradan değiştirilirse zincir kırılır ve denetimde görünür.</div>
+</div>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">DEĞERLENDİRME</div>
+<div style="font-size:12.5px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:8px">Yalnızca tamamlanmış işlemi olan işletme puan verebilir.</div>
+<div style="display:flex;flex-direction:column;gap:12px;margin-top:15px">
+<sc-for list="{{ ratings }}" as="r" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:12px">
+<span style="flex:1;font-size:13px;font-weight:500;color:#F5F5F2">{{ r.label }}</span>
+<div style="display:flex;gap:5px">
+<sc-for list="{{ r.stars }}" as="s" hint-placeholder-count="5">
+<button onClick="{{ s.pick }}" style="width:22px;height:22px;border:none;background:none;cursor:pointer;padding:0;font-size:15px;line-height:1;color:{{ s.fg }}">★</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+<button onClick="{{ submitReview }}" style="width:100%;height:48px;margin-top:18px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25)">Değerlendirmeyi gönder</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isNotifs }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;animation:gh-fade .24s">
+<sc-for list="{{ notifList }}" as="n" hint-placeholder-count="5">
+<div style="border:1px solid {{ n.bd }};border-radius:22px;background:{{ n.bg }};padding:16px 17px">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:9.5px;font-weight:700;letter-spacing:0.09em;padding:4px 8px;border-radius:999px;color:{{ n.lvlFg }};background:{{ n.lvlBg }}">{{ n.lvl }}</span>
+<span style="font-size:11px;color:rgba(245,245,242,0.32);margin-left:auto">{{ n.time }}</span>
+</div>
+<div style="font-size:14.5px;font-weight:600;color:#F5F5F2;margin-top:10px;letter-spacing:-0.01em;line-height:1.3">{{ n.title }}</div>
+<div style="font-size:12.5px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:5px">{{ n.body }}</div>
+<div style="display:flex;gap:8px;margin-top:14px">
+<sc-for list="{{ n.actions }}" as="a" hint-placeholder-count="2">
+<button onClick="{{ a.go }}" style="height:38px;padding:0 15px;border-radius:999px;cursor:pointer;font-size:12.5px;font-weight:600;border:1px solid {{ a.bd }};background:{{ a.bg }};color:{{ a.fg }}">{{ a.label }}</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+<button onClick="{{ goSettings }}" style="height:48px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:13.5px;font-weight:600;cursor:pointer;margin-top:4px">Kanal tercihlerini düzenle</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:11px;animation:gh-fade .24s">
+<sc-for list="{{ toggles }}" as="t" hint-placeholder-count="5">
+<button onClick="{{ t.flip }}" style="display:flex;align-items:center;gap:13px;text-align:left;border:1px solid rgba(255,255,255,0.07);border-radius:22px;background:#111111;padding:15px 16px;cursor:pointer">
+<span style="flex:1"><span style="display:block;font-size:14px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ t.label }}</span><span style="display:block;font-size:11.5px;line-height:1.4;color:rgba(245,245,242,0.32);margin-top:3px">{{ t.sub }}</span></span>
+<span style="width:44px;height:26px;flex:none;border-radius:999px;background:{{ t.trackBg }};border:1px solid {{ t.trackBd }};display:flex;align-items:center;padding:2px;justify-content:{{ t.justify }};transition:background .12s cubic-bezier(.2,.7,.2,1)">
+<span style="width:20px;height:20px;border-radius:999px;background:{{ t.knob }}"></span>
+</span>
+</button>
+</sc-for>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px;margin-top:4px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">BİLDİRİM MATRİSİ</div>
+<div style="display:flex;flex-direction:column;gap:11px;margin-top:14px">
+<sc-for list="{{ matrix }}" as="m" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:10px">
+<span style="flex:1;font-size:13px;font-weight:500;color:#F5F5F2">{{ m.cat }}</span>
+<span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:{{ m.fg }}">{{ m.channels }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="border:1px solid rgba(255,255,255,0.07);border-radius:26px;background:#111111;padding:17px 18px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.11em;text-transform:uppercase;color:rgba(245,245,242,0.32)">EŞİTLEME</div>
+<div style="display:flex;align-items:center;gap:9px;margin-top:12px">
+<span style="width:8px;height:8px;border-radius:999px;background:{{ sync.dot }};animation:gh-pulse 2.4s infinite"></span>
+<span style="flex:1;font-size:13.5px;font-weight:600;color:#F5F5F2">{{ sync.label }}</span>
+</div>
+<div style="font-size:12px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:8px">{{ sync.body }}</div>
+<button onClick="{{ toggleOffline }}" style="height:40px;padding:0 16px;margin-top:13px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:12.5px;font-weight:600;cursor:pointer">{{ sync.cta }}</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isFeed }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px;animation:gh-fade .24s">
+<sc-for list="{{ posts }}" as="p" hint-placeholder-count="3">
+<div style="border:1px solid {{ p.bd }};border-radius:26px;background:#111111;padding:16px 17px">
+<div style="display:flex;align-items:center;gap:11px">
+<span style="width:36px;height:36px;flex:none;border-radius:12px;background:#1E1E1E;display:flex;align-items:center;justify-content:center;font-family:'Outfit',sans-serif;font-size:13px;font-weight:700;color:rgba(245,245,242,0.55)">{{ p.initials }}</span>
+<div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ p.name }}</div><div style="font-size:11px;color:rgba(245,245,242,0.32);margin-top:2px">{{ p.role }}</div></div>
+<button onClick="{{ p.follow }}" style="height:32px;padding:0 14px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:600;border:1px solid {{ p.fBd }};background:{{ p.fBg }};color:{{ p.fFg }}">{{ p.fLabel }}</button>
+</div>
+<sc-if value="{{ p.verified }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;align-items:center;gap:7px;margin-top:13px;border:1px solid rgba(198,255,61,0.28);background:rgba(198,255,61,0.05);border-radius:999px;padding:5px 11px;align-self:flex-start;width:fit-content">
+<span style="width:14px;height:14px;border-radius:999px;background:#C6FF3D;color:#0A1500;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800">✓</span>
+<span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#C6FF3D">GOVERHUB ONAYLI İÇERİK</span>
+</div>
+</sc-if>
+<div style="font-size:14px;line-height:1.5;color:#F5F5F2;margin-top:13px">{{ p.text }}</div>
+<sc-if value="{{ p.unverified }}" hint-placeholder-val="{{ false }}">
+<div style="font-size:11.5px;line-height:1.45;color:rgba(245,245,242,0.32);margin-top:10px;border-left:1px solid rgba(255,255,255,0.13);padding-left:11px">Bu yorum uzman görüşüdür, GoverHub tarafından doğrulanmış mevzuat bilgisi değildir.</div>
+</sc-if>
+<div style="display:flex;gap:18px;margin-top:15px;padding-top:13px;border-top:1px solid rgba(255,255,255,0.07)">
+<button onClick="{{ p.like }}" style="background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:{{ p.likeFg }};padding:0">♥ {{ p.likes }}</button>
+<button style="background:none;border:none;cursor:pointer;font-size:12px;font-weight:500;color:rgba(245,245,242,0.32);padding:0">Yorum {{ p.comments }}</button>
+<button style="background:none;border:none;cursor:pointer;font-size:12px;font-weight:500;color:rgba(245,245,242,0.32);padding:0;margin-left:auto">Kaydet</button>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+</div>
+
+<sc-if value="{{ showAiFab }}" hint-placeholder-val="{{ true }}">
+<button onPointerDown="{{ fabDown }}" onClick="{{ fabClick }}" style="position:absolute;left:{{ fab.left }};top:{{ fab.top }};width:52px;height:52px;padding:0;border-radius:17px;border:none;background:rgba(118,124,110,{{ fab.shell }});backdrop-filter:blur(14px) saturate(160%);display:flex;align-items:center;justify-content:center;cursor:grab;z-index:6;opacity:{{ fab.opacity }};transform:scale({{ fab.scale }});transition:{{ fab.transition }};touch-action:none;box-shadow:0 6px 18px rgba(0,0,0,0.32)">
+<span style="width:38px;height:38px;border-radius:12px;border:2px solid rgba(255,255,255,{{ fab.ring }});display:flex;align-items:center;justify-content:center">
+<span style="width:19px;height:19px;border-radius:999px;background:rgba(198,255,61,{{ fab.dot }});box-shadow:0 0 12px rgba(198,255,61,{{ fab.dotGlow }})"></span>
+</span>
+</button>
+</sc-if>
+
+<div style="position:absolute;left:0;right:0;bottom:0;height:112px;pointer-events:none;background:linear-gradient(to top,#050505 42%,rgba(5,5,5,0.8) 72%,transparent);z-index:4"></div>
+<div style="position:absolute;left:16px;right:16px;bottom:26px;height:68px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;background:rgba(18,18,18,0.94);backdrop-filter:blur(24px) saturate(180%);border:1px solid rgba(255,255,255,0.09);border-radius:999px;box-shadow:0 20px 50px rgba(0,0,0,0.6);z-index:5">
+<button onClick="{{ tHome.go }}" title="Ana Sayfa" style="width:52px;height:52px;flex:none;border-radius:999px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:{{ tHome.pill }};color:{{ tHome.fg }};box-shadow:{{ tHome.glow }};transition:background .12s cubic-bezier(.2,.7,.2,1)">
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"></path></svg>
+</button>
+<button onClick="{{ tTasks.go }}" title="Görevler" style="width:52px;height:52px;flex:none;border-radius:999px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:{{ tTasks.pill }};color:{{ tTasks.fg }};box-shadow:{{ tTasks.glow }};transition:background .12s cubic-bezier(.2,.7,.2,1)">
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"></path><path d="M4 6l1.4 1.4L8 4.6M4 12l1.4 1.4L8 10.6M4 18l1.4 1.4L8 16.6"></path></svg>
+</button>
+<button onClick="{{ tQr.go }}" title="Tara" style="width:60px;height:60px;flex:none;border-radius:999px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:{{ tQr.pill }};color:{{ tQr.fg }};box-shadow:{{ tQr.glow }};transition:background .12s cubic-bezier(.2,.7,.2,1)">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M3 12h18"></path></svg>
+</button>
+<button onClick="{{ tDocs.go }}" title="Belgeler" style="width:52px;height:52px;flex:none;border-radius:999px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:{{ tDocs.pill }};color:{{ tDocs.fg }};box-shadow:{{ tDocs.glow }};transition:background .12s cubic-bezier(.2,.7,.2,1)">
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"></path><path d="M13 3v5h5M8.5 13h7M8.5 17h4"></path></svg>
+</button>
+<button onClick="{{ tMore.go }}" title="Daha" style="width:52px;height:52px;flex:none;border-radius:999px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:{{ tMore.pill }};color:{{ tMore.fg }};box-shadow:{{ tMore.glow }};transition:background .12s cubic-bezier(.2,.7,.2,1)">
+<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="5.5" r="2.2"></circle><circle cx="12" cy="5.5" r="2.2"></circle><circle cx="18.5" cy="5.5" r="2.2"></circle><circle cx="5.5" cy="12" r="2.2"></circle><circle cx="12" cy="12" r="2.2"></circle><circle cx="18.5" cy="12" r="2.2"></circle><circle cx="5.5" cy="18.5" r="2.2"></circle><circle cx="12" cy="18.5" r="2.2"></circle><circle cx="18.5" cy="18.5" r="2.2"></circle></svg>
+</button>
+</div>
+
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,0.62);z-index:8;animation:gh-fade .2s"></div>
+<div style="position:absolute;left:0;right:0;bottom:0;max-height:76%;overflow-y:auto;z-index:9;background:#0F0F0F;border-top:1px solid rgba(255,255,255,0.13);border-radius:32px 32px 0 0;padding:10px 22px 34px;animation:gh-sheet .28s cubic-bezier(.16,1,.3,1)">
+<div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,0.18);margin:0 auto 18px"></div>
+<div style="font-size:10.5px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:rgba(245,245,242,0.32)">{{ sheet.eyebrow }}</div>
+<div style="font-family:'Outfit',sans-serif;font-size:23px;font-weight:600;letter-spacing:-0.03em;line-height:1.15;color:#F5F5F2;margin-top:9px">{{ sheet.title }}</div>
+<div style="font-size:14px;line-height:1.5;color:rgba(245,245,242,0.55);margin-top:9px">{{ sheet.body }}</div>
+
+<div style="display:flex;flex-direction:column;gap:9px;margin-top:20px">
+<sc-for list="{{ sheet.rows }}" as="r" hint-placeholder-count="3">
+<div style="display:flex;gap:11px;align-items:flex-start;border:1px solid {{ r.bd }};border-radius:16px;background:{{ r.bg }};padding:13px 15px">
+<span style="flex:none;font-size:13px;margin-top:1px">{{ r.icon }}</span>
+<div style="flex:1"><div style="font-size:13.5px;font-weight:600;color:{{ r.fg }};letter-spacing:-0.01em">{{ r.label }}</div><div style="font-size:11.5px;line-height:1.45;color:rgba(245,245,242,0.55);margin-top:3px">{{ r.sub }}</div></div>
+</div>
+</sc-for>
+</div>
+
+<sc-if value="{{ sheet.hasMeta }}" hint-placeholder-val="{{ false }}">
+<div style="border-top:1px solid rgba(255,255,255,0.07);margin-top:20px;padding-top:16px;display:flex;flex-direction:column;gap:9px">
+<sc-for list="{{ sheet.meta }}" as="m" hint-placeholder-count="4">
+<div style="display:flex;justify-content:space-between;gap:14px;font-size:12.5px"><span style="color:rgba(245,245,242,0.32)">{{ m.k }}</span><span style="color:#F5F5F2;font-weight:500;text-align:right">{{ m.v }}</span></div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ sheet.hasInput }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:9px;margin-top:18px">
+<div style="flex:1;height:48px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:#161616;display:flex;align-items:center;padding:0 18px;font-size:13.5px;color:rgba(245,245,242,0.32)">{{ sheet.inputPlaceholder }}</div>
+<button style="width:48px;height:48px;flex:none;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:16px;font-weight:800;cursor:pointer">↑</button>
+</div>
+</sc-if>
+
+<div style="display:flex;gap:9px;margin-top:20px">
+<button onClick="{{ sheet.primary }}" style="flex:1;height:50px;border:none;border-radius:999px;background:#C6FF3D;color:#0A1500;font-size:13.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 24px rgba(198,255,61,0.25)">{{ sheet.primaryLabel }}</button>
+<button onClick="{{ closeSheet }}" style="height:50px;padding:0 20px;border:1px solid rgba(255,255,255,0.13);border-radius:999px;background:transparent;color:#F5F5F2;font-size:13.5px;font-weight:600;cursor:pointer">Kapat</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toastOpen }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:16px;right:16px;top:66px;z-index:12;border:1px solid rgba(255,255,255,0.13);border-radius:20px;background:rgba(20,20,20,0.95);backdrop-filter:blur(25px);padding:14px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 20px 60px rgba(0,0,0,0.6);animation:gh-rise .26s cubic-bezier(.16,1,.3,1)">
+<span style="width:30px;height:30px;flex:none;border-radius:10px;background:{{ toast.bg }};color:{{ toast.fg }};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800">{{ toast.icon }}</span>
+<div style="flex:1"><div style="font-size:13px;font-weight:600;color:#F5F5F2;letter-spacing:-0.01em">{{ toast.title }}</div><div style="font-size:11.5px;color:rgba(245,245,242,0.55);margin-top:2px">{{ toast.body }}</div></div>
+</div>
+</sc-if>
+
+</div>
+
+<div style="width:210px;flex:none;position:sticky;top:56px;padding-top:8px;display:flex;flex-direction:column;gap:16px">
+<div style="font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:rgba(245,245,242,0.32)">TASARIM NOTU</div>
+<div style="font-size:12.5px;line-height:1.6;color:rgba(245,245,242,0.55)">{{ note.body }}</div>
+<div style="display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07)">
+<sc-for list="{{ note.points }}" as="p" hint-placeholder-count="3">
+<div style="display:flex;gap:9px"><span style="color:#C6FF3D;font-size:12px;line-height:1.5">—</span><span style="flex:1;font-size:12px;line-height:1.55;color:rgba(245,245,242,0.55)">{{ p.text }}</span></div>
+</sc-for>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1000,&quot;height&quot;:1010},&quot;showRisk&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Ana ekran&quot;}}">
+const LIME='#C6FF3D',INK='#0A1500',T1='#F5F5F2',T2='rgba(245,245,242,0.55)',T3='rgba(245,245,242,0.32)',BD='rgba(255,255,255,0.07)',BDS='rgba(255,255,255,0.13)',CRIT='#F87171',WARN='#FCD34D',INFO='#93C5FD';
+
+const SEV={crit:{fg:CRIT,bg:'rgba(248,113,113,0.14)',label:'KRİTİK'},imp:{fg:WARN,bg:'rgba(252,211,77,0.14)',label:'ÖNEMLİ'},low:{fg:INFO,bg:'rgba(147,197,253,0.14)',label:'İYİLEŞTİRME'}};
+
+const TASKS=[
+ {id:'t1',title:'Soğuk zincir sıcaklık kaydı',meta:'Günlük · Mutfak · 18:00',sev:'crit',due:'Bugün 18:00',bucket:'today',
+  what:'Mutfak arkasındaki buzdolabının sıcaklığını ölç, değeri gir ve termometre fotoğrafını ekle.'},
+ {id:'t2',title:'Personel hijyen eldiven kontrolü',meta:'Günlük · Servis',sev:'imp',due:'Bugün',bucket:'today',
+  what:'Vardiyadaki personelin eldiven ve önlük durumunu kontrol et, tamamlandı olarak işaretle.'},
+ {id:'t3',title:'Menü alerjen listesi güncelleme',meta:'Tebliğ değişikliği · 30 gün',sev:'imp',due:'14 gün kaldı',bucket:'upcoming',
+  what:'Alerjen Etiketleme Tebliği güncellendi. 14 alerjen için yeni formatı menü kartlarına işle.'},
+ {id:'t4',title:'Yangın tüpü periyodik kontrolü',meta:'Gecikmiş · 3 gün',sev:'crit',due:'3 gün gecikmiş',bucket:'late',
+  what:'Yetkili servisin periyodik kontrolünü yapması ve etiketi yenilemesi gerekiyor.'},
+ {id:'t5',title:'Su deposu temizlik kaydı',meta:'Aylık · Depo',sev:'low',due:'Bu ay',bucket:'upcoming',
+  what:'Depo temizliği sonrası tarih ve sorumlu personeli kaydet.'}];
+
+const DOCS=[
+ {id:'d1',icon:'🧯',title:'Yangın tüpü kontrol etiketi',meta:'3 gün içinde doluyor',status:'DOLUYOR',st:'crit',cat:'exp'},
+ {id:'d2',icon:'🩺',title:'Portör muayenesi · Elif K.',meta:'21 gün içinde doluyor',status:'DOLUYOR',st:'warn',cat:'exp'},
+ {id:'d3',icon:'📜',title:'İşletme kayıt belgesi',meta:'Geçerli · 14.02.2027',status:'GEÇERLİ',st:'ok',cat:'all'},
+ {id:'d4',icon:'🎓',title:'Hijyen eğitim sertifikası ×3',meta:'Geçerli · doğrulandı',status:'DOĞRULANDI',st:'ok',cat:'all'},
+ {id:'d5',icon:'🪲',title:'Haşere mücadele raporu',meta:'Eksik — hiç yüklenmedi',status:'EKSİK',st:'crit',cat:'missing'},
+ {id:'d6',icon:'💧',title:'Su analiz raporu',meta:'İnceleme bekliyor · QR okunamadı',status:'İNCELEME',st:'warn',cat:'review'}];
+
+const DOCST={crit:{fg:CRIT,bg:'rgba(248,113,113,0.14)',bd:'rgba(248,113,113,0.24)'},warn:{fg:WARN,bg:'rgba(252,211,77,0.14)',bd:BD},ok:{fg:LIME,bg:'rgba(198,255,61,0.14)',bd:BD}};
+
+const PROS=[
+ {id:'p1',initials:'MY',name:'Murat Yıldız',role:'Soğutma teknik servisi · Kadıköy',rating:'4.9',jobs:184,dist:'2,1 km',price:'₺850',eta:'Bugün 11:30',verified:true},
+ {id:'p2',initials:'SC',name:'Soğuk-Tek Servis A.Ş.',role:'Yetkili servis · 6 teknisyen',rating:'4.7',jobs:512,dist:'5,4 km',price:'Teklif',eta:'Yarın',verified:true},
+ {id:'p3',initials:'HB',name:'Hakan Bulut',role:'Bağımsız teknisyen',rating:'4.4',jobs:37,dist:'1,3 km',price:'₺600',eta:'2 saat içinde',verified:false}];
+
+const ICON=(d)=>'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+d+'</svg>';
+const ICONS={
+ home:ICON('<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>'),
+ tasks:ICON('<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1.4 1.4L8 4.6M4 12l1.4 1.4L8 10.6M4 18l1.4 1.4L8 16.6"/>'),
+ qr:ICON('<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M3 12h18"/>'),
+ docs:ICON('<path d="M6 3h8l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M13 3v5h5M8.5 13h7M8.5 17h4"/>'),
+ pros:ICON('<circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3.2 2.5-5.4 5.5-5.4s5.5 2.2 5.5 5.4"/><path d="M17 11l1.4 1.4L21.5 9"/>'),
+ more:ICON('<circle cx="12" cy="5.5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18.5" r="1.6"/>')};
+
+class Component extends DCLogic {
+  state={persona:'owner',screen:'home',stack:[],sheet:null,done:{t2:true},temp:null,photo:false,taskId:'t1',
+    filter:'today',docFilter:'all',proId:'p1',query:'Buzdolabım soğutmuyor',onb:0,onbPick:null,scan:0,
+    toast:null,checkedIn:false,booked:false,trained:false,
+    f1:'Evet',f2:null,f3:null,f4:null,rating:[0,0,0,0],offline:false,
+    fabX:314,fabY:640,fabDrag:false,fabIdle:false,
+    tog:{dark:true,onehand:false,sms:true,morning:true,lang:true}};
+
+  componentDidMount(){this.armIdle();}
+  componentWillUnmount(){clearTimeout(this._t);clearTimeout(this._s);clearTimeout(this._idle);
+    window.removeEventListener('pointermove',this._move);window.removeEventListener('pointerup',this._up);}
+
+  armIdle(){clearTimeout(this._idle);this._idle=setTimeout(()=>this.setState({fabIdle:true}),2600);}
+
+  fabDown=(e)=>{const btn=e.currentTarget,host=btn.offsetParent;if(!host)return;
+    const r=btn.getBoundingClientRect(),h=host.getBoundingClientRect();
+    this._off={x:e.clientX-r.left,y:e.clientY-r.top};this._host=h;this._moved=false;
+    clearTimeout(this._idle);this.setState({fabDrag:true,fabIdle:false});
+    this._move=(ev)=>{const nx=ev.clientX-this._host.left-this._off.x,ny=ev.clientY-this._host.top-this._off.y;
+      if(Math.abs(nx-this.state.fabX)>3||Math.abs(ny-this.state.fabY)>3)this._moved=true;
+      this.setState({fabX:Math.max(8,Math.min(this._host.width-60,nx)),fabY:Math.max(60,Math.min(this._host.height-112,ny))});};
+    this._up=()=>{window.removeEventListener('pointermove',this._move);window.removeEventListener('pointerup',this._up);
+      const snapLeft=this.state.fabX+26<this._host.width/2;
+      this.setState({fabDrag:false,fabX:snapLeft?12:this._host.width-64});this.armIdle();};
+    window.addEventListener('pointermove',this._move);window.addEventListener('pointerup',this._up);};
+
+  fabClick=()=>{if(this._moved){this._moved=false;return;}
+    clearTimeout(this._idle);this.setState({sheet:'ai',fabIdle:false});this.armIdle();};
+
+  nav(s){this.setState(p=>({screen:s,stack:[...p.stack,p.screen]}));}
+  back=()=>this.setState(p=>({screen:p.stack.length?p.stack[p.stack.length-1]:'home',stack:p.stack.slice(0,-1)}));
+  root(s){this.setState({screen:s,stack:[]});}
+  toast(t,b,kind){clearTimeout(this._t);this.setState({toast:{title:t,body:b,kind:kind||'ok'}});this._t=setTimeout(()=>this.setState({toast:null}),3400);}
+
+  goScan=()=>{this.nav('scan');clearTimeout(this._s);this.setState({scan:0});
+    this._s=setTimeout(()=>{this.setState({scan:1});this._s=setTimeout(()=>{this.setState({scan:2});this._s=setTimeout(()=>this.setState({screen:'scanConfirm'}),900);},900);},900);};
+
+  openTask(id){this.setState({taskId:id,temp:null,photo:false});this.nav('taskDetail');}
+
+  complete=()=>{const t=this.state.taskId;
+    if(t==='t1'&&(this.state.temp===null||!this.state.photo))return;
+    if(t==='t1'&&this.state.temp===12){this.setState({sheet:'ncr'});return;}
+    this.setState(p=>({done:{...p.done,[t]:true}}));this.back();this.toast('Görev kapatıldı','Kanıt zincirine yazıldı · 09:41');};
+
+  personaHome(p){return p==='owner'?'home':p==='hq'?'hq':p==='employee'?'employee':'provider';}
+
+  renderVals(){
+    const s=this.state,sc=s.screen,dTaskRaw=TASKS.find(t=>t.id===s.taskId)||TASKS[0];
+    const doneCount=TASKS.filter(t=>s.done[t.id]&&t.bucket!=='upcoming').length+1;
+
+    const mapTask=t=>{const done=!!s.done[t.id],sv=SEV[t.sev];return{
+      title:t.title,meta:t.meta,strike:done?'line-through':'none',
+      ringColor:done?LIME:'rgba(255,255,255,0.18)',fill:done?LIME:'transparent',tickOpacity:done?1:0,
+      sevFg:sv.fg,sevBg:sv.bg,sevLabel:sv.label,
+      toggle:()=>this.setState(p=>({done:{...p.done,[t.id]:!p.done[t.id]}})),
+      open:()=>this.openTask(t.id)};};
+
+    const sheets={
+      calc:{eyebrow:'SKOR NASIL HESAPLANIR',title:'Beş süreç, ağırlıklı ortalama',
+        body:'Her süreç tamamlanma oranıyla değil, yasal ağırlığıyla çarpılarak toplanır. Bu yüzden 6/14 ekipman, 18/22 belgeden daha çok puan düşürür.',
+        rows:[{icon:'◉',label:'Ekipman ve bakım · ağırlık 30',sub:'Sağlık riski doğrudan · gecikme çarpanı var',fg:T1,bd:'rgba(248,113,113,0.3)',bg:'rgba(248,113,113,0.07)'},
+              {icon:'◉',label:'Belgeler · ağırlık 25',sub:'Süresi dolan belge, eksik belgeden az düşürür',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'◉',label:'Formlar · ağırlık 20',sub:'Açık uygunsuzluk varsa ek kesinti',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'◉',label:'Personel · ağırlık 15',sub:'Eğitim ve portör muayenesi',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'◉',label:'İSG · ağırlık 10',sub:'Risk değerlendirmesi güncelliği',fg:T1,bd:BD,bg:'#161616'}],
+        hasMeta:true,meta:[{k:'Hesap zamanı',v:'Her gece 03:00 · anlık olay sonrası'},{k:'Denetim skoru mu?',v:'Hayır — GoverHub iç göstergesi'},{k:'Paylaşım',v:'Yalnızca sen ve yetkilendirdiğin kişiler'}],
+        primaryLabel:'Anladım',primary:()=>this.setState({sheet:null})},
+      why:{eyebrow:'NEDEN BANA UYGULANIYOR',title:'Restoran işletiyorsun ve LPG kullanıyorsun',
+        body:'Bu yükümlülük tahminle değil, doğruladığın işletme bilgileriyle eşleşti. Koşullardan biri değişirse yükümlülük yeniden hesaplanır.',
+        rows:[{icon:'✓',label:'Faaliyet: Yemek hazırlama',sub:'İşletme kayıt belgenden okundu',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'✓',label:'LPG kullanımı: Var',sub:'Kurulum sorusunda sen onayladın',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'✓',label:'Konum: İstanbul / Kadıköy',sub:'Belediye kuralı ülke kuralına ekleniyor',fg:T1,bd:BD,bg:'#161616'}],
+        hasMeta:true,meta:[{k:'Dayanak',v:'Binaların Yangından Korunması Hk. Yönetmelik'},{k:'Madde',v:'Madde 99 · fıkra 2'},{k:'Yürürlük',v:'01.01.2024'},{k:'Son değişiklik',v:'12.06.2026'},{k:'GoverHub durumu',v:'Uzman onaylı · doğrulanmış'}],
+        primaryLabel:'Kaynağı gör',primary:()=>this.toast('Resmî Gazete kaydı','Kaynak anlık görüntüsü ve karma değeri saklı')},
+      ncr:{eyebrow:'UYGUNSUZLUK · KRİTİK',title:'12 °C ölçüldü, limit 4 °C',
+        body:'Kaydı aldık. Bu ünite bu ay 4. kez limit aştı, bu yüzden risk seviyesini yükselttik.',
+        rows:[{icon:'1',label:'Ürünü güvenli üniteye taşı',sub:'Şimdi · sorumlu sen',fg:T1,bd:'rgba(248,113,113,0.3)',bg:'rgba(248,113,113,0.07)'},
+              {icon:'2',label:'Düzeltici faaliyet açıldı',sub:'Teknik servis kontrolü · 24 saat',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'3',label:'Şube yöneticisi bilgilendirildi',sub:'Kritik bildirim gönderildi',fg:T1,bd:BD,bg:'#161616'}],
+        hasMeta:false,primaryLabel:'Teknik servis bul',
+        primary:()=>{this.setState(p=>({done:{...p.done,t1:true},sheet:null,screen:'experts',stack:[]}));this.toast('Uygunsuzluk kaydedildi','Düzeltici faaliyet açıldı · servise yönlendirildin','warn');}},
+      ai:{eyebrow:'GOVERHUB ASİSTAN',title:'Bu işletme hakkında ne sormak istersin?',
+        body:'Mevzuat yanıtları yalnızca doğrulanmış GoverHub kaynaklarından gelir. Model kendi başına yükümlülük üretmez.',
+        rows:[{icon:'◆',label:'"Yeni personel alsam ne yapmam gerekir?"',sub:'6 adımlık işe alış listesi çıkarır',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'◆',label:'"Alerjen tebliği beni nasıl etkiliyor?"',sub:'Madde ve yürürlük tarihiyle yanıtlar',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'◆',label:'"Bu ay hangi belgem doluyor?"',sub:'Kasadan okur, yenileme görevi açar',fg:T1,bd:BD,bg:'#161616'}],
+        hasMeta:false,hasInput:true,inputPlaceholder:'GoverHub\'a sor…',
+        primaryLabel:'Sesli sor',primary:()=>this.toast('Dinliyorum','Konuşmayı bitirdiğinde işleyeceğim')},
+      notif:{eyebrow:'BİLDİRİMLER',title:'3 yeni',body:'Her bildirim bir işe bağlı. Bilgi, işlem ve kritik ayrı seviyelerde.',
+        rows:[{icon:'▲',label:'Yangın tüpü kontrolü 3 gün içinde',sub:'Kritik · Servis çağır / Hatırlat',fg:CRIT,bd:'rgba(248,113,113,0.3)',bg:'rgba(248,113,113,0.07)'},
+              {icon:'●',label:'Alerjen Etiketleme Tebliği güncellendi',sub:'İşlem gerekli · 30 gün süre',fg:WARN,bd:'rgba(252,211,77,0.26)',bg:'rgba(252,211,77,0.05)'},
+              {icon:'●',label:'Elif K. hijyen eğitimini tamamladı',sub:'Bilgi · skor +4',fg:T1,bd:BD,bg:'#161616'}],
+        hasMeta:false,primaryLabel:'Bildirim tercihleri',primary:()=>this.toast('Tercih matrisi','Kanal × kategori ayarları açıldı')},
+      search:{eyebrow:'KOMUT ARAMA',title:'Her şeyde ara',body:'Görev, belge, personel, ekipman, mevzuat ve uzman aynı yerde. Yetkin olmayan kayıt sonuçlarda çıkmaz.',
+        rows:[{icon:'📄',label:'yangın tüpü',sub:'2 belge · 1 görev · 1 ekipman · 1 mevzuat',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'🔎',label:'anlamsal eşleşme',sub:'"söndürücü", "YSC" gibi terimler de bulunur',fg:T1,bd:BD,bg:'#161616'}],
+        hasMeta:false,hasInput:true,inputPlaceholder:'Ara…',primaryLabel:'Aramayı çalıştır',primary:()=>this.toast('4 sonuç','Varlık türüne göre gruplandı')},
+      quote:{eyebrow:'TEKLİF TOPLA',title:'3 sağlayıcıdan aynı formatta teklif',body:'Kapsam, fiyat, süre, dahil olan ve olmayan işler standart alanlarda gelir; elmayla elmayı karşılaştırırsın.',
+        rows:[{icon:'①',label:'Kapsamı onayla',sub:'Soğutma arızası · yerinde · acil',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'②',label:'3 sağlayıcıya gönder',sub:'Ortalama yanıt 40 dk',fg:T1,bd:BD,bg:'#161616'}],
+        hasMeta:false,primaryLabel:'Teklif isteği gönder',primary:()=>{this.setState({sheet:null});this.toast('Teklif isteği gönderildi','3 sağlayıcı · yanıtlar bildirim olarak gelir');}},
+      training:{eyebrow:'EĞİTİM ATAMA',title:'Hijyen eğitimi · 2 personel',body:'Bu bir GoverHub katılım belgesidir; yetkili kurum sertifikası değildir. Ayrımı her ekranda açıkça gösteriyoruz.',
+        rows:[{icon:'▶',label:'Kayıtlı eğitim · 45 dk',sub:'Video + kısa sınav · GoverHub katılım belgesi',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'◉',label:'Canlı eğitim · 12 Eylül',sub:'Doğrulanmış eğitmen · resmî sertifika yolu',fg:LIME,bd:'rgba(198,255,61,0.28)',bg:'rgba(198,255,61,0.05)'}],
+        hasMeta:false,primaryLabel:'İkisine de ata',primary:()=>{this.setState({sheet:null,trained:true});this.toast('Eğitim atandı','Elif K. ve Burak T. · takip başladı');}},
+      fault:{eyebrow:'ARIZA BİLDİRİMİ',title:'Buzdolabı · Mutfak arka',body:'Personel arıza bildirebilir. Yönetici anında haber alır, servis geçmişi yapılandırılmış olarak birikir.',
+        rows:[{icon:'📞',label:'Kayıtlı servisi ara',sub:'Soğuk-Tek · sözleşmeli',fg:T1,bd:BD,bg:'#161616'},
+              {icon:'✳',label:'GoverHub servis talebi oluştur',sub:'QR girişli, kanıtlı servis kaydı',fg:LIME,bd:'rgba(198,255,61,0.28)',bg:'rgba(198,255,61,0.05)'}],
+        hasMeta:false,primaryLabel:'Servis talebi oluştur',primary:()=>{this.setState({sheet:null,screen:'experts',stack:[]});this.toast('Arıza kaydı açıldı','Yönetici bilgilendirildi','warn');}}};
+
+    const sheet=s.sheet?{...sheets[s.sheet],primary:sheets[s.sheet].primary}:null;
+
+    const onbSteps=[
+      {step:'ADIM 1 / 5',title:'İşletmeni nasıl tanımlayalım?',body:'Sıfırdan doldurmak zorunda değilsin. Belgen varsa biz okuruz.',
+       options:[{icon:'📄',label:'Belgemi yükle',sub:'Vergi levhası, ruhsat, kayıt belgesi',v:'doc'},{icon:'✍️',label:'Elle anlatayım',sub:'Kendi cümlelerinle yaz',v:'text'},{icon:'⚡',label:'Hızlı başlangıç',sub:'4 soru, sonra devam',v:'quick'}],
+       cta:'Devam',skip:'Şimdilik atla'},
+      {step:'ADIM 2 / 5',title:'Belgeni okuduk. Doğrulayalım mı?',body:'Kritik alanları senin onayın olmadan kaydetmiyoruz.',
+       options:[{icon:'🏢',label:'Kahve Durağı Gıda Ltd. Şti.',sub:'Ticari unvan · güven %98',v:'a'},{icon:'📍',label:'Caferağa Mah. · Kadıköy / İstanbul',sub:'Adres · güven %94 · haritada onayla',v:'b'},{icon:'🏷️',label:'56.10.13 — Kafe faaliyeti',sub:'NACE · güven %91',v:'c'}],
+       cta:'Bilgiler doğru',skip:'Elle düzelt'},
+      {step:'ADIM 3 / 5',title:'Kafe için 3 sorumuz var',body:'Sadece işine uyanları soruyoruz. Yanıtına göre soru sayısı değişir.',
+       options:[{icon:'🔥',label:'LPG / tüp gaz kullanıyor musun?',sub:'Evet — gaz ve ekipman soruları eklenir',v:'lpg'},{icon:'🛵',label:'Paket servis yapıyor musun?',sub:'Evet — taşıma sıcaklık kuralları eklenir',v:'deliv'},{icon:'❄️',label:'Soğuk depon var mı?',sub:'Evet — soğuk zincir kayıtları eklenir',v:'cold'}],
+       cta:'Yanıtları kaydet',skip:'Bu bölümü atla'},
+      {step:'ADIM 4 / 5',title:'Kaç kişi çalışıyor?',body:'Personel sayısı bazı yükümlülükleri açıp kapatıyor.',
+       options:[{label:'1 – 4 kişi',sub:'Temel İSG yükümlülükleri',v:'1'},{label:'5 – 9 kişi',sub:'İSG uzmanı desteği gerekir',v:'2'},{label:'10+ kişi',sub:'Genişletilmiş yükümlülük seti',v:'3'}],
+       cta:'Analizi başlat',skip:'Sonra sorun'},
+      {step:'HAZIR',title:'İşletmeni analiz ettik',body:'Bugün yapman gerekenleri hazırladık. Kurulum %62 — çalışırken tamamlarız.',
+       options:[],cta:'Komuta merkezine git',skip:'',isResult:true}];
+    const onb=onbSteps[s.onb];
+
+    const scanLabels=['Güvenlik ve tür kontrolü','Metin okuma (OCR)','Belge sınıflandırma','Alan çıkarımı ve güven puanı'];
+
+    const tabDefs=[{k:'home',label:'Ana Sayfa',icon:ICONS.home},{k:'tasks',label:'Görevler',icon:ICONS.tasks},
+      {k:'qr',label:'Tara',icon:ICONS.qr},{k:'docs',label:'Belgeler',icon:ICONS.docs},{k:'experts',label:'Uzmanlar',icon:ICONS.pros},{k:'more',label:'Daha',icon:ICONS.more}];
+
+    const notes={
+      owner:{body:'İşletme sahibi görünümü. 200 maddelik bir platform, günde üç dokunuşa indirilmiş: bugünün sayacı, tek kritik kart, kısa liste.',
+        points:[{text:'Her yükümlülüğün yanında "Neden?" var — hukuk dili katmanın altında kalıyor.'},{text:'Kanıt zorunluysa görev kapanmıyor; limit aşımı anında uygunsuzluğa dönüyor.'},{text:'Uygunsuzluk ve süresi dolan belge, doğrudan doğrulanmış uzmana köprü kuruyor.'}]},
+      hq:{body:'Çok şubeli merkez görünümü. Aynı veri modeli, farklı toplama seviyesi — tek şubeli kafe kurumsal terminoloji görmüyor.',
+        points:[{text:'En riskli şube başa gelir; ortalama skor değil, sapma önemlidir.'},{text:'Şube standardı şablonu yeni lokasyona klonlanır.'}]},
+      employee:{body:'Personel görünümü. Ceza tutarı, skor ve başkalarının verisi yok; sadece kendi işi.',
+        points:[{text:'Vardiya girişi, atanan kontroller ve kendi belgeleri.'},{text:'Kanıt akışı iki dakikadan kısa tutuldu — yoksa doldurulmaz.'}]},
+      provider:{body:'Uzman / servis sağlayıcı görünümü. Sağlayıcı da kendi belge uyumunu GoverHub üzerinde yürütür.',
+        points:[{text:'Yetki belgesi dolduğunda profil silinmez; ilgili hizmet satıştan çıkar.'},{text:'QR giriş–çıkış ve teslim edilen rapor kanıt zincirine yazılır.'}]}};
+
+    const isOwnerish=s.persona==='owner';
+    const subTitles={taskDetail:['Görev','Task detail'],scan:['Belge tara','Document scan'],scanConfirm:['Okunan alanlar','Extracted fields'],
+      taskDetailx:['',''],pro:['Uzman profili','Professional profile'],score:['Uyum skoru','Compliance score'],
+      personnel:['Personel','Personnel'],equip:['Ekipman','Equipment'],qr:['GoverHub QR','QR'],onb:['Kurulum','Onboarding'],
+      more:['Yönetim','Management'],experts:['Uzman bul','Find an expert'],docs:['Dijital kasa','Document vault'],tasks:['Görevler','Tasks'],
+      form:['Hijyen kontrol formu','Dynamic form'],ncrDetail:['Uygunsuzluk','Nonconformity'],roadmap:['Resmî süreçler','Official processes'],
+      training:['Eğitim','Training'],quotes:['Teklifler','Quotes'],visit:['Servis kaydı','Service visit'],
+      notifs:['Bildirimler','Notifications'],settings:['Ayarlar','Settings'],feed:['İçerik','Professional feed']};
+    const st=subTitles[sc]||['',''];
+    const brandScreens=['home','hq','employee','provider'];
+    const isBrand=brandScreens.indexOf(sc)>=0;
+
+    const tempOpts=[0,2,4,12];
+
+    return {
+      personas:[['owner','İşletme sahibi','Business owner · single'],['hq','Merkez / çok şube','Multi-location HQ'],['employee','Personel','Employee'],['provider','Uzman / servis','Professional']]
+        .map(([k,tr,en])=>({tr,en,bd:s.persona===k?'rgba(198,255,61,0.4)':BD,bg:s.persona===k?'rgba(198,255,61,0.07)':'#0F0F0F',fg:s.persona===k?LIME:T1,
+          pick:()=>this.setState({persona:k,screen:this.personaHome(k),stack:[],sheet:null})})),
+      jumps:[{label:'Kurulum + OCR akışı',go:()=>this.setState({screen:'onb',stack:[],onb:0,persona:'owner'})},
+        {label:'Görev + kanıt yakalama',go:()=>{this.setState({persona:'owner',stack:['home']});this.openTask('t1');}},
+        {label:'Uygunsuzluk → servis köprüsü',go:()=>{this.setState({persona:'owner',screen:'taskDetail',stack:['home'],taskId:'t1',temp:12,photo:true});}},
+        {label:'Belge kasası',go:()=>this.setState({persona:'owner',screen:'docs',stack:[]})},
+        {label:'Skor kırılımı',go:()=>this.setState({persona:'owner',screen:'score',stack:['home']})},
+        {label:'Ekipman QR',go:()=>this.setState({persona:'owner',screen:'qr',stack:['more']})},
+        {label:'Uzman bul + doğrulama',go:()=>this.setState({persona:'owner',screen:'pro',stack:['experts']})},
+        {label:'Dinamik form motoru',go:()=>this.setState({persona:'owner',screen:'form',stack:['more']})},
+        {label:'Uygunsuzluk + CAPA',go:()=>this.setState({persona:'owner',screen:'ncrDetail',stack:['more']})},
+        {label:'Resmî süreç yol haritası',go:()=>this.setState({persona:'owner',screen:'roadmap',stack:['more']})},
+        {label:'Eğitim + sertifika ayrımı',go:()=>this.setState({persona:'owner',screen:'training',stack:['more']})},
+        {label:'Teklif karşılaştırma',go:()=>this.setState({persona:'owner',screen:'quotes',stack:['more']})},
+        {label:'Servis ziyareti + kanıt zinciri',go:()=>this.setState({persona:'owner',screen:'visit',stack:['more']})},
+        {label:'Bildirimler',go:()=>this.setState({persona:'owner',screen:'notifs',stack:['home']})},
+        {label:'Ayarlar + çevrimdışı',go:()=>this.setState({persona:'owner',screen:'settings',stack:['more']})},
+        {label:'Uzman içerik akışı',go:()=>this.setState({persona:'owner',screen:'feed',stack:['experts']})},
+        {label:'Asistan',go:()=>this.setState({sheet:'ai'})}],
+
+      greeting:s.persona==='employee'?'Günaydın, Elif':s.persona==='provider'?'Bugün 3 işin var':s.persona==='hq'?'Merkez görünümü':'Günaydın, Ahmet',
+      orgName:s.persona==='hq'?'Kahve Durağı Grup':s.persona==='employee'?'Kahve Durağı':s.persona==='provider'?'Murat Yıldız':'Kahve Durağı',
+      orgMeta:s.persona==='hq'?'7 ŞUBE · İSTANBUL':s.persona==='employee'?'ELİF K. · SERVİS':s.persona==='provider'?'SOĞUTMA SERVİSİ · DOĞRULANMIŞ':'KADIKÖY · TEK ŞUBE',
+      chromeBrand:isBrand,chromeSub:!isBrand,subTitle:st[0],subTitleEn:st[1],goBack:this.back,
+
+      isHome:sc==='home',isTasks:sc==='tasks',isTaskDetail:sc==='taskDetail',isDocs:sc==='docs',isScan:sc==='scan',
+      isScanConfirm:sc==='scanConfirm',isExperts:sc==='experts',isPro:sc==='pro',isScore:sc==='score',isMore:sc==='more',
+      isPersonnel:sc==='personnel',isEquip:sc==='equip',isQr:sc==='qr',isOnb:sc==='onb',
+      isForm:sc==='form',isNcr:sc==='ncrDetail',isRoadmap:sc==='roadmap',isTraining:sc==='training',
+      isQuotes:sc==='quotes',isVisit:sc==='visit',isNotifs:sc==='notifs',isSettings:sc==='settings',isFeed:sc==='feed',
+      isHq:sc==='hq',isEmployee:sc==='employee',isProvider:sc==='provider',
+
+      ringDash:(()=>{const c=2*Math.PI*41;const p=Math.max(0,Math.min(1,doneCount/5));return (c*p).toFixed(1)+' '+c.toFixed(1);})(),
+      week:['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map((label,i)=>{
+        const state=i<6?'done':'today';
+        return{label,mark:state==='done'?'✓':'',
+          ring:state==='done'?LIME:state==='today'?'rgba(198,255,61,0.55)':'rgba(255,255,255,0.09)',
+          bg:state==='done'?LIME:'transparent',fg:INK,
+          glow:state==='done'?'0 3px 14px rgba(198,255,61,0.3)':'none',
+          labelFg:state==='idle'?'rgba(245,245,242,0.32)':T1};}),
+      doneCount,remainLabel:(5-doneCount)+' görev kaldı',score:this.props.showRisk===false?58:58,showRisk:this.props.showRisk!==false,
+      segments:[0,1,2,3,4].map(i=>({bg:i<doneCount?LIME:'rgba(255,255,255,0.09)'})),
+      homeTasks:TASKS.slice(0,3).map(mapTask),
+      timeline:[{date:'28.08',title:'Portör muayenesi yenileme',meta:'Elif K. · randevu al',dot:WARN},
+        {date:'01.09',title:'Alerjen formatı yürürlükte',meta:'Menü kartları güncellenmeli',dot:INFO},
+        {date:'14.09',title:'Yangın tüpü kontrol tarihi',meta:'Servis planlanmadı',dot:CRIT}],
+
+      taskFilters:[['today','Bugün'],['late','Gecikmiş'],['upcoming','Yaklaşan']].map(([k,label])=>({label,
+        bd:s.filter===k?'rgba(198,255,61,0.4)':BD,bg:s.filter===k?'rgba(198,255,61,0.1)':'#161616',fg:s.filter===k?LIME:T2,
+        pick:()=>this.setState({filter:k})})),
+      visibleTasks:TASKS.filter(t=>t.bucket===s.filter).map(mapTask),
+
+      dTask:{title:dTaskRaw.title,what:dTaskRaw.what,due:dTaskRaw.due,sevFg:SEV[dTaskRaw.sev].fg,sevBg:SEV[dTaskRaw.sev].bg,sevLabel:SEV[dTaskRaw.sev].label},
+      tempChoices:tempOpts.map(v=>({label:v+'°',bd:s.temp===v?(v>4?'rgba(248,113,113,0.5)':'rgba(198,255,61,0.45)'):BDS,
+        bg:s.temp===v?(v>4?'rgba(248,113,113,0.12)':'rgba(198,255,61,0.1)'):'#161616',fg:s.temp===v?(v>4?CRIT:LIME):T2,
+        pick:()=>this.setState({temp:v})})),
+      tempWarn:s.temp===12,
+      takePhoto:()=>this.setState(p=>({photo:!p.photo})),
+      photoLabel:s.photo?'Fotoğraf eklendi ✓':'Fotoğraf çek',
+      photoBd:s.photo?'rgba(198,255,61,0.45)':BDS,photoBg:s.photo?'rgba(198,255,61,0.07)':'#161616',photoFg:s.photo?LIME:T2,
+      history:[1,1,0,1,1,1,2,1,1,1,0,1,1,2].map(v=>({bg:v===0?'rgba(248,113,113,0.55)':v===2?'rgba(252,211,77,0.5)':'rgba(198,255,61,0.32)',label:v===0?'Uygunsuzluk':'Tamam'})),
+      cta:(()=>{const ok=s.taskId!=='t1'||(s.temp!==null&&s.photo);
+        return{label:ok?'Görevi tamamla':'Kanıt bekleniyor',bg:ok?LIME:'#1E1E1E',fg:ok?INK:T3,cursor:ok?'pointer':'not-allowed',opacity:ok?1:0.6};})(),
+      completeTask:this.complete,
+
+      docFilters:[['all','Tümü'],['exp','Süresi doluyor'],['missing','Eksik'],['review','İnceleme']].map(([k,label])=>({label,
+        bd:s.docFilter===k?'rgba(198,255,61,0.4)':BD,bg:s.docFilter===k?'rgba(198,255,61,0.1)':'#161616',fg:s.docFilter===k?LIME:T2,
+        pick:()=>this.setState({docFilter:k})})),
+      visibleDocs:DOCS.filter(d=>s.docFilter==='all'||d.cat===s.docFilter).map(d=>({...d,
+        bd:DOCST[d.st].bd,stFg:DOCST[d.st].fg,stBg:DOCST[d.st].bg,metaFg:d.st==='crit'?CRIT:d.st==='warn'?WARN:T3})),
+      goScan:this.goScan,
+
+      scanLines:['92%','78%','86%','64%','88%','52%','72%'].map(w=>({w})),
+      corners:[{pos:'left:14px;top:14px;border-right:none;border-bottom:none'},{pos:'right:14px;top:14px;border-left:none;border-bottom:none'},
+        {pos:'left:14px;bottom:14px;border-right:none;border-top:none'},{pos:'right:14px;bottom:14px;border-left:none;border-top:none'}],
+      scanStatus:['Belge okunuyor…','Alanlar çıkarılıyor…','Sınıflandırıldı: İşletme kayıt belgesi'][s.scan],
+      scanSteps:scanLabels.map((label,i)=>({label,fg:i<=s.scan?T1:T3,op:i<=s.scan?1:0.45,
+        ring:i<=s.scan?LIME:'rgba(255,255,255,0.18)',fill:i<=s.scan?LIME:'transparent',tick:i<=s.scan?'✓':''})),
+      ocrFields:[{label:'TİCARİ UNVAN',value:'Kahve Durağı Gıda Ltd. Şti.',conf:'%98',confFg:LIME,bd:BD,needsCheck:false},
+        {label:'VERGİ NO',value:'472 018 5566',conf:'%96',confFg:LIME,bd:BD,needsCheck:false},
+        {label:'ADRES',value:'Caferağa Mah. Moda Cad. 41/A Kadıköy',conf:'%94',confFg:LIME,bd:BD,needsCheck:false},
+        {label:'NACE / FAALİYET',value:'56.10.13 — Kafe faaliyeti',conf:'%91',confFg:WARN,bd:'rgba(252,211,77,0.26)',needsCheck:true},
+        {label:'GEÇERLİLİK',value:'14.02.2027',conf:'%88',confFg:WARN,bd:'rgba(252,211,77,0.26)',needsCheck:true}],
+      confirmOcr:()=>{this.setState({screen:'docs',stack:[]});this.toast('Kasaya kaydedildi','3 yükümlülük güncellendi · hatırlatma kuruldu');},
+
+      proQuery:s.query,
+      proQueries:[['Buzdolabım soğutmuyor','a'],['İSG uzmanı gerekiyor','b'],['HACCP kurulumu','c']].map(([label])=>({label,pick:()=>this.setState({query:label})})),
+      pros:PROS.map(p=>({...p,badgeFill:p.verified?LIME:'rgba(245,245,242,0.18)',open:()=>{this.setState({proId:p.id});this.nav('pro');}})),
+      verifications:[{label:'Kimlik doğrulandı',status:'Doğrulandı',mark:'✓',bg:'rgba(198,255,61,0.16)',fg:LIME,stFg:LIME},
+        {label:'Meslek belgesi',status:'Doğrulandı',mark:'✓',bg:'rgba(198,255,61,0.16)',fg:LIME,stFg:LIME},
+        {label:'Yetkili servis sözleşmesi',status:'Doğrulandı',mark:'✓',bg:'rgba(198,255,61,0.16)',fg:LIME,stFg:LIME},
+        {label:'Oda / birlik kaydı',status:'Kontrol edilmedi',mark:'–',bg:'rgba(255,255,255,0.08)',fg:T3,stFg:T3}],
+      proStats:[{value:'4.9',label:'PUAN · 96 DEĞ.'},{value:'184',label:'TAMAMLANAN İŞ'},{value:'38 dk',label:'YANIT SÜRESİ'}],
+      services:[{name:'Acil arıza müdahalesi',scope:'Yerinde · 2 saat içinde',price:'₺850'},
+        {name:'Soğutma bakım sözleşmesi',scope:'Aylık periyodik · rapor dahil',price:'₺1.400'}],
+      bookPro:()=>{this.setState({booked:true});this.toast('Randevu oluşturuldu','Bugün 11:30 · QR ile giriş yapacak');},
+      bookLabel:s.booked?'Randevu oluşturuldu ✓':'Bugün 11:30 için tut · ₺850',
+      openQuote:()=>this.setState({sheet:'quote'}),
+
+      ...(()=>{const doms=[
+          {r:150,label:'BELGELER',value:'18/22',unit:'%82',color:LIME,go:()=>this.root('docs')},
+          {r:122,label:'PERSONEL',value:'9/12',unit:'%75',color:WARN,go:()=>this.nav('personnel')},
+          {r:94,label:'FORMLAR',value:'12/16',unit:'%75',color:WARN,go:()=>this.nav('form')},
+          {r:66,label:'İSG',value:'11/13',unit:'%85',color:LIME,go:()=>this.nav('roadmap')},
+          {r:38,label:'EKİPMAN',value:'6/14',unit:'%43',color:CRIT,go:()=>this.nav('equip')}];
+        return{arcLabels:doms.map(d=>({label:d.label,value:d.value,unit:d.unit,color:d.color,
+          top:(190-d.r-11.5)+'px',go:d.go}))};})(),
+      openCalc:()=>this.setState({sheet:'calc'}),
+      goEquipFix:()=>this.nav('equip'),
+      scoreRows:[{label:'Belgeler',value:'18/22',state:'İYİ',pct:'82%',fg:LIME,bg:'rgba(198,255,61,0.14)',note:'2 belge süresi doluyor'},
+        {label:'Ekipman bakımı',value:'6/14',state:'ZAYIF',pct:'43%',fg:CRIT,bg:'rgba(248,113,113,0.14)',note:'Yangın tüpü ve soğutma kontrolü gecikmiş'},
+        {label:'Personel uyumu',value:'9/12',state:'İZLE',pct:'75%',fg:WARN,bg:'rgba(252,211,77,0.14)',note:'2 hijyen eğitimi eksik'},
+        {label:'İSG',value:'11/13',state:'İYİ',pct:'85%',fg:LIME,bg:'rgba(198,255,61,0.14)',note:'Risk değerlendirmesi güncel'},
+        {label:'Vergi & SGK',value:'8/8',state:'TAM',pct:'100%',fg:LIME,bg:'rgba(198,255,61,0.14)',note:'Bu dönem eksik yok'},
+        {label:'Gıda / üretim',value:'12/16',state:'İZLE',pct:'75%',fg:WARN,bg:'rgba(252,211,77,0.14)',note:'Soğuk zincir kayıtlarında boşluk var'}],
+
+      moreItems:[{icon:'👥',label:'Personel',sub:'4 kişi · 2 eksik eğitim',badge:true,badgeText:'2',go:()=>this.nav('personnel')},
+        {icon:'🧰',label:'Ekipman & bakım',sub:'11 kayıt · 1 arıza',badge:true,badgeText:'1',go:()=>this.nav('equip')},
+        {icon:'📋',label:'Formlar',sub:'Günlük hijyen kontrol formu · v4',badge:true,badgeText:'1',go:()=>this.nav('form')},
+        {icon:'⚠️',label:'Uygunsuzluklar',sub:'1 açık · kritik',badge:true,badgeText:'1',go:()=>this.nav('ncrDetail')},
+        {icon:'🎓',label:'Eğitim',sub:'Kayıtlı, canlı ve resmî sertifika yolları',badge:false,go:()=>this.nav('training')},
+        {icon:'🧭',label:'Resmî süreç yol haritası',sub:'7 süreç · 3 tamam, 1 sürüyor',badge:false,go:()=>this.nav('roadmap')},
+        {icon:'💬',label:'Teklifler',sub:'3 yanıt bekliyor',badge:true,badgeText:'3',go:()=>this.nav('quotes')},
+        {icon:'🧾',label:'Servis geçmişi',sub:'QR girişli ziyaretler ve kanıt zinciri',badge:false,go:()=>this.nav('visit')},
+        {icon:'📰',label:'Uzman içerikleri',sub:'Doğrulanmış mevzuat yorumları',badge:false,go:()=>this.nav('feed')},
+        {icon:'📤',label:'Rapor al',sub:'PDF / Excel · denetim dosyası',badge:false,go:()=>this.toast('Denetim dosyası','PDF hazırlanıyor · 22 belge, 84 kanıt')},
+        {icon:'⚙️',label:'Ayarlar',sub:'Bildirim matrisi, tek el modu, çevrimdışı',badge:false,go:()=>this.nav('settings')}],
+
+      staff:[{initials:'EK',name:'Elif Kaya',role:'Servis · tam zamanlı',tasks:'3 görev',chips:[{label:'HİJYEN EKSİK',fg:WARN,bg:'rgba(252,211,77,0.14)'},{label:'PORTÖR 21 GÜN',fg:WARN,bg:'rgba(252,211,77,0.14)'}]},
+        {initials:'BT',name:'Burak Tan',role:'Mutfak · tam zamanlı',tasks:'2 görev',chips:[{label:'HİJYEN EKSİK',fg:WARN,bg:'rgba(252,211,77,0.14)'}]},
+        {initials:'MS',name:'Merve Sarı',role:'Kasa · yarı zamanlı',tasks:'1 görev',chips:[{label:'BELGELER TAM',fg:LIME,bg:'rgba(198,255,61,0.14)'}]},
+        {initials:'AD',name:'Ali Demir',role:'Kurye · sözleşmeli',tasks:'—',chips:[{label:'İŞE ALIŞ %60',fg:INFO,bg:'rgba(147,197,253,0.14)'}]}],
+
+      equipment:[{icon:'❄️',name:'Buzdolabı · Mutfak arka',serial:'GH-EQ-4471-KDK',status:'ARIZA',stFg:CRIT,stBg:'rgba(248,113,113,0.14)',bd:'rgba(248,113,113,0.24)',next:'Bu ay 4. limit aşımı · servis öneriliyor',fault:()=>this.setState({sheet:'fault'})},
+        {icon:'🧯',name:'Yangın tüpü ×3 · Salon',serial:'GH-EQ-2210-KDK',status:'DOLUYOR',stFg:WARN,stBg:'rgba(252,211,77,0.14)',bd:BD,next:'Periyodik kontrol 3 gün içinde',fault:()=>this.setState({sheet:'fault'})},
+        {icon:'🔥',name:'LPG tüp bağlantısı',serial:'GH-EQ-8842-KDK',status:'GEÇERLİ',stFg:LIME,stBg:'rgba(198,255,61,0.14)',bd:BD,next:'Sonraki bakım 12.11.2026',fault:()=>this.setState({sheet:'fault'})}],
+      goQr:()=>this.nav('qr'),
+      qrCells:Array.from({length:100},(_,i)=>{const r=Math.floor(i/10),c=i%10;const corner=(r<3&&c<3)||(r<3&&c>6)||(r>6&&c<3);
+        const on=corner?!((r===1&&c!==1&&c!==8)||(c===1&&r!==1&&r!==8)||(r===8&&c<3)||(c===8&&r<3)):((r*7+c*3+((r*c)%5))%3!==0);
+        return{bg:on?'#0A0A0A':'transparent'};}),
+      qrActions:[{icon:'📋',label:'Bugünün kontrolleri (2)'},{icon:'🧰',label:'Bakım geçmişi'},{icon:'⚠️',label:'Arıza bildir'},{icon:'📄',label:'Ekipman belgeleri'}],
+
+      onb:{...onb,isResult:!!onb.isResult,options:(onb.options||[]).map(o=>({...o,hasIcon:!!o.icon,icon:o.icon||'',
+        picked:s.onbPick===o.v,bd:s.onbPick===o.v?'rgba(198,255,61,0.4)':BD,bg:s.onbPick===o.v?'rgba(198,255,61,0.06)':'#0F0F0F',
+        pick:()=>this.setState({onbPick:o.v})}))},
+      onbSegs:[0,1,2,3,4].map(i=>({bg:i<=s.onb?LIME:'rgba(255,255,255,0.09)'})),
+      onbResults:[{n:'14',label:'aktif yükümlülük',sub:'Kafe · LPG · paket servis · Kadıköy'},
+        {n:'3',label:'bugünlük iş',sub:'Hiçbiri 2 dakikadan uzun değil'},
+        {n:'2',label:'eksik belge',sub:'Haşere raporu ve su analizi'},
+        {n:'1',label:'uzman ihtiyacı',sub:'Yangın tüpü periyodik kontrolü'}],
+      onbNext:()=>{if(s.onb===1&&s.onbPick===null){this.setState({onbPick:'a'});return;}
+        if(s.onb>=4){this.setState({screen:'home',stack:[],onb:0});this.toast('Kurulum %62','Çalışmaya başlarken kalanı tamamlarız');return;}
+        if(s.onb===0&&s.onbPick==='doc'){this.setState({onb:1,onbPick:null});return;}
+        this.setState({onb:s.onb+1,onbPick:null});},
+      onbSkip:()=>{if(s.onb>=4)return;this.setState({onb:s.onb+1,onbPick:null});},
+
+      branches:[{name:'Bostancı',meta:'2 kritik · 4 gecikmiş görev',score:'41',fg:CRIT,bd:'rgba(248,113,113,0.24)'},
+        {name:'Kadıköy Moda',meta:'1 belge doluyor',score:'58',fg:WARN,bd:BD},
+        {name:'Acıbadem',meta:'Tüm görevler zamanında',score:'79',fg:LIME,bd:BD},
+        {name:'Ataşehir',meta:'Eğitim eksiği yok',score:'84',fg:LIME,bd:BD},
+        {name:'Üsküdar',meta:'Yeni şube · kurulum %40',score:'—',fg:T3,bd:BD}],
+
+      checkIn:()=>{this.setState(p=>({checkedIn:!p.checkedIn}));this.toast(s.checkedIn?'Çıkış yapıldı':'Vardiyaya giriş yapıldı','QR ile kaydedildi · 09:41');},
+      checkinLabel:s.checkedIn?'Vardiyadan çık':'QR ile vardiyaya giriş',
+      checkinBg:s.checkedIn?'#1E1E1E':LIME,checkinFg:s.checkedIn?T1:INK,
+      empTasks:[{icon:'❄️',title:'Soğuk zincir sıcaklık kaydı',meta:'Fotoğraf + değer · 1 dk',open:()=>{this.setState({persona:'owner',stack:['employee']});this.openTask('t1');}},
+        {icon:'🧼',title:'El yıkama istasyonu kontrolü',meta:'Onay kutusu · 20 sn',open:()=>this.toast('Tamamlandı','Kanıt gerekmiyordu')},
+        {icon:'🎓',title:'Hijyen eğitimi · 45 dk',meta:'Sana atandı · bu hafta',open:()=>this.setState({sheet:'training'})}],
+
+      provRows:[{label:'Bu ayki kazanç',sub:'Komisyon sonrası · %11',value:'₺18.400'},
+        {label:'Bekleyen teklif',sub:'Ortalama yanıt 38 dk',value:'4'},
+        {label:'İşletme puanı',sub:'96 doğrulanmış değerlendirme',value:'4,9'}],
+
+      ...(()=>{const keys={home:'tHome',tasks:'tTasks',qr:'tQr',docs:'tDocs',experts:'tExperts',more:'tMore'};const out={};
+        const moreScreens=['personnel','equip','form','ncrDetail','roadmap','training','quotes','visit','settings'];
+        tabDefs.forEach(t=>{const active=(t.k==='home'&&isBrand)||sc===t.k||(t.k==='tasks'&&sc==='taskDetail')||(t.k==='docs'&&(sc==='scan'||sc==='scanConfirm'))||(t.k==='experts'&&(sc==='pro'||sc==='feed'))||(t.k==='more'&&moreScreens.indexOf(sc)>=0);
+          out[keys[t.k]]={fg:active?INK:'rgba(245,245,242,0.5)',pill:active?LIME:'transparent',
+            glow:active?'0 4px 20px rgba(198,255,61,0.35)':'none',go:()=>{if(t.k==='qr'){this.setState({screen:'qr',stack:[this.personaHome(s.persona)]});return;}
+            if(t.k==='home'){this.root(this.personaHome(s.persona));return;}this.root(t.k);}};});
+        return out;})(),
+      tabsUnused:tabDefs.map(t=>{const active=(t.k==='home'&&isBrand)||sc===t.k||(t.k==='tasks'&&sc==='taskDetail')||(t.k==='docs'&&(sc==='scan'||sc==='scanConfirm'))||(t.k==='experts'&&sc==='pro')||(t.k==='more'&&(sc==='personnel'||sc==='equip'));
+        return{label:t.label,icon:t.icon,fg:active?LIME:T3,
+          go:()=>{if(t.k==='qr'){this.setState({screen:'qr',stack:[this.personaHome(s.persona)]});return;}
+            if(t.k==='home'){this.root(this.personaHome(s.persona));return;}
+            this.root(t.k);}};}),
+
+      showAiFab:true,openAi:()=>this.setState({sheet:'ai'}),
+      fab:{left:s.fabX+'px',top:s.fabY+'px',
+        opacity:s.fabDrag?1:(s.fabIdle?0.42:0.95),
+        scale:s.fabDrag?1.08:1,
+        shell:s.fabDrag?0.5:0.34,ring:s.fabDrag?0.85:0.6,
+        dot:s.fabDrag?1:0.85,dotGlow:s.fabDrag?0.55:0.3,
+        transition:s.fabDrag?'opacity .12s ease, transform .12s cubic-bezier(.2,.7,.2,1)':'left .34s cubic-bezier(.16,1,.3,1), top .34s cubic-bezier(.16,1,.3,1), opacity .5s ease, transform .16s cubic-bezier(.2,.7,.2,1)'},
+      fabDown:this.fabDown,fabClick:this.fabClick,openNotif:()=>this.nav('notifs'),
+      openSearch:()=>this.setState({sheet:'search'}),openWhy:()=>this.setState({sheet:'why'}),
+      openTraining:()=>this.setState({sheet:'training'}),
+      goTasks:()=>this.root('tasks'),goExperts:()=>this.root('experts'),goScore:()=>this.nav('score'),
+      goOnb:()=>this.nav('onb'),
+      sheetOpen:!!s.sheet,sheet:sheet||{rows:[],meta:[]},closeSheet:()=>this.setState({sheet:null}),
+      toastOpen:!!s.toast,toast:s.toast?{...s.toast,icon:s.toast.kind==='warn'?'!':'✓',
+        bg:s.toast.kind==='warn'?'rgba(252,211,77,0.16)':'rgba(198,255,61,0.16)',fg:s.toast.kind==='warn'?WARN:LIME}:{},
+      formQs:[
+        {no:'01',label:'Soğutucu sıcaklıkları kabul aralığında mı?',required:true,isCond:false,ans:s.f1,key:'f1',opts:['Evet','Hayır'],flagKey:'Hayır'},
+        {no:'02',label:'Personel hijyen kıyafeti eksiksiz mi?',required:true,isCond:false,ans:s.f2,key:'f2',opts:['Evet','Hayır'],flagKey:'Hayır'},
+        {no:'03',label:'Paket servis taşıma kabı sıcak/soğuk ayrımı yapıldı mı?',required:true,isCond:true,ans:s.f3,key:'f3',opts:['Evet','Hayır'],flagKey:'Hayır'},
+        {no:'04',label:'Atık kovaları kapalı ve temiz mi?',required:false,isCond:false,ans:s.f4,key:'f4',opts:['Evet','Hayır'],flagKey:'Hayır'}]
+        .map(q=>({no:q.no,label:q.label,required:q.required,isCond:q.isCond,flagged:q.ans==='Hayır',
+          bd:q.ans==='Hayır'?'rgba(248,113,113,0.24)':BD,
+          opts:q.opts.map(o=>({label:o,bd:q.ans===o?(o==='Hayır'?'rgba(248,113,113,0.5)':'rgba(198,255,61,0.45)'):BDS,
+            bg:q.ans===o?(o==='Hayır'?'rgba(248,113,113,0.12)':'rgba(198,255,61,0.1)'):'#161616',
+            fg:q.ans===o?(o==='Hayır'?CRIT:LIME):T2,pick:()=>this.setState({[q.key]:o})}))})),
+      formScore:(()=>{const a=[s.f1,s.f2,s.f3,s.f4].filter(v=>v==='Evet').length;return a*25+' / 100';})(),
+      formScoreFg:[s.f1,s.f2,s.f3,s.f4].some(v=>v==='Hayır')?CRIT:LIME,
+      submitForm:()=>{const bad=[s.f1,s.f2,s.f3,s.f4].some(v=>v==='Hayır');
+        if(bad){this.setState({screen:'ncrDetail',stack:['home']});this.toast('Form gönderildi','1 uygunsuzluk açıldı · düzeltici faaliyet atandı','warn');}
+        else{this.setState({screen:'home',stack:[]});this.toast('Form gönderildi','HIJ-KTRL v4 · kanıt zincirine yazıldı');}},
+
+      capa:[{label:'Tespit',meta:'25.08 09:41 · form kaydı · Elif K.',mark:'✓',ring:LIME,fill:LIME,markFg:INK,fg:T1},
+        {label:'Kontrol altına alma',meta:'Ürün yedek üniteye taşındı · fotoğraf eklendi',mark:'✓',ring:LIME,fill:LIME,markFg:INK,fg:T1},
+        {label:'Düzeltici faaliyet',meta:'Teknik servis kontrolü · 24 saat içinde · açık',mark:'●',ring:WARN,fill:'transparent',markFg:WARN,fg:T1},
+        {label:'Yönetici doğrulaması',meta:'Kanıt yüklendikten sonra istenecek',mark:'',ring:'rgba(255,255,255,0.18)',fill:'transparent',markFg:T3,fg:T2},
+        {label:'Kapanış',meta:'Doğrulama sonrası otomatik',mark:'',ring:'rgba(255,255,255,0.18)',fill:'transparent',markFg:T3,fg:T2}],
+      suggestReplace:()=>this.toast('Değişim analizi','4 arıza · 11 yıl yaş · onarım maliyeti değişimin %58\'i'),
+
+      roadSegs:[0,1,2,3,4,5,6].map(i=>({bg:i<3?LIME:i===3?WARN:'rgba(255,255,255,0.09)'})),
+      roadmap:[
+        {name:'Vergi dairesi kaydı',status:'TAMAM',stFg:LIME,stBg:'rgba(198,255,61,0.14)',mark:'✓',ring:LIME,fill:LIME,markFg:INK,bd:BD,where:'Kadıköy Vergi D.',dur:'1 gün',
+         items:[{label:'Kira sözleşmesi',mark:'✓',fg:LIME},{label:'İmza beyannamesi',mark:'✓',fg:LIME},{label:'Vergi levhası alındı',mark:'✓',fg:LIME}]},
+        {name:'İşletme kayıt belgesi',status:'SÜRÜYOR',stFg:WARN,stBg:'rgba(252,211,77,0.14)',mark:'●',ring:WARN,fill:'transparent',markFg:WARN,bd:'rgba(252,211,77,0.24)',where:'Kadıköy Belediyesi',dur:'≈10 gün',
+         items:[{label:'Başvuru formu verildi',mark:'✓',fg:LIME},{label:'Ustalık belgesi bekleniyor',mark:'●',fg:WARN},{label:'Yerinde inceleme planlanmadı',mark:'○',fg:T3}]},
+        {name:'İtfaiye uygunluk raporu',status:'BAŞLAMADI',stFg:T3,stBg:'rgba(255,255,255,0.08)',mark:'',ring:'rgba(255,255,255,0.18)',fill:'transparent',markFg:T3,bd:BD,where:'İtfaiye Daire Bşk.',dur:'≈15 gün',
+         items:[{label:'Yangın tüpü ve tesisat kontrolü',mark:'○',fg:T3},{label:'Kaçış planı çizimi',mark:'○',fg:T3}]},
+        {name:'Gıda işletmesi kaydı',status:'BAŞLAMADI',stFg:T3,stBg:'rgba(255,255,255,0.08)',mark:'',ring:'rgba(255,255,255,0.18)',fill:'transparent',markFg:T3,bd:BD,where:'Tarım ve Orman İl Md.',dur:'≈20 gün',
+         items:[{label:'Kayıt belgesi ön koşul',mark:'○',fg:T3},{label:'Su analiz raporu',mark:'○',fg:T3},{label:'Personel portör muayenesi',mark:'○',fg:T3}]}],
+
+      courses:[
+        {name:'Hijyen eğitimi · temel',kind:'GOVERHUB EĞİTİMİ',kindFg:LIME,kindBg:'rgba(198,255,61,0.14)',dur:'45 dk · video + sınav',
+         cert:'Tamamlayana GoverHub katılım belgesi verilir. Resmî hijyen sertifikası değildir.',pct:'40%',progress:'2/5 bölüm · Elif K.',cta:'Devam et',ctaBg:LIME,ctaFg:INK,bd:BD,act:()=>this.toast('Bölüm 3 açıldı','İlerleme çevrimdışı da kaydedilir')},
+        {name:'Hijyen eğitimi · resmî sertifika',kind:'CANLI · YETKİLİ KURUM',kindFg:INFO,kindBg:'rgba(147,197,253,0.14)',dur:'12 Eylül · 3 saat',
+         cert:'Yetkili kurum tarafından verilir; resmî sertifika yerine geçer. Eğitmen doğrulandı.',pct:'0%',progress:'2 personel için uygun',cta:'Yer ayır',ctaBg:'#1E1E1E',ctaFg:T1,bd:'rgba(147,197,253,0.24)',act:()=>this.toast('Yer ayrıldı','12 Eylül · 2 kişi · hatırlatma kuruldu')},
+        {name:'Alerjen yönetimi',kind:'UZMAN EĞİTİMİ',kindFg:T2,kindBg:'rgba(255,255,255,0.08)',dur:'25 dk · kayıtlı',
+         cert:'Doğrulanmış gıda mühendisi tarafından hazırlandı, GoverHub içerik onayından geçti.',pct:'100%',progress:'Tamamlandı · 3 personel',cta:'Belgeyi gör',ctaBg:'#1E1E1E',ctaFg:T1,bd:BD,act:()=>this.toast('Katılım belgesi','PDF · kanıt zincirinde kayıtlı')}],
+
+      quotes:[
+        {initials:'MY',name:'Murat Yıldız',meta:'Doğrulanmış · 4,9 · 2,1 km',price:'₺850',bd:'rgba(198,255,61,0.28)',cta:'Bu teklifi kabul et',ctaBg:LIME,ctaFg:INK,
+         rows:[{k:'Kapsam',v:'Termostat kontrolü + gaz basıncı',fg:T1},{k:'Süre',v:'Bugün 11:30 · 1–2 saat',fg:T1},{k:'Dahil',v:'İşçilik, ölçüm raporu',fg:T1},{k:'Dahil değil',v:'Kompresör değişimi (₺2.400)',fg:WARN},{k:'Geçerlilik',v:'6 saat',fg:T2}],
+         accept:()=>{this.setState({screen:'visit',stack:['quotes']});this.toast('Teklif kabul edildi','Ödeme alındı · QR girişli servis kaydı açıldı');}},
+        {initials:'SC',name:'Soğuk-Tek Servis A.Ş.',meta:'Doğrulanmış şirket · 4,7',price:'₺1.150',bd:BD,cta:'Kabul et',ctaBg:'#1E1E1E',ctaFg:T1,
+         rows:[{k:'Kapsam',v:'Tam ünite bakımı + rapor',fg:T1},{k:'Süre',v:'Yarın 09:00 · 3 saat',fg:T1},{k:'Dahil',v:'İşçilik, gaz dolumu, 3 ay garanti',fg:T1},{k:'Dahil değil',v:'Yedek parça',fg:WARN},{k:'Geçerlilik',v:'2 gün',fg:T2}],
+         accept:()=>{this.setState({screen:'visit',stack:['quotes']});this.toast('Teklif kabul edildi','Yarın 09:00 · hatırlatma kuruldu');}},
+        {initials:'HB',name:'Hakan Bulut',meta:'Kimlik doğrulandı · oda kaydı yok',price:'₺600',bd:BD,cta:'Kabul et',ctaBg:'#1E1E1E',ctaFg:T1,
+         rows:[{k:'Kapsam',v:'Arıza tespiti',fg:T1},{k:'Süre',v:'2 saat içinde · 1 saat',fg:T1},{k:'Dahil',v:'İşçilik',fg:T1},{k:'Dahil değil',v:'Rapor, parça, garanti',fg:CRIT},{k:'Geçerlilik',v:'12 saat',fg:T2}],
+         accept:()=>{this.setState({screen:'visit',stack:['quotes']});this.toast('Teklif kabul edildi','Rapor dahil değil — kanıt için ek belge gerekebilir','warn');}}],
+
+      chain:[{time:'11:28',label:'QR ile giriş · Murat Yıldız',hash:'a17f…9c2e'},
+        {time:'11:31',label:'Arıza tespiti fotoğrafı eklendi',hash:'b93d…4417'},
+        {time:'12:14',label:'Termostat değişimi tamamlandı',hash:'c58a…7f30'},
+        {time:'12:22',label:'Ölçüm raporu teslim edildi',hash:'d02c…11b8'},
+        {time:'12:24',label:'QR ile çıkış · işletme onayı',hash:'e6b1…88af'}],
+      ratings:['Uzmanlık','İletişim','Zamanında gelme','Rapor kalitesi'].map((label,ri)=>({label,
+        stars:[1,2,3,4,5].map(n=>({fg:n<=(s.rating[ri]||0)?LIME:'rgba(255,255,255,0.18)',
+          pick:()=>this.setState(p=>{const r=[...p.rating];r[ri]=n;return{rating:r};})}))})),
+      submitReview:()=>{this.setState({screen:'home',stack:[]});this.toast('Değerlendirme gönderildi','Yalnızca tamamlanmış işlem için geçerli sayıldı');},
+
+      notifList:[
+        {lvl:'KRİTİK',lvlFg:CRIT,lvlBg:'rgba(248,113,113,0.14)',bd:'rgba(248,113,113,0.28)',bg:'rgba(248,113,113,0.04)',time:'09:12',
+         title:'Yangın tüpü kontrolü 3 gün içinde',body:'Süre geçerse denetimde eksik sayılır ve ceza riski yükselir.',
+         actions:[{label:'Servis bul',bd:'transparent',bg:LIME,fg:INK,go:()=>this.root('experts')},{label:'Hatırlat',bd:BDS,bg:'transparent',fg:T1,go:()=>this.toast('Hatırlatma kuruldu','Yarın 09:00')}]},
+        {lvl:'İŞLEM GEREKLİ',lvlFg:WARN,lvlBg:'rgba(252,211,77,0.14)',bd:'rgba(252,211,77,0.24)',bg:'#0F0F0F',time:'Dün',
+         title:'Alerjen Etiketleme Tebliği güncellendi',body:'Menü kartlarında 14 alerjen için yeni format 01.09.2026 itibarıyla aranıyor. 30 gün süren var.',
+         actions:[{label:'Görevi aç',bd:'transparent',bg:LIME,fg:INK,go:()=>{this.setState({stack:['notifs']});this.openTask('t3');}},{label:'Neden?',bd:BDS,bg:'transparent',fg:T1,go:()=>this.setState({sheet:'why'})}]},
+        {lvl:'BİLGİ',lvlFg:INFO,lvlBg:'rgba(147,197,253,0.14)',bd:BD,bg:'#0F0F0F',time:'Dün',
+         title:'Elif K. hijyen eğitimini tamamladı',body:'Uyum skorun 4 puan arttı. Katılım belgesi kasaya eklendi.',
+         actions:[{label:'Belgeyi gör',bd:BDS,bg:'transparent',fg:T1,go:()=>this.root('docs')}]},
+        {lvl:'PAZAR YERİ',lvlFg:T2,lvlBg:'rgba(255,255,255,0.08)',bd:BD,bg:'#0F0F0F',time:'2 gün',
+         title:'3 teklif geldi',body:'Soğutma arızası talebine Murat Yıldız, Soğuk-Tek ve Hakan Bulut yanıt verdi.',
+         actions:[{label:'Teklifleri karşılaştır',bd:'transparent',bg:LIME,fg:INK,go:()=>this.root('quotes')}]}],
+      goSettings:()=>this.nav('settings'),
+
+      toggles:[['dark','Koyu tema','Sistem ayarını izler · gündüz modu mevcut'],['onehand','Tek el modu','Ana işlemler alt bölgeye toplanır'],
+        ['sms','Kritik uyarılarda SMS','Yalnızca kritik seviye için · diğerleri uygulama içi'],['morning','Sabah özeti','07:30 · bugünün işleri ve süresi dolan belgeler'],
+        ['lang','Arayüz dili · Türkçe','İkinci dil olarak İngilizce etiketler açık']]
+        .map(([k,label,sub])=>{const on=!!s.tog[k];return{label,sub,flip:()=>this.setState(p=>({tog:{...p.tog,[k]:!p.tog[k]}})),
+          trackBg:on?'rgba(198,255,61,0.9)':'#1E1E1E',trackBd:on?'transparent':BDS,knob:on?INK:'rgba(245,245,242,0.55)',justify:on?'flex-end':'flex-start'};}),
+      matrix:[{cat:'Kritik mevzuat',channels:'PUSH · SMS · E-POSTA',fg:LIME},{cat:'Görev ve son tarih',channels:'PUSH · E-POSTA',fg:LIME},
+        {cat:'Belge süresi',channels:'PUSH · E-POSTA',fg:LIME},{cat:'Pazar yeri ve içerik',channels:'UYGULAMA İÇİ',fg:T2}],
+      sync:{dot:s.offline?WARN:LIME,label:s.offline?'Çevrimdışı · 3 kayıt bekliyor':'Eşitlendi · 09:41',
+        body:s.offline?'2 form ve 1 fotoğraf cihazda kuyrukta. Bağlantı gelince sıra korunarak yüklenir; çakışma olursa üzerine yazmadan sana sorar.':'Tüm görev, form ve kanıtlar sunucuda. Çevrimdışıyken de görev doldurmaya devam edebilirsin.',
+        cta:s.offline?'Şimdi eşitle':'Çevrimdışı modu dene'},
+      toggleOffline:()=>{const off=s.offline;this.setState({offline:!off});this.toast(off?'Eşitleme tamamlandı':'Çevrimdışı mod','3 kayıt sıraya alındı · kayıp yok',off?'ok':'warn');},
+
+      posts:[
+        {initials:'ZA',name:'Dr. Zeynep Arslan',role:'Gıda mühendisi · GoverHub Onaylı',verified:true,unverified:false,
+         text:'Alerjen tebliğinin yeni ekinde 14 alerjen için yazı boyu ve kontrast şartı da var. Menü kartını yeniden basmadan önce ölçüleri kontrol et — sadece liste eklemek yeterli değil.',
+         likes:184,comments:23,fBd:BDS,fBg:'transparent',fFg:T1,fLabel:'Takip et',likeFg:T3,follow:()=>this.toast('Takip ediliyor','Dr. Zeynep Arslan'),like:()=>this.toast('Beğenildi','')},
+        {initials:'MK',name:'Mehmet Korkmaz',role:'İSG uzmanı · meslek belgesi doğrulandı',verified:false,unverified:true,
+         text:'5 çalışanı geçen kafelerde risk değerlendirmesinin güncellenme sıklığı çoğu işletmede atlanıyor. Benim önerim yılda bir yerine her personel değişiminde gözden geçirmek.',
+         likes:62,comments:9,fBd:BDS,fBg:'transparent',fFg:T1,fLabel:'Takip et',likeFg:T3,follow:()=>this.toast('Takip ediliyor','Mehmet Korkmaz'),like:()=>this.toast('Beğenildi','')},
+        {initials:'ST',name:'Soğuk-Tek Servis A.Ş.',role:'Yetkili servis · şirket profili',verified:false,unverified:false,
+         text:'Yaz aylarında en sık gördüğümüz arıza kondenser kirliliği. Ayda bir filtre temizliği, çağırdığınız servis sayısını yarıya indiriyor.',
+         likes:41,comments:4,fBd:BDS,fBg:'transparent',fFg:T1,fLabel:'Takip et',likeFg:T3,follow:()=>this.toast('Takip ediliyor','Soğuk-Tek'),like:()=>this.toast('Beğenildi','')}],
+
+      note:notes[s.persona]};
+  }
+}
+</script>
+</body>
+</html>
