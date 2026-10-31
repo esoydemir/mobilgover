@@ -5,18 +5,15 @@
  */
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 
-export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string, readonly details?: any) {
-    super(message);
-  }
-}
+import { ApiError, NetworkError } from './errors';
 
-/** The request never reached the server (offline, DNS, timeout). Safe to retry. */
-export class NetworkError extends Error {}
+export { ApiError, NetworkError };
 
-type Options = { token?: string | null; body?: unknown; idempotencyKey?: string; bytes?: { data: Uint8Array; mime: string } };
+export type Options = { token?: string | null; body?: unknown; idempotencyKey?: string; bytes?: { data: Uint8Array; mime: string } };
+export type Api = <T = any>(method: 'GET' | 'POST' | 'PUT', path: string, o?: Options) => Promise<T>;
 
-export async function api<T = any>(method: 'GET' | 'POST' | 'PUT', path: string, o: Options = {}): Promise<T> {
+/** A client for one server. Tests use it against a server started on a random port. */
+export const makeApi = (baseUrl: string): Api => async <T = any>(method: 'GET' | 'POST' | 'PUT', path: string, o: Options = {}): Promise<T> => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20_000);
   const headers: Record<string, string> = {};
@@ -27,7 +24,7 @@ export async function api<T = any>(method: 'GET' | 'POST' | 'PUT', path: string,
   else if (o.body !== undefined) { headers['content-type'] = 'application/json'; body = JSON.stringify(o.body); }
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { method, headers, body, signal: ctrl.signal });
+    res = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, { method, headers, body, signal: ctrl.signal });
   } catch {
     throw new NetworkError('Sunucuya ulaşılamadı.');
   } finally {
@@ -40,7 +37,9 @@ export async function api<T = any>(method: 'GET' | 'POST' | 'PUT', path: string,
     throw new ApiError(res.status, e?.code ?? 'HTTP_' + res.status, e?.message ?? `Sunucu hatası (${res.status}).`, e?.details);
   }
   return json as T;
-}
+};
+
+export const api: Api = makeApi(API_URL);
 
 function safeJson(t: string) {
   try { return JSON.parse(t); } catch { return null; }

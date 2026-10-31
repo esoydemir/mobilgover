@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 import { useQueue, type Op } from '../api/queue';
 import { Screen } from '../components/Screen';
@@ -13,7 +14,7 @@ const STATUS: Record<Op['status'], [string, string]> = {
 
 /** Every record still on the device, with its state. Nothing is dropped without the user deciding. */
 export default function SyncRoute() {
-  const { ops, recent, online, syncing, syncNow, retry, discard } = useQueue();
+  const { ops, recent, online, syncing, syncNow, retry, discard, authRequired } = useQueue();
   return (
     <Screen title="Eşitleme" titleEn="Sync status">
       <Card border={online === false ? tint.warn(0.35) : C.bd}>
@@ -22,6 +23,13 @@ export default function SyncRoute() {
         <Text style={[type(12, 400, { color: C.t2, lh: 1.5 }), { marginTop: 6 }]}>Kayıtlar sırayla ve tekil işlem anahtarıyla gönderilir; tekrar gönderim mükerrer kayıt oluşturmaz. Fotoğraf, sunucu özetini doğrulamadan "gönderildi" sayılmaz.</Text>
         <PrimaryButton testID="sync-now" label={syncing ? 'Gönderiliyor…' : 'Şimdi eşitle'} disabled={syncing || !ops.some(o => o.status === 'pending')} height={44} size={13} style={{ marginTop: 12 }} onPress={() => void syncNow()} />
       </Card>
+      {authRequired ? (
+        <Card border={tint.warn(0.35)} style={{ gap: 8 }}>
+          <Text testID="sync-login-needed" style={type(13.5, 600, { color: C.warn })}>Oturum sona erdi</Text>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>Bekleyen kayıtlar cihazda duruyor ve silinmedi. Aynı hesapla yeniden giriş yapınca sırayla gönderilir.</Text>
+          <GhostButton label="Giriş yap" height={38} size={12} onPress={() => router.push('/login')} />
+        </Card>
+      ) : null}
       {ops.length === 0 ? <Empty title="Bekleyen kayıt yok" /> : null}
       {ops.map(o => (
         <Card key={o.id} border={o.status === 'failed' || o.status === 'conflict' ? tint.crit(0.35) : tint.warn(0.3)} style={{ gap: 6 }}>

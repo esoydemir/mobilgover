@@ -17,7 +17,9 @@ export async function uploadContent(db: Db, store: EvidenceStore, p: Principal, 
     if (!r || !can(p, 'task.execute', { companyId, siteId: r.site_id, assigneeId: r.assignee_id }).ok) throw notFound('Kanıt');
     return r;
   });
-  if (ev.status !== 'pending_upload') throw conflict('EVIDENCE_NOT_PENDING', `Bu kanıt zaten ${ev.status} durumunda.`);
+  // The details tell a client whose earlier answer was lost what actually happened.
+  if (ev.status !== 'pending_upload') throw conflict('EVIDENCE_NOT_PENDING', `Bu kanıt zaten ${ev.status === 'stored' ? 'kaydedilmiş' : 'reddedilmiş'}.`,
+    { status: ev.status, sha256: ev.sha256, reason: ev.rejection_reason });
 
   const actual = sha256Hex(bytes);
   let rejection: string | null = null;

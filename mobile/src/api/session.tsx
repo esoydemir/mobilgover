@@ -3,12 +3,14 @@ import { api, ApiError } from './client';
 import { load, remove, save } from './storage';
 import type { Company, Env, Me } from './types';
 
-type Stored = { token: string | null; companyId: string | null };
+type Stored = { token: string | null; companyId: string | null; userId?: string | null };
 
 type Session = {
   ready: boolean;
   env: Env | null;
   token: string | null;
+  /** Kept on the device so queued records can be matched to their author even when the app starts offline. */
+  userId: string | null;
   me: Me | null;
   companies: Company[];
   company: Company | null;
@@ -41,7 +43,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const [m, c] = await Promise.all([api<Me>('GET', '/me', { token }), api<Company[]>('GET', '/companies', { token })]);
     setMe(m);
     setCompanies(c);
-    return c;
+    return { m, c };
   }, []);
 
   useEffect(() => {
@@ -68,12 +70,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       api<T>(method, path, { token: stored.token, body, idempotencyKey });
 
     const finish = async (token: string) => {
-      const c = await loadAccount(token);
-      persist({ token, companyId: c[0]?.id ?? null });
+      const { m, c } = await loadAccount(token);
+      persist({ token, companyId: c[0]?.id ?? null, userId: m.userId });
     };
 
     return {
-      ready, env, token: stored.token, me, companies, company, siteId, role,
+      ready, env, token: stored.token, userId: me?.userId ?? stored.userId ?? null, me, companies, company, siteId, role,
       startLogin: async email => { await api('POST', '/auth/email/start', { body: { email } }); },
       verifyLogin: async (email, code) => {
         const r = await api<{ mfaRequired: boolean; token?: string; ticket?: string }>('POST', '/auth/email/verify', { body: { email, code } });
@@ -88,7 +90,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         try { await call('POST', '/auth/logout'); } catch { /* sign out locally anyway */ }
         setMe(null); setCompanies([]);
-        persist({ token: null, companyId: null });
+        persist({ token: null, companyId: null, userId: null });
       },
       refresh: async () => { if (stored.token) await loadAccount(stored.token); },
       selectCompany: id => persist({ ...stored, companyId: id }),
