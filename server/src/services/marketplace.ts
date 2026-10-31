@@ -18,6 +18,14 @@ import { appendAudit } from './audit';
 const isReviewer = (p: Principal) => p.platformRoles.includes('marketplace_reviewer');
 const today = () => new Date().toISOString().slice(0, 10);
 
+/**
+ * SQL condition for an approval that can take new work today ($n = today's date):
+ * approved, not past its end date, and every document it rests on still verified and in date.
+ */
+const LIVE_AUTH = (alias: string, n: number) => `${alias}.status = 'approved' AND ${alias}.valid_until >= $${n}::date
+  AND NOT EXISTS (SELECT 1 FROM professional_verifications bv WHERE bv.id = ANY(${alias}.basis_verification_ids)
+                   AND (bv.status <> 'verified' OR bv.valid_until < $${n}::date))`;
+
 async function ownProfile(tx: Tx, p: Principal) {
   const r = (await tx.query(`SELECT * FROM professional_profiles WHERE user_id = $1`, [p.userId])).rows[0];
   if (!r) throw notFound('Mesleki profil');
@@ -46,16 +54,17 @@ export async function profileView(tx: Tx, profileId: string) {
        FROM professional_verifications WHERE profile_id = $1 ORDER BY submitted_at`, [profileId])).rows
     .map(v => ({ ...v, expired: v.valid_until !== null && v.valid_until < today() }));
   const auth = (await tx.query(
-    `SELECT a.category_code, c.name, a.status, a.decided_at, c.is_example FROM service_authorizations a JOIN service_categories c ON c.code = a.category_code
-      WHERE a.profile_id = $1 ORDER BY c.name`, [profileId])).rows;
+    `SELECT a.category_code, c.name, a.status, a.decided_at, a.valid_until, c.is_example, (a.status = 'approved' AND NOT (${LIVE_AUTH('a', 2)})) AS expired
+       FROM service_authorizations a JOIN service_categories c ON c.code = a.category_code
+      WHERE a.profile_id = $1 ORDER BY c.name`, [profileId, today()])).rows;
   const identity = ver.find(v => v.kind === 'identity' && v.status === 'verified');
   return {
     profile: pr,
     identity: identity ? { status: 'verified', checkedAt: identity.checked_at, method: identity.check_method } : { status: 'not_verified' },
     credentials: ver.filter(v => v.kind === 'credential'),
     businessRegistration: ver.filter(v => v.kind === 'business_registration'),
-    authorizedCategories: auth.filter(a => a.status === 'approved'),
-    otherCategoryRequests: auth.filter(a => a.status !== 'approved'),
+    authorizedCategories: auth.filter(a => a.status === 'approved' && !a.expired),
+    otherCategoryRequests: auth.filter(a => a.status !== 'approved' || a.expired),
     notChecked: [
       ...(identity ? [] : ['Kimlik']),
       'Oda / meslek birliği kaydı (bu aşamada kontrol edilmiyor)',
@@ -106,7 +115,7 @@ export async function decideVerification(tx: Tx, p: Principal, id: string, b: { 
  * Category approval requires a verified identity and every credential the
  * category lists, verified and in date. The basis is recorded.
  */
-export async function decideAuthorization(tx: Tx, p: Principal, id: string, b: { decision: 'approved' | 'rejected' | 'suspended'; reason: string }) {
+export async function decideAuthorization(tx: Tx, p: Principal, id: string, b: { decision: 'approved' | 'rejected' | 'suspended'; reason: string; validUntil?: string | null }) {
   if (!isReviewer(p)) throw forbidden();
   const a = (await tx.query(
     `SELECT a.*, pp.user_id, c.required_credentials FROM service_authorizations a JOIN professional_profiles pp ON pp.id = a.profile_id
@@ -116,17 +125,23 @@ export async function decideAuthorization(tx: Tx, p: Principal, id: string, b: {
   if (b.reason.trim().length < 5) throw invalid('Karar gerekçesi yaz.');
   let basis: string[] = [];
   if (b.decision === 'approved') {
-    const ver = (await tx.query(`SELECT id, kind, credential_type FROM professional_verifications WHERE profile_id = $1 AND status = 'verified' AND (valid_until IS NULL OR valid_until >= $2)`,
+    const ver = (await tx.query(`SELECT id, kind, credential_type, valid_until FROM professional_verifications WHERE profile_id = $1 AND status = 'verified' AND (valid_until IS NULL OR valid_until >= $2)`,
       [a.profile_id, today()])).rows;
     const identity = ver.find(v => v.kind === 'identity');
     const missing = (a.required_credentials as string[]).filter(c => !ver.some(v => v.kind === 'credential' && v.credential_type === c));
     if (!identity) missing.unshift('identity');
     if (missing.length) throw new AppError(422, 'CREDENTIALS_MISSING', `Onay için doğrulanmış ve süresi geçmemiş belge gerekli: ${missing.join(', ')}`, { missing });
-    basis = [identity!.id, ...ver.filter(v => v.kind === 'credential' && a.required_credentials.includes(v.credential_type)).map(v => v.id)];
+    const basisRows = [identity!, ...ver.filter(v => v.kind === 'credential' && a.required_credentials.includes(v.credential_type))];
+    basis = basisRows.map(v => v.id);
+    // The approval ends no later than the first basis document does.
+    if (!b.validUntil || b.validUntil <= today()) throw invalid('Onayın bitiş tarihini (bugünden sonra) yaz.');
+    const cap = basisRows.map(v => v.valid_until).filter(Boolean).map(d => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d))).sort()[0];
+    if (cap && b.validUntil > cap) throw new AppError(422, 'VALIDITY_EXCEEDS_CREDENTIAL', `Onay, dayandığı belgenin bitişinden (${cap}) sonra bitemez.`, { cap });
   }
-  await tx.query(`UPDATE service_authorizations SET status = $2, reason = $3, decided_by = $4, decided_at = now(), basis_verification_ids = $5 WHERE id = $1`,
-    [id, b.decision, b.reason, p.userId, basis]);
-  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'pro.authorization_decided', entityType: 'service_authorization', entityId: id, payload: { decision: b.decision, category: a.category_code, basis } });
+  const validUntil = b.decision === 'approved' ? b.validUntil! : null;
+  await tx.query(`UPDATE service_authorizations SET status = $2, reason = $3, decided_by = $4, decided_at = now(), basis_verification_ids = $5, valid_until = $6 WHERE id = $1`,
+    [id, b.decision, b.reason, p.userId, basis, validUntil]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'pro.authorization_decided', entityType: 'service_authorization', entityId: id, payload: { decision: b.decision, category: a.category_code, basis, validUntil } });
 }
 
 export async function reviewQueue(tx: Tx, p: Principal) {
@@ -147,20 +162,27 @@ export async function providersFor(tx: Tx, categoryCode: string) {
     `SELECT pp.id, pp.display_name, pp.headline, pp.city, pp.district,
             (SELECT count(*)::int FROM professional_verifications v WHERE v.profile_id = pp.id AND v.status = 'verified' AND v.kind = 'credential') AS verified_credentials
        FROM professional_profiles pp JOIN service_authorizations a ON a.profile_id = pp.id
-      WHERE a.category_code = $1 AND a.status = 'approved' AND pp.status = 'active'
-      ORDER BY verified_credentials DESC, pp.display_name`, [categoryCode])).rows
+      WHERE a.category_code = $1 AND ${LIVE_AUTH('a', 2)} AND pp.status = 'active'
+      ORDER BY verified_credentials DESC, pp.display_name`, [categoryCode, today()])).rows
     .map(r => ({ ...r, sponsored: false }));
 }
 
-export async function createRequest(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; ncrId?: string | null; city: string }) {
+export async function createRequest(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; ncrId?: string | null; city: string; shareNcrSummary?: boolean }) {
   if (!can(p, 'service.request', { companyId, siteId: b.siteId }).ok) throw forbidden();
   if (!(await tx.query(`SELECT 1 FROM service_categories WHERE code = $1`, [b.categoryCode])).rowCount) throw notFound('Hizmet kategorisi');
   if (b.ncrId && !(await tx.query(`SELECT 1 FROM nonconformities WHERE id = $1 AND company_id = $2`, [b.ncrId, companyId])).rowCount) throw notFound('Uygunsuzluk');
+  if (b.shareNcrSummary && !b.ncrId) throw invalid('Paylaşmak için bir uygunsuzluk seç.');
   const r = await tx.query<{ id: string }>(
-    `INSERT INTO service_requests (company_id, site_id, category_code, title, description, ncr_id, city, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-    [companyId, b.siteId, b.categoryCode, b.title, b.description, b.ncrId ?? null, b.city, p.userId]);
-  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'service.requested', entityType: 'service_request', entityId: r.rows[0]!.id, payload: { category: b.categoryCode, ncrId: b.ncrId ?? null } });
+    `INSERT INTO service_requests (company_id, site_id, category_code, title, description, ncr_id, city, created_by, share_ncr_summary) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+    [companyId, b.siteId, b.categoryCode, b.title, b.description, b.ncrId ?? null, b.city, p.userId, !!b.shareNcrSummary]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'service.requested', entityType: 'service_request', entityId: r.rows[0]!.id,
+    payload: { category: b.categoryCode, ncrId: b.ncrId ?? null, sharedWithProviders: sharedFields(!!b.shareNcrSummary) } });
   return { id: r.rows[0]!.id };
+}
+
+/** Exactly what a provider can see of a request; recorded with the request so the business has a record of what it shared. */
+function sharedFields(shareNcr: boolean) {
+  return ['title', 'description', 'city', 'category', ...(shareNcr ? ['ncr.title', 'ncr.risk_level', 'ncr.hazard_type'] : []), 'after_award:company_name', 'after_award:site_name'];
 }
 
 export async function listRequests(tx: Tx, p: Principal, companyId: string) {
@@ -187,6 +209,11 @@ export async function acceptQuote(tx: Tx, p: Principal, companyId: string, quote
   if (!q || !can(p, 'service.request', { companyId, siteId: q.site_id }).ok) throw notFound('Teklif');
   if (q.request_status !== 'open' || q.status !== 'submitted') throw conflict('INVALID_STATE', 'Bu teklif kabul edilebilir durumda değil.');
   if (new Date(q.valid_until) < new Date()) throw conflict('QUOTE_EXPIRED', 'Teklifin geçerlilik süresi dolmuş.');
+  // The provider must still hold a live approval for this category when the job is created.
+  const live = await tx.query(`SELECT 1 FROM service_authorizations a JOIN service_requests r ON r.category_code = a.category_code
+                                 JOIN professional_profiles pp ON pp.id = a.profile_id
+                                WHERE r.id = $1 AND a.profile_id = $2 AND pp.status = 'active' AND ${LIVE_AUTH('a', 3)}`, [q.request_id, q.provider_profile_id, today()]);
+  if (!live.rowCount) throw conflict('PROVIDER_NOT_AUTHORIZED', 'Uzmanın bu kategorideki hizmet onayı artık geçerli değil; bu teklif kabul edilemez.');
   await tx.query(`UPDATE quotes SET status = 'accepted' WHERE id = $1`, [quoteId]);
   await tx.query(`UPDATE quotes SET status = 'rejected' WHERE request_id = $1 AND id <> $2 AND status = 'submitted'`, [q.request_id, quoteId]);
   await tx.query(`UPDATE service_requests SET status = 'awarded' WHERE id = $1`, [q.request_id]);
@@ -220,24 +247,31 @@ export async function providerInbox(tx: Tx, p: Principal) {
   const pr = await ownProfile(tx, p);
   const requests = (await tx.query(
     `SELECT r.id, r.category_code, c.name AS category_name, r.title, r.description, r.city, r.created_at,
+            CASE WHEN r.share_ncr_summary THEN json_build_object('title', n.title, 'riskLevel', n.risk_level, 'hazardType', n.hazard_type) END AS shared_ncr,
             (SELECT q.status FROM quotes q WHERE q.request_id = r.id AND q.provider_profile_id = $1 ORDER BY q.created_at DESC LIMIT 1) AS my_quote_status
        FROM service_requests r JOIN service_categories c ON c.code = r.category_code
-       JOIN service_authorizations a ON a.category_code = r.category_code AND a.profile_id = $1 AND a.status = 'approved'
-      WHERE r.status = 'open' ORDER BY r.created_at DESC`, [pr.id])).rows;
+       JOIN service_authorizations a ON a.category_code = r.category_code AND a.profile_id = $1 AND ${LIVE_AUTH('a', 2)}
+       LEFT JOIN nonconformities n ON n.id = r.ncr_id AND n.company_id = r.company_id
+      WHERE r.status = 'open' ORDER BY r.created_at DESC`, [pr.id, today()])).rows;
+  const authorizations = (await tx.query(
+    `SELECT a.category_code, c.name, a.status, a.valid_until, (a.status = 'approved' AND NOT (${LIVE_AUTH('a', 2)})) AS expired
+       FROM service_authorizations a JOIN service_categories c ON c.code = a.category_code WHERE a.profile_id = $1 ORDER BY c.name`, [pr.id, today()])).rows;
   const jobs = (await tx.query(
     `SELECT j.id, j.status, j.checked_in_at, j.report_submitted_at, j.accepted_at, j.business_note, r.title, r.city, co.name AS company_name, s.name AS site_name
        FROM service_jobs j JOIN service_requests r ON r.id = j.request_id JOIN companies co ON co.id = j.company_id JOIN sites s ON s.id = r.site_id
       WHERE j.provider_profile_id = $1 ORDER BY j.created_at DESC`, [pr.id])).rows;
-  return { requests, jobs };
+  return { requests, jobs, authorizations };
 }
 
 export async function submitQuote(tx: Tx, p: Principal, requestId: string, b: { scope: string; exclusions: string; priceNet: number; vatRate: number; materials: string; durationText: string; warrantyText: string; validUntil: string }) {
   const pr = await ownProfile(tx, p);
   const r = (await tx.query(
-    `SELECT r.* FROM service_requests r JOIN service_authorizations a ON a.category_code = r.category_code AND a.profile_id = $2 AND a.status = 'approved'
-      WHERE r.id = $1`, [requestId, pr.id])).rows[0];
+    `SELECT r.*, NOT (${LIVE_AUTH('a', 3)}) AS auth_expired FROM service_requests r
+       JOIN service_authorizations a ON a.category_code = r.category_code AND a.profile_id = $2 AND a.status = 'approved'
+      WHERE r.id = $1`, [requestId, pr.id, today()])).rows[0];
   // Unauthorized categories look like missing requests.
   if (!r) throw notFound('Hizmet talebi');
+  if (r.auth_expired) throw new AppError(403, 'AUTHORIZATION_EXPIRED', 'Bu kategorideki hizmet onayının süresi doldu; yeni iş alamazsın. Güncel belgeyle yeniden onay iste.');
   if (r.status !== 'open') throw conflict('INVALID_STATE', 'Talep teklif almaya kapalı.');
   if (new Date(b.validUntil) <= new Date()) throw invalid('Geçerlilik tarihi gelecekte olmalı.');
   const q = await tx.query<{ id: string }>(

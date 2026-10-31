@@ -27,6 +27,7 @@ export default function AdminRoute() {
   const queue = useApi<Queue>(roles.includes('marketplace_reviewer') ? '/admin/marketplace/queue' : null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState('');
+  const [validUntil, setValidUntil] = useState('');
   const act = async (fn: () => Promise<unknown>, msg: string) => {
     setError(null);
     try { await fn(); showToast(msg); await rules.reload(); await queue.reload(); } catch (e) { setError(errorText(e)); }
@@ -95,13 +96,14 @@ export default function AdminRoute() {
             </Card>
           ))}
           <SectionLabel>PAZAR YERİ · KATEGORİ BAŞVURULARI</SectionLabel>
+          <Field label="Onay bitiş tarihi (YYYY-AA-GG) — dayandığı belgelerin bitişini geçemez" testID="auth-valid-until" value={validUntil} onChangeText={setValidUntil} placeholder="ör. 2027-10-31" />
           {(queue.data?.authorizations ?? []).map(a => (
             <Card key={a.id} style={{ gap: 6 }}>
               <Text style={type(13.5, 600)}>{a.display_name} · {a.category_name}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>Gerekli: kimlik + {a.required_credentials.map(credentialLabel).join(', ')}</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <GhostButton testID="auth-approve" label="Onayla" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 5}
-                  onPress={() => act(() => call('POST', `/admin/marketplace/authorizations/${a.id}/decide`, { decision: 'approved', reason: note.trim() }), 'Kategori onaylandı')} />
+                <GhostButton testID="auth-approve" label="Onayla" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 5 || !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)}
+                  onPress={() => act(() => call('POST', `/admin/marketplace/authorizations/${a.id}/decide`, { decision: 'approved', reason: note.trim(), validUntil }), 'Kategori onaylandı')} />
                 <GhostButton label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.crit} border={tint.crit(0.35)} disabled={note.trim().length < 5}
                   onPress={() => act(() => call('POST', `/admin/marketplace/authorizations/${a.id}/decide`, { decision: 'rejected', reason: note.trim() }), 'Başvuru reddedildi')} />
               </View>

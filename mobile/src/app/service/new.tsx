@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../components/states';
-import { PrimaryButton, Tap } from '../../components/ui';
+import { Card, Eyebrow, PrimaryButton, Tap } from '../../components/ui';
 import { C, tint, type } from '../../theme';
 
 type Category = { code: string; name: string; description: string; is_example: boolean };
@@ -23,12 +23,13 @@ export default function NewServiceRoute() {
   const [city, setCity] = useState('İstanbul');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shareNcr, setShareNcr] = useState(false);
   const providers = useApi<Provider[]>(company && cat ? `/companies/${company.id}/providers?category=${cat}` : null);
 
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await call<{ id: string }>('POST', `/companies/${company!.id}/service-requests`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(), ncrId: params.ncrId ?? null });
+      const r = await call<{ id: string }>('POST', `/companies/${company!.id}/service-requests`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(), ncrId: params.ncrId ?? null, shareNcrSummary: !!params.ncrId && shareNcr });
       router.replace(`/service/${r.id}`);
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };
@@ -51,6 +52,16 @@ export default function NewServiceRoute() {
       ))}
       {cat && providers.data ? <Text style={type(12, 500, { color: providers.data.length ? C.t2 : C.warn })}>{providers.data.length ? `Bu kategoride onaylı ${providers.data.length} uzman var.` : 'Bu kategoride henüz onaylı uzman yok; talep yine de açılır.'}</Text> : null}
       <Field label="Şehir" value={city} onChangeText={setCity} />
+      <Card style={{ gap: 8 }}>
+        <Eyebrow>UZMANLARLA NE PAYLAŞILIR?</Eyebrow>
+        <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>Onaylı uzmanlar yalnızca başlığı, açıklamanı, şehri ve kategoriyi görür. İşletme ve şube adı ancak bir teklifi kabul edince o uzmana açılır. Görevlerin, kanıtların, ekibin ve diğer kayıtların hiçbir uzmana açılmaz.</Text>
+        {params.ncrId ? (
+          <Tap testID="svc-share-ncr" onPress={() => setShareNcr(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: shareNcr ? C.lime : C.t3, backgroundColor: shareNcr ? C.lime : 'transparent' }} />
+            <Text style={[type(12.5, 500), { flex: 1 }]}>Uygunsuzluğun başlığını, risk seviyesini ve türünü de paylaş (açıklama, notlar ve fotoğraflar paylaşılmaz)</Text>
+          </Tap>
+        ) : null}
+      </Card>
       {error ? <ErrorBox message={error} /> : null}
       <PrimaryButton testID="svc-submit" label={busy ? 'Gönderiliyor…' : 'Talebi aç'} disabled={busy || !cat || title.trim().length < 3 || description.trim().length < 5} onPress={submit} />
     </Screen>

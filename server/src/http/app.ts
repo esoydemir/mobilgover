@@ -458,7 +458,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   app.post('/admin/marketplace/authorizations/:id/decide', async req => {
     platformGate(req);
-    const b = z.object({ decision: z.enum(['approved', 'rejected', 'suspended']), reason: z.string().max(2000) }).parse(req.body);
+    const b = z.object({ decision: z.enum(['approved', 'rejected', 'suspended']), reason: z.string().max(2000), validUntil: z.iso.date().nullable().optional() }).parse(req.body);
     await db.system(tx => mk.decideAuthorization(tx, req.principal, rvId(req), b));
     return { ok: true };
   });
@@ -472,7 +472,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/service-requests', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().trim().min(3).max(200), description: z.string().trim().min(5).max(4000),
-      ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60) }).parse(req.body);
+      ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.createRequest(tx, req.principal, companyId, b), 201);
   });
   app.get('/companies/:companyId/service-requests', async req => {

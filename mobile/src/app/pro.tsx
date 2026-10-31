@@ -7,8 +7,8 @@ import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../components/states';
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../components/ui';
-import { addDays, fmtDateTime } from '../features/dates';
-import { QUOTE_STATUS, credentialLabel } from '../features/labels';
+import { addDays, fmtDate, fmtDateTime } from '../features/dates';
+import { QUOTE_STATUS, RISK_LABEL, credentialLabel } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
@@ -17,14 +17,15 @@ type ProfileView = {
   identity: { status: string; checkedAt?: string; method?: string };
   credentials: { id: string; credential_type: string; issuer: string; valid_until: string | null; status: string; expired: boolean; checked_at: string | null; check_method: string | null }[];
   businessRegistration: { id: string; status: string }[];
-  authorizedCategories: { category_code: string; name: string; is_example: boolean }[];
-  otherCategoryRequests: { category_code: string; name: string; status: string }[];
+  authorizedCategories: { category_code: string; name: string; is_example: boolean; valid_until: string | null }[];
+  otherCategoryRequests: { category_code: string; name: string; status: string; expired: boolean; valid_until: string | null }[];
   notChecked: string[];
   disclaimer: string;
 };
 type Category = { code: string; name: string; required_credentials: string[]; is_example: boolean };
 type Inbox = {
-  requests: { id: string; category_name: string; title: string; description: string; city: string; created_at: string; my_quote_status: string | null }[];
+  requests: { id: string; category_name: string; title: string; description: string; city: string; created_at: string; my_quote_status: string | null;
+    shared_ncr: { title: string; riskLevel: string; hazardType: string } | null }[];
   jobs: { id: string; status: string; title: string; company_name: string; site_name: string; checked_in_at: string | null; business_note: string | null }[];
 };
 
@@ -64,9 +65,12 @@ function ProfileCard({ v }: { v: ProfileView }) {
         {v.authorizedCategories.length === 0 ? <Text style={[type(12.5, 400, { color: C.t2 }), { marginTop: 10 }]}>Henüz onaylı kategori yok; bu profil hizmet sunamaz.</Text> : null}
         {v.authorizedCategories.map(a => (
           <View key={a.category_code} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <Text style={[type(13, 600, { color: C.lime }), { flex: 1 }]}>✓ {a.name}</Text>
+            <Text style={[type(13, 600, { color: C.lime }), { flex: 1 }]}>✓ {a.name}{a.valid_until ? ` · ${fmtDate(a.valid_until)}'e kadar` : ''}</Text>
             {a.is_example ? <ExampleBadge label="ÖRNEK KATEGORİ" /> : null}
           </View>
+        ))}
+        {v.otherCategoryRequests.filter(a => a.expired).map(a => (
+          <Text key={a.category_code} style={[type(12.5, 600, { color: C.crit }), { marginTop: 10 }]}>Süresi doldu: {a.name}. Yeni iş alınamaz; güncel belgeyle yeniden onay iste.</Text>
         ))}
       </Card>
       <View style={{ borderWidth: 1, borderColor: tint.info(0.3), backgroundColor: tint.info(0.06), borderRadius: 16, padding: 13 }}>
@@ -149,7 +153,8 @@ function MyProfessionalArea() {
 
       <SectionLabel>HİZMET KATEGORİLERİ</SectionLabel>
       {(cats.data ?? []).map(c => {
-        const st = requested.get(c.code);
+        const exp = me.data!.otherCategoryRequests.find(a => a.category_code === c.code && a.expired);
+        const st = exp ? 'expired' : requested.get(c.code);
         return (
           <Card key={c.code} style={{ gap: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -157,7 +162,7 @@ function MyProfessionalArea() {
               {c.is_example ? <ExampleBadge label="ÖRNEK" /> : null}
             </View>
             <Text style={type(11.5, 400, { color: C.t3 })}>Gerekli: {c.required_credentials.map(credentialLabel).join(', ') || '—'} + doğrulanmış kimlik</Text>
-            {st ? <Pill label={st === 'approved' ? 'ONAYLI' : st === 'pending' ? 'İNCELEMEDE' : st.toUpperCase()} fg={st === 'approved' ? C.lime : st === 'pending' ? C.warn : C.crit} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
+            {st ? <Pill label={st === 'approved' ? 'ONAYLI' : st === 'pending' ? 'İNCELEMEDE' : st === 'expired' ? 'SÜRESİ DOLDU' : st === 'rejected' ? 'REDDEDİLDİ' : st === 'suspended' ? 'ASKIDA' : st.toUpperCase()} fg={st === 'approved' ? C.lime : st === 'pending' ? C.warn : C.crit} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
               : <GhostButton testID={`auth-${c.code}`} label="Bu kategori için başvur" height={38} size={12.5} onPress={() => act(() => call('POST', '/pro/authorizations', { categoryCode: c.code }), 'Başvuru gönderildi')} />}
           </Card>
         );
@@ -184,6 +189,7 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
       <Text style={type(11, 600, { ls: 0.08, color: C.t3 })}>{r.category_name.toUpperCase()} · {r.city} · {fmtDateTime(r.created_at)}</Text>
       <Text style={type(14.5, 600)}>{r.title}</Text>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{r.description}</Text>
+      {r.shared_ncr ? <Text style={type(12, 500, { color: C.warn, lh: 1.45 })}>İşletmenin paylaştığı uygunsuzluk: {r.shared_ncr.title} · risk {RISK_LABEL[r.shared_ncr.riskLevel] ?? r.shared_ncr.riskLevel}</Text> : null}
       {r.my_quote_status ? <Text style={type(12, 600, { color: C.lime })}>Teklifin: {QUOTE_STATUS[r.my_quote_status] ?? r.my_quote_status}</Text> : !open ? (
         <GhostButton testID="quote-open" label="Teklif ver" height={40} size={12.5} onPress={() => setOpen(true)} />
       ) : (

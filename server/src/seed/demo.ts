@@ -173,7 +173,7 @@ export async function seedDemoProvider(db: Db, marketReviewerId: string, email: 
     await decideVerification(tx, rev, id.id, { decision: 'verified', checkMethod: 'Demo: belge görüntüsü incelendi', notes: '' });
     await decideVerification(tx, rev, cred.id, { decision: 'verified', checkMethod: 'Demo: belge numarası sorgulandı', notes: '' });
     const a = await requestAuthorization(tx, me, 'refrigeration_service');
-    await decideAuthorization(tx, rev, a.id, { decision: 'approved', reason: 'Demo: kimlik ve soğutma teknisyeni belgesi doğrulandı.' });
+    await decideAuthorization(tx, rev, a.id, { decision: 'approved', reason: 'Demo: kimlik ve soğutma teknisyeni belgesi doğrulandı.', validUntil: '2029-12-31' });
   });
   return provider;
 }
