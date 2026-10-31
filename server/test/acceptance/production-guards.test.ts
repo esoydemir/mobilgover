@@ -25,6 +25,13 @@ describe('production guards', () => {
     expect(pub.body.error.message).toContain('demo');
   });
 
+  it('reports pilot mode and keeps the dev mail outbox closed', async () => {
+    const anon = client(env, '');
+    expect((await anon.get('/env')).body.mode).toBe('pilot');
+    await anon.post('/auth/email/start', { email: 'pilot@ornek.com.tr' });
+    expect((await anon.get('/dev/outbox/latest?email=pilot@ornek.com.tr')).status).toBe(404);
+  });
+
   it('refuses demo reset', async () => {
     expect((await client(env, platform.admin.token).post('/admin/demo/reset')).status).toBe(403);
   });

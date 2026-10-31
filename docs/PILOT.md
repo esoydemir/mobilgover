@@ -40,11 +40,11 @@ Kayıt: `e2e/pilot-walkthrough.js` ve `e2e/offline-sync.js`. Ortam: demo modu, g
 | Tür | Dosyalar | Sayı | Ne doğrular | Neyi doğrulamaz |
 |---|---|---|---|---|
 | Saf mantık (birim) | `server/test/domain/*` | 31 | Üç değerli koşul mantığı, karar sırası, saat dilimi ve takvim, limit seçimi, kanıt yeterliliği, risk derinliği, bağımsız kapanış, gösterge formülü, karma zinciri, yetki matrisi | Veritabanı, ağ, arayüz |
-| Gerçek entegrasyon | `server/test/acceptance/*` | 40 | Gerçek PostgreSQL (RLS, tetikleyiciler, kısıtlar) ve gerçek HTTP API: giriş ve ek doğrulama, işletmeler arası izolasyon, kanıt yükleme ve bütünlük, CAPA, denetim dosyası, pazar yeri, demo/üretim korumaları | **Kurallar örnek veridir**: limitler (0–4 °C), kategoriler ve belgeler örnektir; testler motorun davranışını doğrular, mevzuatın doğruluğunu değil |
+| Gerçek entegrasyon | `server/test/acceptance/*` | 41 | Gerçek PostgreSQL (RLS, tetikleyiciler, kısıtlar) ve gerçek HTTP API: giriş ve ek doğrulama, işletmeler arası izolasyon, kanıt yükleme ve bütünlük, CAPA, denetim dosyası, pazar yeri, demo/üretim korumaları | **Kurallar örnek veridir**: limitler (0–4 °C), kategoriler ve belgeler örnektir; testler motorun davranışını doğrular, mevzuatın doğruluğunu değil |
 | Uçtan uca arayüz gösterimi | `e2e/*` | 2 kayıt | Gerçek web arayüzü + gerçek API + gerçek PostgreSQL ile tam kullanıcı akışı | Otomatik doğrulama paketi değil, kayıtlı gösterim; iOS/Android cihaz derlemesi denenmedi |
 | Mobil birim testi | — | 0 | — | Kuyruk mantığı yalnızca uçtan uca gösterimle denendi; ayrı birim testi yok |
 
-Son çalıştırma: 71/71 sunucu testi geçti. Sunucu ve mobil tür kontrolü temiz.
+Son çalıştırma: 72/72 sunucu testi geçti. Sunucu ve mobil tür kontrolü temiz.
 
 ## 4. Zorunlu senaryoların güncel durumu
 
