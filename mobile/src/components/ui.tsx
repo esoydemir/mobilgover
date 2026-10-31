@@ -41,11 +41,12 @@ export const SevPill = ({ sev, big }: { sev: Sev; big?: boolean }) => (
   <Pill label={SEV[sev].label} fg={SEV[sev].fg} bg={SEV[sev].bg} ls={big ? 0.09 : 0.08} style={big && { paddingVertical: 5, paddingHorizontal: 9 }} />
 );
 
-export function PrimaryButton({ label, onPress, height = 52, size = 14.5, style, disabled, glow = true }: {
-  label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; disabled?: boolean; glow?: boolean;
+export function PrimaryButton({ label, onPress, height = 52, size = 14.5, style, disabled, glow = true, testID }: {
+  label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; disabled?: boolean; glow?: boolean; testID?: string;
 }) {
   return (
     <Tap
+      testID={testID}
       onPress={onPress}
       disabled={disabled}
       style={[
@@ -59,11 +60,11 @@ export function PrimaryButton({ label, onPress, height = 52, size = 14.5, style,
   );
 }
 
-export function GhostButton({ label, onPress, height = 48, size = 13.5, style, color = C.t1, border = C.bds, bg = 'transparent' }: {
-  label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; color?: string; border?: string; bg?: string;
+export function GhostButton({ label, onPress, height = 48, size = 13.5, style, color = C.t1, border = C.bds, bg = 'transparent', testID, disabled }: {
+  label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; color?: string; border?: string; bg?: string; testID?: string; disabled?: boolean;
 }) {
   return (
-    <Tap onPress={onPress} style={[{ height, borderRadius: 999, borderWidth: 1, borderColor: border, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, style]}>
+    <Tap testID={testID} disabled={disabled} onPress={onPress} style={[{ height, borderRadius: 999, borderWidth: 1, borderColor: border, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, style]}>
       <Text style={type(size, 600, { color })}>{label}</Text>
     </Tap>
   );

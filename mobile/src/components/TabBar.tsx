@@ -8,7 +8,7 @@ import { GradientFill } from './Gradient';
 import { DocsIcon, GridIcon, HomeIcon, ScanIcon, TasksIcon } from './Icons';
 import { Tap } from './ui';
 
-const MORE_ROUTES = ['/more', '/personnel', '/equipment', '/form', '/ncr', '/roadmap', '/training', '/quotes', '/visit', '/settings'];
+const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/sync', '/account', '/equipment', '/profile', '/admin', '/team'];
 
 type Tab = {
   key: string;
@@ -23,12 +23,12 @@ const TABS: Tab[] = [
   { key: 'home', label: 'Ana Sayfa', Icon: HomeIcon, isActive: p => p === '/', go: () => goRoot('/') },
   { key: 'tasks', label: 'Görevler', Icon: TasksIcon, isActive: p => p === '/tasks' || p.startsWith('/task/'), go: () => goRoot('/tasks') },
   {
-    key: 'qr', label: 'Tara', Icon: ScanIcon, big: true, isActive: p => p === '/qr',
-    // QR sits one level above the persona's home, so back returns there.
-    go: () => { goRoot('/'); router.push('/qr'); },
+    // Centre action: open the next check that is due.
+    key: 'next', label: 'Sıradaki kontrol', Icon: ScanIcon, big: true, isActive: p => p === '/next',
+    go: () => { goRoot('/'); router.push('/next'); },
   },
-  { key: 'docs', label: 'Belgeler', Icon: DocsIcon, isActive: p => p === '/docs' || p === '/scan' || p === '/scan-confirm', go: () => goRoot('/docs') },
-  { key: 'more', label: 'Daha', Icon: GridIcon, isActive: p => MORE_ROUTES.includes(p), go: () => goRoot('/more') },
+  { key: 'report', label: 'Rapor', Icon: DocsIcon, isActive: p => p === '/report', go: () => goRoot('/report') },
+  { key: 'more', label: 'Daha', Icon: GridIcon, isActive: p => MORE_PREFIXES.some(m => p === m || p.startsWith(m + '/') || p.startsWith(m + 's')), go: () => goRoot('/more') },
 ];
 
 export function TabBar() {

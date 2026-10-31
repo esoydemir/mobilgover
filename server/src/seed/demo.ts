@@ -79,9 +79,9 @@ export type DemoSeed = {
 const principal = (userId: string, extra: Partial<Principal> = {}): Principal =>
   ({ userId, platformRoles: [], memberships: [], grants: [], ...extra });
 
-async function user(db: Db, name: string) {
+async function user(db: Db, name: string, email: string | null = null) {
   return db.system(async tx => {
-    const id = (await tx.query<{ id: string }>(`INSERT INTO users (display_name) VALUES ($1) RETURNING id`, [name])).rows[0]!.id;
+    const id = (await tx.query<{ id: string }>(`INSERT INTO users (display_name, email) VALUES ($1, $2) RETURNING id`, [name, email])).rows[0]!.id;
     return { id, token: await createSession(tx, id, 24 * 30) };
   });
 }
@@ -161,8 +161,8 @@ export async function seedDemoCompany(db: Db, opts: { name?: string; isDemo?: bo
  * A demo refrigeration provider whose identity and (example) credential were
  * checked by the demo marketplace reviewer, authorized for one category.
  */
-export async function seedDemoProvider(db: Db, marketReviewerId: string) {
-  const provider = await user(db, 'Murat Yıldız (demo uzman)');
+export async function seedDemoProvider(db: Db, marketReviewerId: string, email: string | null = null) {
+  const provider = await user(db, 'Murat Yıldız (demo uzman)', email);
   const { upsertProfile, submitVerification, requestAuthorization, decideVerification, decideAuthorization } = await import('../services/marketplace');
   const me = principal(provider.id);
   const rev = principal(marketReviewerId, { platformRoles: ['marketplace_reviewer'] });

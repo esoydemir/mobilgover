@@ -1,13 +1,14 @@
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { RefreshControl, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PERSONA_HEADER } from '../data';
-import { goBack, useApp } from '../state/app';
+import { useQueue } from '../api/queue';
+import { useSession } from '../api/session';
+import { goBack } from '../state/app';
 import { C, tint, type } from '../theme';
 import { GradientFill } from './Gradient';
-import { BackIcon, BellIcon, SearchIcon } from './Icons';
-import { Pulse, Tap } from './ui';
+import { BackIcon } from './Icons';
+import { Tap } from './ui';
 
 /** Bottom padding that keeps content clear of the floating tab bar. */
 export const TAB_CLEARANCE = 142;
@@ -19,9 +20,11 @@ type Props = {
   titleEn?: string;
   gap?: number;
   contentStyle?: StyleProp<ViewStyle>;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 };
 
-export function Screen({ children, title, titleEn, gap = 12, contentStyle }: Props) {
+export function Screen({ children, title, titleEn, gap = 12, contentStyle, onRefresh, refreshing = false }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -32,6 +35,8 @@ export function Screen({ children, title, titleEn, gap = 12, contentStyle }: Pro
         style={{ flex: 1 }}
         contentContainerStyle={[{ paddingHorizontal: 22, paddingBottom: TAB_CLEARANCE + insets.bottom, gap }, contentStyle]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.lime} /> : undefined}
       >
         {children}
       </ScrollView>
@@ -39,9 +44,35 @@ export function Screen({ children, title, titleEn, gap = 12, contentStyle }: Pro
   );
 }
 
+/** Demo and pilot data must never look alike. */
+export function EnvBadge() {
+  const { env } = useSession();
+  if (!env) return null;
+  const demo = env.mode === 'demo';
+  return (
+    <View accessibilityLabel={demo ? 'Demo ortamı: örnek veri' : 'Pilot ortamı'} style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, borderWidth: 1, borderColor: demo ? tint.warn(0.45) : tint.info(0.45) }}>
+      <Text style={type(8.5, 700, { ls: 0.08, color: demo ? C.warn : C.info })}>{demo ? 'DEMO · ÖRNEK VERİ' : 'PİLOT'}</Text>
+    </View>
+  );
+}
+
+/** Shows how many records are still only on this device. */
+export function SyncChip() {
+  const { ops, online, syncing } = useQueue();
+  const waiting = ops.length;
+  const problem = ops.some(o => o.status === 'failed' || o.status === 'conflict');
+  const label = problem ? `${waiting} kayıt sorunlu` : waiting ? `${waiting} kayıt cihazda` : online === false ? 'Çevrimdışı' : syncing ? 'Eşitleniyor' : 'Eşitlendi';
+  const color = problem ? C.crit : waiting || online === false ? C.warn : C.lime;
+  return (
+    <Tap accessibilityLabel={`Eşitleme durumu: ${label}`} onPress={() => router.push('/sync')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: tint.white(0.09), backgroundColor: '#141414' }}>
+      <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: color }} />
+      <Text style={type(11, 600, { color: C.t2 })}>{label}</Text>
+    </Tap>
+  );
+}
+
 function BrandHeader() {
-  const { persona, openSheet } = useApp();
-  const h = PERSONA_HEADER[persona];
+  const { me, company } = useSession();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, paddingTop: 4, paddingHorizontal: 22, paddingBottom: 14 }}>
       <View style={{ width: 44, height: 44, borderRadius: 15, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 22px rgba(198,255,61,0.28)' }}>
@@ -50,30 +81,13 @@ function BrandHeader() {
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={type(11, 500, { color: C.t2 })}>{h.greeting}</Text>
-          {/* The app is not connected to the API yet; say so instead of implying real records. */}
-          <View accessibilityLabel="Demo: örnek veri, sunucuya bağlı değil" style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, borderWidth: 1, borderColor: tint.warn(0.4) }}>
-            <Text style={type(8.5, 700, { ls: 0.08, color: C.warn })}>DEMO · ÖRNEK VERİ</Text>
-          </View>
+          <Text numberOfLines={1} style={[type(11, 500, { color: C.t2 }), { flexShrink: 1 }]}>Merhaba, {me?.displayName ?? ''}</Text>
+          <EnvBadge />
         </View>
-        <Text style={[type(16, 700, { ls: -0.015 }), { marginTop: 2 }]}>{h.org}</Text>
+        <Text numberOfLines={1} style={[type(16, 700, { ls: -0.015 }), { marginTop: 2 }]}>{company?.name ?? 'GoverHub'}</Text>
       </View>
-      <RoundIcon label="Ara" onPress={() => openSheet('search')}><SearchIcon /></RoundIcon>
-      <RoundIcon label="Bildirimler" onPress={() => router.push('/notifications')}>
-        <BellIcon />
-        <View style={{ position: 'absolute', top: 4, right: 5 }}>
-          <Pulse><View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: C.lime, borderWidth: 1.5, borderColor: C.bg }} /></Pulse>
-        </View>
-      </RoundIcon>
+      <SyncChip />
     </View>
-  );
-}
-
-function RoundIcon({ children, onPress, label }: { children: ReactNode; onPress: () => void; label: string }) {
-  return (
-    <Tap accessibilityLabel={label} onPress={onPress} style={{ width: 40, height: 40, borderRadius: 999, borderWidth: 1, borderColor: tint.white(0.09), backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center' }}>
-      {children}
-    </Tap>
   );
 }
 
@@ -87,6 +101,7 @@ function SubHeader({ title, titleEn }: { title: string; titleEn?: string }) {
         <Text style={type(16, 700, { ls: -0.015 })}>{title}</Text>
         {titleEn ? <Text style={[type(10.5, 400, { color: C.t3 }), { marginTop: 1 }]}>{titleEn}</Text> : null}
       </View>
+      <EnvBadge />
     </View>
   );
 }

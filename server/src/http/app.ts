@@ -33,7 +33,7 @@ const companyParams = z.object({ companyId: uuid });
  * Builds the API. Every route: authenticate → check permission in the
  * service → run inside a company-bound transaction (row-level security).
  */
-export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'>;
+export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[] };
 
 /** Routes that work without a session. */
 const PUBLIC = new Set(['/health', '/env', '/auth/email/start', '/auth/email/verify', '/auth/mfa/verify', '/dev/outbox/latest']);
@@ -45,6 +45,21 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   for (const mime of ALLOWED_MIME) {
     app.addContentTypeParser(mime, { parseAs: 'buffer', bodyLimit: config.maxUploadBytes }, (_req, body, done) => done(null, body));
   }
+
+  // CORS for the web build of the app: only listed origins, never "*".
+  const origins = new Set(config.corsOrigins ?? []);
+  app.addHook('onRequest', async (req, reply) => {
+    const origin = req.headers.origin;
+    if (origin && origins.has(origin)) {
+      reply.header('access-control-allow-origin', origin);
+      reply.header('vary', 'origin');
+      reply.header('access-control-allow-headers', 'authorization, content-type, idempotency-key');
+      reply.header('access-control-allow-methods', 'GET, POST, PUT, OPTIONS');
+      reply.header('access-control-expose-headers', 'idempotent-replay');
+      reply.header('access-control-max-age', '600');
+    }
+    if (req.method === 'OPTIONS') return reply.code(origin && origins.has(origin) ? 204 : 403).send();
+  });
 
   // Simple per-token rate limit; a shared store (e.g. Redis) replaces this when running several instances.
   const hits = new Map<string, { n: number; reset: number }>();
@@ -171,6 +186,13 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ name: z.string().trim().min(2).max(120), siteName: z.string().trim().min(2).max(120), timezone: z.string().default('Europe/Istanbul') }).parse(req.body);
     return reply.code(201).send(await createCompany(db, req.principal, b, config.demoMode));
   });
+  app.get('/companies/:companyId/members', async req => {
+    const companyId = company(req);
+    if (!can(req.principal, 'members.manage', { companyId }).ok) throw forbidden();
+    return db.system(async tx => (await tx.query(
+      `SELECT u.id, u.display_name, u.email, m.role, m.site_id, (u.email_verified_at IS NOT NULL) AS signed_in
+         FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.company_id = $1 ORDER BY m.created_at`, [companyId])).rows);
+  });
   app.post('/companies/:companyId/members', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ email: z.email(), role: z.enum(['hq_manager', 'site_manager', 'staff']), siteId: uuid.nullable().default(null) }).parse(req.body);
@@ -219,6 +241,14 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
       await recomputeSite(tx, companyId, b.siteId, req.principal.userId);
       return { id };
     }, 201);
+  });
+
+  app.get('/companies/:companyId/sites/:siteId/equipment', async req => {
+    const companyId = company(req);
+    const { siteId } = z.object({ siteId: uuid }).parse(req.params);
+    if (!can(req.principal, 'equipment.read', { companyId, siteId }).ok && !can(req.principal, 'task.generate', { companyId, siteId }).ok) throw forbidden();
+    return db.tenant(companyId, async tx => (await tx.query(
+      `SELECT id, type, name, serial, calibrated_until, active FROM equipment WHERE company_id = $1 AND site_id = $2 ORDER BY name`, [companyId, siteId])).rows);
   });
 
   // ── Obligations ──
@@ -294,6 +324,14 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
 
   // ── Nonconformities ──
+  app.get('/companies/:companyId/nonconformities', async req => {
+    const companyId = company(req);
+    const { status } = z.object({ status: z.enum(['open', 'closed']).optional() }).parse(req.query);
+    return db.tenant(companyId, async tx => (await tx.query(
+      `SELECT id, site_id, title, risk_level, depth, status, recurrence_count, detected_at, closed_at, due_at, owner_id
+         FROM nonconformities WHERE company_id = $1 AND ($2::text IS NULL OR ($2 = 'closed') = (status = 'closed')) ORDER BY detected_at DESC`,
+      [companyId, status ?? null])).rows.filter(n => can(req.principal, 'ncr.read', { companyId, siteId: n.site_id, assigneeId: n.owner_id }).ok));
+  });
   app.get('/companies/:companyId/nonconformities/:id', async req => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);

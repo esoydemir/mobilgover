@@ -1,11 +1,11 @@
 import { Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useApp } from '../state/app';
+import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 import { Rise } from './ui';
 
 export function ToastView() {
-  const { toast } = useApp();
+  const { toast } = useUi();
   const insets = useSafeAreaInsets();
   if (!toast) return null;
   const warn = toast.kind === 'warn';

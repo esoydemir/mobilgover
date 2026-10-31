@@ -1,28 +1,45 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
+import { useSession } from '../api/session';
+import type { TaskRow } from '../api/types';
+import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
-import { FilterChip, TaskRow } from '../components/ui';
-import { TASKS, type Task } from '../data';
-import { useApp } from '../state/app';
+import { Empty, ErrorBox, Loading, StaleNote } from '../components/states';
+import { FilterChip } from '../components/ui';
+import { addDays, dayKey, startOfDay } from '../features/dates';
 import { C, type } from '../theme';
+import { TaskLine } from './index';
 
-const FILTERS: [Task['bucket'], string][] = [['today', 'Bugün'], ['late', 'Gecikmiş'], ['upcoming', 'Yaklaşan']];
+type Filter = 'today' | 'late' | 'upcoming' | 'done';
+const FILTERS: [Filter, string][] = [['today', 'Bugün'], ['late', 'Gecikmiş'], ['upcoming', 'Yaklaşan'], ['done', 'Tamamlanan']];
 
 export default function TasksRoute() {
-  const { done, toggleTask } = useApp();
-  const [filter, setFilter] = useState<Task['bucket']>('today');
+  const { company, siteId } = useSession();
+  const [filter, setFilter] = useState<Filter>('today');
+  const today = startOfDay();
+  const q = useApi<TaskRow[]>(company && siteId ? `/companies/${company.id}/tasks?siteId=${siteId}&from=${encodeURIComponent(addDays(today, -14).toISOString())}&to=${encodeURIComponent(addDays(today, 15).toISOString())}` : null);
+  const list = useMemo(() => {
+    const now = new Date();
+    const k = dayKey(today);
+    const rows = (q.data ?? []).filter(t => t.status !== 'cancelled');
+    if (filter === 'today') return rows.filter(t => dayKey(new Date(t.due_at)) === k);
+    if (filter === 'late') return rows.filter(t => (t.status === 'open' || t.status === 'missed') && new Date(t.due_at) < now);
+    if (filter === 'upcoming') return rows.filter(t => t.status === 'open' && new Date(t.due_at) >= addDays(today, 1));
+    return rows.filter(t => t.status === 'done').reverse();
+  }, [q.data, filter]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <Screen title="Görevler" titleEn="Tasks" gap={11}>
-      <View style={{ flexDirection: 'row', gap: 7, paddingBottom: 2 }}>
-        {FILTERS.map(([k, label]) => <FilterChip key={k} label={label} active={filter === k} onPress={() => setFilter(k)} />)}
+    <Screen title="Görevler" titleEn="Tasks" gap={11} onRefresh={q.reload} refreshing={q.loading}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingBottom: 2 }}>
+        {FILTERS.map(([k, label]) => <FilterChip key={k} label={label} px={13} active={filter === k} onPress={() => setFilter(k)} />)}
       </View>
-      {TASKS.filter(t => t.bucket === filter).map(t => (
-        <TaskRow key={t.id} title={t.title} meta={t.meta} sev={t.sev} done={!!done[t.id]}
-          onToggle={() => toggleTask(t.id)} onOpen={() => router.push(`/task/${t.id}`)} />
-      ))}
+      {q.stale ? <StaleNote /> : null}
+      {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
+      {!q.data && q.loading ? <Loading /> : null}
+      {q.data && list.length === 0 ? <Empty title="Bu listede görev yok" /> : null}
+      {list.map(t => <TaskLine key={t.id} t={t} />)}
       <Text style={[type(12, 400, { lh: 1.5, color: C.t3 }), { paddingTop: 8, paddingHorizontal: 4 }]}>
-        Sıralama son teslim tarihine göre değil; yasal ağırlık, sağlık riski, gecikme süresi ve tekrar geçmişine göre yapılır.
+        "Yapıldı" ile "uygun" ayrı gösterilir: limit dışı sonuç da kayda geçer ve uygunsuzluk olarak izlenir.
       </Text>
     </Screen>
   );

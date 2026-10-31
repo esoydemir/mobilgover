@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Easing, Text, View } from 'react-native';
 import Svg, { Defs, Path, Text as SvgText, TextPath } from 'react-native-svg';
-import { SCORE_DOMAINS } from '../data';
 import { C, STATUS, type } from '../theme';
+
+export type RingDomain = { key: string; label: string; value: string; unit: string; pct: number; tone: 'ok' | 'warn' | 'crit' | 'idle' };
+
+/** Ring radii, outermost first. */
+const RADII = [150, 122, 94, 66, 38];
 
 /** Native size of the chart; it is scaled uniformly to the available width. */
 const W = 346;
@@ -43,9 +47,10 @@ function useDrawIn(count: number) {
  * process label sits on a bar along the left edge whose coloured top rule
  * lines up with the start of its ring.
  */
-export function ScoreRings({ width }: { width: number }) {
+export function ScoreRings({ width, domains: input }: { width: number; domains: RingDomain[] }) {
   const k = Math.min(1, width / W);
-  const progress = useDrawIn(SCORE_DOMAINS.length);
+  const domains = input.slice(0, RADII.length).map((d, i) => ({ ...d, r: RADII[i]! }));
+  const progress = useDrawIn(domains.length);
   return (
     <View style={{ width: W * k, height: H * k, marginTop: 12, marginLeft: -3 * k }}>
       <View style={{ width: W, height: H, transform: [{ scale: k }], transformOrigin: 'top left' }}>
@@ -54,10 +59,10 @@ export function ScoreRings({ width }: { width: number }) {
             <Path id="ghOuterTxt" d="M180,14 A176,176 0 0 1 356,190" fill="none" />
             <Path id="ghInnerTxt" d="M20,190 A160,160 0 0 0 180,350" fill="none" />
           </Defs>
-          {SCORE_DOMAINS.map(d => (
+          {domains.map(d => (
             <Path key={`t${d.key}`} d={arcPath(d.r)} fill="none" stroke={C.bd} strokeWidth={STROKE} strokeLinecap="round" />
           ))}
-          {SCORE_DOMAINS.map((d, i) => {
+          {domains.map((d, i) => {
             const L = arcLength(d.r);
             const dash = d.pct * L;
             return (
@@ -81,7 +86,7 @@ export function ScoreRings({ width }: { width: number }) {
             <TextPath href="#ghInnerTxt" startOffset="12%">EKSİK İŞ</TextPath>
           </SvgText>
         </Svg>
-        {SCORE_DOMAINS.map(d => {
+        {domains.map(d => {
           const color = STATUS[d.tone].fg;
           return (
             <View

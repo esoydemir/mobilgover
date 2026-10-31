@@ -19,6 +19,8 @@ export type Config = {
   mfaRequiredForPlatform: boolean;
   /** 'dev_outbox' keeps sign-in mails in the database (development and demo only). */
   mailTransport: 'dev_outbox';
+  /** Web origins allowed to call the API (the web build of the app). */
+  corsOrigins: string[];
 };
 
 export function loadConfig(): Config {
@@ -33,6 +35,7 @@ export function loadConfig(): Config {
     mfaEncryptionKey: process.env.MFA_ENCRYPTION_KEY || null,
     mfaRequiredForPlatform: process.env.MFA_REQUIRED_FOR_PLATFORM !== 'false',
     mailTransport: mailTransport(),
+    corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean),
   };
 }
 
