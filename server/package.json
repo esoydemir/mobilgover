@@ -12,7 +12,11 @@
     "migrate": "tsx src/db/migrate.ts",
     "seed:demo": "tsx src/seed/run.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "backup": "tsx src/ops/cli.ts backup",
+    "backup:verify": "tsx src/ops/cli.ts verify",
+    "restore": "tsx src/ops/cli.ts restore",
+    "check:integrity": "tsx src/ops/cli.ts integrity"
   },
   "dependencies": {
     "fastify": "^5.12.7",

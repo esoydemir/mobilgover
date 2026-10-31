@@ -8,7 +8,7 @@ Türkiye'deki KOBİ'lerin kendilerine uygulanan yükümlülükleri anlaması, g�
 |---|---|
 | `server/` | API ve kural motoru (TypeScript, Fastify, PostgreSQL). Kurulum ve testler: `server/README.md` |
 | `mobile/` | Mobil uygulama (Expo). Gerçek API'ye bağlı; çevrimdışı kayıt kuyruğu var. Demo/pilot ortamı başlıkta etiketli |
-| `docs/` | `PILOT.md` (güncel durum, test sınıflandırması, açık bağımlılıklar), `DURUM.md`, `MIMARI.md` (mimari, veri modeli, tehdit modeli), `KABUL.md` (kabul kriterleri), `DEVAMLILIK.md` (proje kimliği ve bağımsızlık), `TELEFON_TESTI.md`, `MOBIL_DAGITIM.md` |
+| `docs/` | `PILOT.md` (güncel durum, test sınıflandırması, açık bağımlılıklar), `DURUM.md`, `MIMARI.md` (mimari, veri modeli, tehdit modeli), `KABUL.md` (kabul kriterleri), `DEVAMLILIK.md` (proje kimliği ve bağımsızlık), `TELEFON_TESTI.md`, `MOBIL_DAGITIM.md`, `YEDEKLEME.md` (yedekleme, geri yükleme, tatbikat) |
 | `e2e/` | Gerçek arayüz + gerçek API ile kayıtlı pilot gösterimi |
 | `project/`, `chats/` | Claude Design tasarım teslimi (aşağıdaki bölüm) |
 

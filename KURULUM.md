@@ -72,8 +72,15 @@ cd server
 createdb -O goverhub_owner goverhub_test     # yalnızca testlere ayrılmış veritabanı
 export TEST_DATABASE_URL=postgres://goverhub_app:<parola>@localhost:5432/goverhub_test
 export TEST_DATABASE_OWNER_URL=postgres://goverhub_owner:<parola>@localhost:5432/goverhub_test
+createdb -O goverhub_owner goverhub_restore_test   # geri yükleme tatbikatı testi için
+export TEST_RESTORE_DATABASE_OWNER_URL=postgres://goverhub_owner:<parola>@localhost:5432/goverhub_restore_test
+export TEST_RESTORE_DATABASE_URL=postgres://goverhub_app:<parola>@localhost:5432/goverhub_restore_test
 npm test && npm run typecheck
 cd ../mobile && npx tsc --noEmit
 ```
 
-Uyarı: Testler her çalışmada test veritabanının `public` şemasını siler.
+Uyarı: Testler her çalışmada test veritabanlarının `public` şemasını siler.
+
+## 5. Yedekleme
+
+`server/` içinde `npm run backup -- <klasör>` ve `npm run restore -- <klasör>`. Ayrıntılar ve kurallar: `docs/YEDEKLEME.md`.

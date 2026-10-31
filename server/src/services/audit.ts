@@ -33,10 +33,11 @@ export async function appendAudit(tx: Tx, e: AuditInput): Promise<{ seq: number;
   return { seq, hash };
 }
 
-export async function verifyCompanyChain(tx: Tx, companyId: string): Promise<ChainVerification> {
+/** Verifies one company's chain; `null` verifies the platform chain. */
+export async function verifyCompanyChain(tx: Tx, companyId: string | null): Promise<ChainVerification> {
   const r = await tx.query(
     `SELECT seq, occurred_at, actor_id, event_type, entity_type, entity_id, payload, prev_hash, hash
-       FROM audit_events WHERE company_id = $1 ORDER BY seq`, [companyId]);
+       FROM audit_events WHERE company_id IS NOT DISTINCT FROM $1 ORDER BY seq`, [companyId]);
   return verifyChain(r.rows.map(x => ({
     seq: x.seq, occurredAt: x.occurred_at, actorId: x.actor_id, eventType: x.event_type,
     entityType: x.entity_type, entityId: x.entity_id, payload: x.payload, prevHash: x.prev_hash, hash: x.hash,

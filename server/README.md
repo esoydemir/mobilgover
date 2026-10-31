@@ -56,9 +56,16 @@ Kabul testleri gerçek bir PostgreSQL'e bağlanır ve **her test dosyasında `pu
 createdb -O goverhub_owner goverhub_test
 export TEST_DATABASE_URL=postgres://goverhub_app:…@localhost:5432/goverhub_test
 export TEST_DATABASE_OWNER_URL=postgres://goverhub_owner:…@localhost:5432/goverhub_test
+# Geri yükleme tatbikatı için ikinci, ayrı bir veritabanı (her çalıştırmada içi silinir)
+createdb -O goverhub_owner goverhub_restore_test
+export TEST_RESTORE_DATABASE_OWNER_URL=postgres://goverhub_owner:…@localhost:5432/goverhub_restore_test
+export TEST_RESTORE_DATABASE_URL=postgres://goverhub_app:…@localhost:5432/goverhub_restore_test
 npm test
 npm run typecheck
 ```
+
+## Yedekleme ve geri yükleme
+`npm run backup -- <klasör>`, `npm run backup:verify -- <klasör>`, `npm run restore -- <klasör>`, `npm run check:integrity`. Kurallar ve tatbikat: `../docs/YEDEKLEME.md`.
 
 ## Örnek içerik uyarısı
 `src/seed/demo.ts` içindeki tüm kaynaklar, kurallar, limitler (ör. 0–4 °C) ve acil talimatlar **örnektir**, gerçek mevzuatı temsil etmez. Gerçek kurallar ancak resmî kaynak doğrulanıp bir inceleyici tarafından onaylandıktan sonra eklenmelidir. Sunucu, demo dışı ortamda örnek kural yayınını reddeder.
