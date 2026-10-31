@@ -152,6 +152,72 @@ export async function createBackup(o: BackupOptions): Promise<Manifest> {
   } finally { await rm(work, { recursive: true, force: true }); }
 }
 
+/**
+ * Plain, non-sensitive marker of the newest backup that reached the target and
+ * passed verification. The watchdog reads it from the target itself, so it
+ * measures what is really usable there, and needs no key.
+ */
+export type HeadMarker = { backupId: string; snapshotAt: string; verifiedAt: string; evidenceCount: number; format: 'goverhub-backup-2' };
+export const HEAD_OBJECT = 'status/latest-verified.json';
+
+export async function writeHead(target: BackupTarget, m: Manifest, verifiedAt: Date) {
+  const work = await mkdtemp(join(tmpdir(), 'gh-head-'));
+  try {
+    const head: HeadMarker = { backupId: m.id, snapshotAt: m.snapshotAt, verifiedAt: verifiedAt.toISOString(), evidenceCount: m.evidence.length, format: 'goverhub-backup-2' };
+    await writeFile(join(work, 'h.json'), JSON.stringify(head));
+    await target.put(HEAD_OBJECT, join(work, 'h.json'));
+  } finally { await rm(work, { recursive: true, force: true }); }
+}
+
+export async function readHead(target: BackupTarget): Promise<HeadMarker | null> {
+  if (!(await target.exists(HEAD_OBJECT))) return null;
+  const work = await mkdtemp(join(tmpdir(), 'gh-head-'));
+  try { await target.get(HEAD_OBJECT, join(work, 'h.json')); return JSON.parse(await readFile(join(work, 'h.json'), 'utf8')); }
+  catch { return null; }
+  finally { await rm(work, { recursive: true, force: true }); }
+}
+
+/**
+ * Checks a key recovered from safekeeping against a backup before any restore:
+ * the fingerprint in the object header (readable without the key) and a full
+ * decryption of the manifest.
+ */
+export async function checkKey(target: BackupTarget, key: Buffer, id: string): Promise<Report> {
+  const work = await mkdtemp(join(tmpdir(), 'gh-key-'));
+  try {
+    await target.get(manifestObject(id), join(work, 'm.enc'));
+    const head = (await readFile(join(work, 'm.enc'))).subarray(5, 13).toString('hex');
+    const fp = keyFingerprint(key).toString('hex');
+    const checks: Check[] = [{ name: 'anahtar parmak izi yedekle eşleşiyor', ok: head === fp, detail: head === fp ? fp : `yedek ${head}, anahtar ${fp}` }];
+    if (head === fp) {
+      try { await decryptFile(key, manifestObject(id), join(work, 'm.enc'), join(work, 'm')); checks.push({ name: 'manifest bu anahtarla çözüldü', ok: true }); }
+      catch (e) { checks.push({ name: 'manifest bu anahtarla çözüldü', ok: false, detail: (e as Error).message }); }
+    }
+    return { ok: checks.every(c => c.ok), checks };
+  } finally { await rm(work, { recursive: true, force: true }); }
+}
+
+/**
+ * Removes evidence objects that no kept backup refers to. Evidence of records
+ * deleted under the business retention policy thus leaves the backups once the
+ * last backup that still contains it has aged out (at most the daily window).
+ * Must not run concurrently with a backup (the scheduled job holds a lock).
+ */
+export async function pruneEvidence(target: BackupTarget, key: Buffer): Promise<string[]> {
+  const referenced = new Set<string>();
+  const ids = await listBackups(target);
+  // With no backup listed, something is wrong with the target or the listing: delete nothing.
+  if (!ids.length) return [];
+  for (const id of ids) for (const e of (await readManifest(target, key, id)).evidence) referenced.add(e.object);
+  const removed: string[] = [];
+  for (const obj of await target.list('evidence')) {
+    if (!obj.endsWith('.enc') || referenced.has(obj)) continue;
+    await target.remove(obj);
+    removed.push(obj);
+  }
+  return removed;
+}
+
 export async function listBackups(target: BackupTarget): Promise<string[]> {
   return (await target.list('db')).filter(n => n.endsWith('.manifest.enc')).map(n => n.slice(3, -'.manifest.enc'.length)).sort();
 }

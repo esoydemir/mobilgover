@@ -20,7 +20,8 @@
     "backup:list": "tsx src/ops/cli.ts list",
     "backup:scheduled": "tsx src/ops/cli.ts scheduled",
     "backup:watchdog": "tsx src/ops/cli.ts watchdog",
-    "ops:loadgen": "tsx src/ops/loadgen.ts"
+    "ops:loadgen": "tsx src/ops/loadgen.ts",
+    "backup:key-check": "tsx src/ops/cli.ts key-check"
   },
   "dependencies": {
     "fastify": "^5.12.7",

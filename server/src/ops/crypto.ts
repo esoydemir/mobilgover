@@ -21,6 +21,22 @@ export function parseBackupKey(b64: string | undefined): Buffer {
   return k;
 }
 
+/** Reads the key from a file (preferred: kept outside the app data and the backup target) or from the variable. */
+export async function loadBackupKey(env: NodeJS.ProcessEnv, forbiddenDirs: string[]): Promise<Buffer> {
+  const file = env.BACKUP_ENCRYPTION_KEY_FILE;
+  if (file) {
+    const { resolve } = await import('node:path');
+    const p = resolve(file) + '/';
+    for (const d of forbiddenDirs.filter(Boolean)) {
+      const r = resolve(d) + '/';
+      if (p.startsWith(r)) throw new Error(`Şifreleme anahtarı yedeklerle ya da uygulama verisiyle aynı yerde tutulamaz: ${file}`);
+    }
+    const { readFile } = await import('node:fs/promises');
+    return parseBackupKey((await readFile(file, 'utf8')).trim());
+  }
+  return parseBackupKey(env.BACKUP_ENCRYPTION_KEY);
+}
+
 export const keyFingerprint = (key: Buffer) => createHash('sha256').update(key).digest().subarray(0, 8);
 
 export async function encryptFile(key: Buffer, name: string, src: string, dst: string) {

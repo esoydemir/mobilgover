@@ -5,7 +5,7 @@ import type { Mailer } from '../services/mail';
  * Operational alerts (failed backup, failed integrity check, stale backup).
  * Messages never contain secrets, connection strings or personal data.
  */
-export type Alert = { kind: 'backup_failed' | 'integrity_failed' | 'backup_stale' | 'backup_ok'; subject: string; details: string[] };
+export type Alert = { kind: 'backup_failed' | 'integrity_failed' | 'backup_age_warning' | 'backup_age_critical' | 'backup_rpo_breached' | 'backup_recovered'; subject: string; details: string[] };
 
 export interface Notifier { notify(a: Alert): Promise<void> }
 

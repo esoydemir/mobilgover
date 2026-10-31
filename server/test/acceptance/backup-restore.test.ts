@@ -11,9 +11,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Db } from '../../src/db/pool';
 import { localDay } from '../../src/domain/schedule';
 import { buildApp } from '../../src/http/app';
-import { checkRestored, createBackup, evidenceObject, listBackups, pruneBackups, restoreBackup, selectToKeep, verifyBackup } from '../../src/ops/backup';
+import { checkKey, checkRestored, createBackup, evidenceObject, listBackups, pruneBackups, pruneEvidence, readHead, restoreBackup, selectToKeep, verifyBackup } from '../../src/ops/backup';
+import { loadBackupKey } from '../../src/ops/crypto';
 import { WebhookNotifier, type Alert } from '../../src/ops/notify';
-import { readStatus, runScheduledBackup, runWatchdog } from '../../src/ops/scheduled';
+import { ageLevel, readStatus, runAgeWatch, runScheduledBackup, DEFAULT_THRESHOLDS } from '../../src/ops/scheduled';
 import { assertSeparate, DirTarget } from '../../src/ops/target';
 import { seedDemoCompany, seedPlatform } from '../../src/seed/demo';
 import { DevOutboxMailer } from '../../src/services/mail';
@@ -342,13 +343,107 @@ describe('alerts', () => {
     } finally { await writeFile(p, bytes); }
   });
 
-  it('the watchdog alerts when the last success is older than the target', async () => {
+  it('a successful run marks the backup as usable in the target, with its snapshot time', async () => {
+    const head = await readHead(target);
+    const status = await readStatus(statusFile());
+    expect(head).toMatchObject({ backupId: status.lastBackupId, format: 'goverhub-backup-2' });
+    expect(Date.parse(head!.snapshotAt)).toBeLessThanOrEqual(Date.parse(head!.verifiedAt));
+  });
+
+  it('thresholds: warning at 40, critical at 50, breach at 60 minutes', () => {
+    expect([0, 31, 40, 49, 50, 59, 60, Infinity].map(m => ageLevel(m, DEFAULT_THRESHOLDS))).toEqual(['ok', 'ok', 'warning', 'warning', 'critical', 'critical', 'breach', 'breach']);
+  });
+
+  it('the age watch reads the separate location and escalates step by step, repeats, then reports recovery', async () => {
     alerts.length = 0;
-    const later = (min: number) => () => new Date(Date.now() + min * 60_000);
-    expect((await runWatchdog({ statusFile: statusFile(), maxAgeMinutes: 75, notifiers: [hook], now: later(30) })).ok).toBe(true);
-    expect((await runWatchdog({ statusFile: statusFile(), maxAgeMinutes: 75, notifiers: [hook], now: later(120), log: () => {} })).ok).toBe(false);
-    expect(alerts.map(a => a.kind)).toEqual(['backup_stale']);
-    expect((await runWatchdog({ statusFile: join(work, 'yok.json'), maxAgeMinutes: 75, notifiers: [hook], log: () => {} })).ok).toBe(false);
+    const head = (await readHead(target))!;
+    const at = (min: number) => () => new Date(Date.parse(head.snapshotAt) + min * 60_000);
+    const state = join(work, 'izleme', 'state.json');
+    const w = (min: number) => runAgeWatch({ target, stateFile: state, notifiers: [hook], now: at(min), log: () => {} });
+    expect((await w(20)).level).toBe('ok');
+    expect((await w(41)).alerted).toBe('backup_age_warning');
+    expect((await w(45)).alerted).toBeNull();                      // same level: no repeat
+    expect((await w(52)).alerted).toBe('backup_age_critical');
+    expect((await w(61)).alerted).toBe('backup_rpo_breached');
+    expect((await w(90)).alerted).toBeNull();                      // within the repeat window
+    expect((await w(125)).alerted).toBe('backup_rpo_breached');    // repeated after an hour
+    expect((await w(5)).alerted).toBe('backup_recovered');
+    expect(alerts.map(a => a.kind)).toEqual(['backup_age_warning', 'backup_age_critical', 'backup_rpo_breached', 'backup_rpo_breached', 'backup_recovered']);
+    expect(alerts[1]!.subject).toContain('tehlikede');
+  });
+
+  it('a marker pointing to a missing backup, or no marker at all, counts as no usable backup', async () => {
+    alerts.length = 0;
+    const empty = new DirTarget(join(work, 'bos-hedef'));
+    const r = await runAgeWatch({ target: empty, stateFile: join(work, 'izleme', 'bos.json'), notifiers: [hook], log: () => {} });
+    expect(r.level).toBe('breach');
+    expect(alerts[0]!.details.join(' ')).toContain('doğrulanmış yedek işareti yok');
+    // A fresh marker whose backup was deleted from the target does not count either.
+    const orphan = join(work, 'yetim-hedef');
+    await mkdir(join(orphan, 'status'), { recursive: true });
+    const head = (await readHead(target))!;
+    await writeFile(join(orphan, 'status', 'latest-verified.json'), JSON.stringify({ ...head, snapshotAt: new Date().toISOString() }));
+    const r2 = await runAgeWatch({ target: new DirTarget(orphan), stateFile: join(work, 'izleme', 'yetim.json'), notifiers: [hook], log: () => {} });
+    expect(r2.level).toBe('breach');
+  });
+});
+
+describe('the key is kept apart and its recovery is part of the drill', () => {
+  it('a key file inside the backup target or the evidence directory is refused', async () => {
+    const inTarget = join(targetDir, 'anahtar.txt');
+    await writeFile(inTarget, key.toString('base64'));
+    await expect(loadBackupKey({ BACKUP_ENCRYPTION_KEY_FILE: inTarget }, [targetDir, env.evidenceDir])).rejects.toThrow('aynı yerde');
+    await rm(inTarget);
+    const vault = join(work, 'kasa'); await mkdir(vault, { recursive: true });
+    await writeFile(join(vault, 'anahtar.txt'), key.toString('base64') + '\n');
+    expect((await loadBackupKey({ BACKUP_ENCRYPTION_KEY_FILE: join(vault, 'anahtar.txt') }, [targetDir, env.evidenceDir])).equals(key)).toBe(true);
+  });
+
+  it('no object in the target contains the key', async () => {
+    const all: string[] = [];
+    for (const d of ['db', 'evidence', 'status']) for (const f of await readdir(join(targetDir, d)).catch(() => [])) all.push(join(targetDir, d, f));
+    for (const f of all) {
+      const b = await readFile(f);
+      expect(b.includes(key)).toBe(false);
+      expect(b.includes(Buffer.from(key.toString('base64')))).toBe(false);
+    }
+  });
+
+  it('a recovered key is checked before restoring: a wrong key is caught without touching anything', async () => {
+    const id = (await listBackups(target)).at(-1)!;
+    const wrong = await checkKey(target, randomBytes(32), id);
+    expect(wrong.ok).toBe(false);
+    expect(wrong.checks[0]!.name).toBe('anahtar parmak izi yedekle eşleşiyor');
+    const right = await checkKey(target, await loadBackupKey({ BACKUP_ENCRYPTION_KEY_FILE: join(work, 'kasa', 'anahtar.txt') }, []), id);
+    expect(right.ok).toBe(true);
+  });
+});
+
+describe('retention keeps backups and business records apart', () => {
+  it('evidence of a record that no kept backup contains any more is removed from the target', async () => {
+    // A photo exists only in the oldest backups; after they age out, its object goes too.
+    const t = tasks.shift()!;
+    await fridgeCheck(t);
+    const withPhoto = await createBackup({ ownerUrl: sourceOwner(), evidenceDir: env.evidenceDir, target, key });
+    const row = (await q(sourceOwner(), `SELECT e.id, e.storage_key FROM evidence e WHERE e.task_id = $1 AND e.status = 'stored'`, [t]))[0];
+    const obj = evidenceObject(row.storage_key);
+    expect(await target.exists(obj)).toBe(true);
+    // The business deletes the record under its retention policy (simulated directly; no deletion job exists).
+    await q(sourceOwner(), `ALTER TABLE evidence DISABLE TRIGGER USER`);
+    await q(sourceOwner(), `UPDATE evidence SET status = 'rejected', storage_key = NULL, rejection_reason = 'test: saklama süresi doldu' WHERE id = $1`, [row.id]);
+    await q(sourceOwner(), `ALTER TABLE evidence ENABLE TRIGGER USER`);
+    await new Promise(r => setTimeout(r, 1100));
+    await createBackup({ ownerUrl: sourceOwner(), evidenceDir: env.evidenceDir, target, key });
+    // While a kept backup still contains it, it stays.
+    expect(await pruneEvidence(target, key)).not.toContain(obj);
+    // Once the backups containing it are out of the window, it is removed.
+    for (const id of await listBackups(target)) if (id <= withPhoto.id) { await target.remove(`db/${id}.manifest.enc`); await target.remove(`db/${id}.dump.enc`); }
+    expect(await pruneEvidence(target, key)).toContain(obj);
+    expect(await target.exists(obj)).toBe(false);
+  });
+
+  it('an empty listing removes nothing', async () => {
+    expect(await pruneEvidence(new DirTarget(join(work, 'baska-bos')), key)).toEqual([]);
   });
 });
 
@@ -357,7 +452,7 @@ describe('command line, as separate processes', () => {
     const sh = promisify(execFile);
     const cli = (args: string[], e: Record<string, string>) => sh('npx', ['tsx', 'src/ops/cli.ts', ...args], { cwd: process.cwd(), env: { ...process.env, ...e } })
       .then(r => ({ code: 0, out: r.stdout }), (err: any) => ({ code: err.code as number, out: `${err.stdout}${err.stderr}` }));
-    const common = { BACKUP_TARGET_DIR: join(work, 'cli-hedef'), BACKUP_ENCRYPTION_KEY: key.toString('base64') };
+    const common = { BACKUP_TARGET_DIR: join(work, 'cli-hedef'), BACKUP_ENCRYPTION_KEY: key.toString('base64'), BACKUP_ENCRYPTION_KEY_FILE: '' };
     const src = { ...common, DATABASE_OWNER_URL: sourceOwner(), EVIDENCE_DIR: env.evidenceDir };
     const b = await cli(['backup'], src);
     expect(b.out).toContain('SONUÇ: TAMAM');
@@ -369,6 +464,9 @@ describe('command line, as separate processes', () => {
     expect(r.out).not.toContain('✗');
     expect(r.code).toBe(0);
     expect((await cli(['backup'], { ...src, BACKUP_ENCRYPTION_KEY: '' })).out).toContain('BACKUP_ENCRYPTION_KEY');
+    expect((await cli(['key-check'], src)).out).toContain('SONUÇ: TAMAM');
+    const w = await cli(['watchdog'], { BACKUP_TARGET_DIR: common.BACKUP_TARGET_DIR, BACKUP_WATCH_STATE_FILE: join(work, 'cli-izleme.json'), BACKUP_ENCRYPTION_KEY: '' });
+    expect(w.out).toContain('bilinmiyor'); // a plain backup run writes no "usable" marker; only the scheduled job does
   }, 120_000);
 });
 

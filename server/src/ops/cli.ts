@@ -1,18 +1,19 @@
-import { checkRestored, createBackup, listBackups, restoreBackup, verifyBackup, type Report } from './backup';
-import { parseBackupKey } from './crypto';
+import { checkKey, checkRestored, createBackup, listBackups, restoreBackup, verifyBackup, type Report } from './backup';
+import { loadBackupKey } from './crypto';
 import { WebhookNotifier, type Notifier } from './notify';
-import { runScheduledBackup, runWatchdog } from './scheduled';
+import { DEFAULT_THRESHOLDS, runAgeWatch, runScheduledBackup } from './scheduled';
 import { assertSeparate, DirTarget } from './target';
 
 /*
  * Backup operations (run in server/, with the environment's variables):
  *   npm run backup                     one encrypted backup into BACKUP_TARGET_DIR
  *   npm run backup:list                backups in the target
- *   npm run backup:verify -- [id] [n]  decrypts and checks a backup (default: newest; n evidence objects deep-checked)
+ *   npm run backup:verify -- [id] [n]  decrypts and checks a backup (default: newest; all evidence)
+ *   npm run backup:key-check -- [id]   recovered key matches the backups? (run before a restore)
  *   npm run restore -- [id]            into the EMPTY database/evidence dir of this environment; resumable
  *   npm run check:integrity            audit chains + evidence files of this environment
- *   npm run backup:scheduled           hourly job: backup → verify → prune → integrity; alerts on failure
- *   npm run backup:watchdog            alerts when the last success is older than BACKUP_RPO_MINUTES
+ *   npm run backup:scheduled           every 30 min: backup → verify → mark usable → prune → integrity
+ *   npm run backup:watchdog            every 5 min, preferably elsewhere: age of the last usable backup
  */
 const [cmd, a1, a2] = process.argv.slice(2);
 const env = (k: string) => { const v = process.env[k]; if (!v) throw new Error(`${k} tanımlı değil`); return v; };
@@ -22,33 +23,40 @@ const target = () => {
   assertSeparate(dir, [process.env.EVIDENCE_DIR ?? './var/evidence', process.cwd()]);
   return new DirTarget(dir);
 };
-const key = () => parseBackupKey(process.env.BACKUP_ENCRYPTION_KEY);
+const key = () => loadBackupKey(process.env, [process.env.BACKUP_TARGET_DIR ?? '', process.env.EVIDENCE_DIR ?? '']);
 const notifiers = (): Notifier[] => (process.env.ALERT_WEBHOOK_URL ? [new WebhookNotifier(process.env.ALERT_WEBHOOK_URL)] : []);
 const newest = async () => { const ids = await listBackups(target()); if (!ids.length) throw new Error('Hedefte yedek yok.'); return ids.at(-1)!; };
+const num = (k: string, d: number) => Number(process.env[k] ?? d);
 
 if (cmd === 'backup') {
-  const m = await createBackup({ ownerUrl: env('DATABASE_OWNER_URL'), evidenceDir: env('EVIDENCE_DIR'), target: target(), key: key() });
+  const k = await key();
+  const m = await createBackup({ ownerUrl: env('DATABASE_OWNER_URL'), evidenceDir: env('EVIDENCE_DIR'), target: target(), key: k });
   console.log(`Yedek ${m.id} · döküm ${m.dump.size} bayt · ${m.evidence.length} kanıt · ${m.durationMs} ms`);
-  print(await verifyBackup(target(), key(), m.id, 20));
+  print(await verifyBackup(target(), k, m.id, 20));
 } else if (cmd === 'list') {
   for (const id of await listBackups(target())) console.log(id);
 } else if (cmd === 'verify') {
-  print(await verifyBackup(target(), key(), a1 || await newest(), a2 ? Number(a2) : Infinity));
+  print(await verifyBackup(target(), await key(), a1 || await newest(), a2 ? Number(a2) : Infinity));
+} else if (cmd === 'key-check') {
+  print(await checkKey(target(), await key(), a1 || await newest()));
 } else if (cmd === 'restore') {
   const t0 = Date.now();
-  print(await restoreBackup({ target: target(), key: key(), backupId: a1 || await newest(), targetOwnerUrl: env('DATABASE_OWNER_URL'), targetEvidenceDir: env('EVIDENCE_DIR'), log: m => console.log(m) }));
+  print(await restoreBackup({ target: target(), key: await key(), backupId: a1 || await newest(), targetOwnerUrl: env('DATABASE_OWNER_URL'), targetEvidenceDir: env('EVIDENCE_DIR'), log: m => console.log(m) }));
   console.log(`Süre: ${Math.round((Date.now() - t0) / 1000)} sn`);
 } else if (cmd === 'integrity') {
   print(await checkRestored({ ownerUrl: env('DATABASE_OWNER_URL'), evidenceDir: env('EVIDENCE_DIR') }));
 } else if (cmd === 'scheduled') {
-  const r = await runScheduledBackup({ ownerUrl: env('DATABASE_OWNER_URL'), evidenceDir: env('EVIDENCE_DIR'), target: target(), key: key(),
-    statusFile: env('BACKUP_STATUS_FILE'), notifiers: notifiers(), deepSample: Number(process.env.BACKUP_DEEP_SAMPLE ?? 20) });
+  const r = await runScheduledBackup({ ownerUrl: env('DATABASE_OWNER_URL'), evidenceDir: env('EVIDENCE_DIR'), target: target(), key: await key(),
+    statusFile: env('BACKUP_STATUS_FILE'), notifiers: notifiers(), deepSample: num('BACKUP_DEEP_SAMPLE', 20),
+    keep: { hourly: num('BACKUP_KEEP_HOURS', 48), daily: num('BACKUP_KEEP_DAYS', 30) } });
   process.exitCode = r.ok ? 0 : 1;
 } else if (cmd === 'watchdog') {
-  const r = await runWatchdog({ statusFile: env('BACKUP_STATUS_FILE'), maxAgeMinutes: Number(process.env.BACKUP_RPO_MINUTES ?? 60) + Number(process.env.BACKUP_GRACE_MINUTES ?? 15), notifiers: notifiers() });
-  console.log(r.ok ? `son başarılı yedek ${Math.round(r.ageMinutes)} dk önce` : 'UYARI gönderildi');
-  process.exitCode = r.ok ? 0 : 1;
+  // Needs only read access to the target; no database, no key.
+  const r = await runAgeWatch({ target: new DirTarget(env('BACKUP_TARGET_DIR')), stateFile: env('BACKUP_WATCH_STATE_FILE'), notifiers: notifiers(),
+    thresholds: { warnMinutes: num('BACKUP_AGE_WARN_MINUTES', DEFAULT_THRESHOLDS.warnMinutes), criticalMinutes: num('BACKUP_AGE_CRITICAL_MINUTES', DEFAULT_THRESHOLDS.criticalMinutes), rpoMinutes: num('BACKUP_RPO_MINUTES', DEFAULT_THRESHOLDS.rpoMinutes) } });
+  console.log(`son kullanılabilir yedeğin yaşı: ${Number.isFinite(r.ageMinutes) ? Math.round(r.ageMinutes) + ' dk' : 'bilinmiyor'} · düzey: ${r.level}${r.alerted ? ` · bildirim: ${r.alerted}` : ''}`);
+  process.exitCode = r.level === 'ok' ? 0 : 1;
 } else {
-  console.error('Kullanım: backup | list | verify [id] [n] | restore [id] | integrity | scheduled | watchdog');
+  console.error('Kullanım: backup | list | verify [id] [n] | key-check [id] | restore [id] | integrity | scheduled | watchdog');
   process.exitCode = 2;
 }

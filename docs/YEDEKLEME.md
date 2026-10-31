@@ -1,102 +1,119 @@
 # Yedekleme, geri yükleme ve hedefler
 
-## 1. Hedefler ve ölçüm sonucu
+## 1. Kararlar ve durumları
 
-Hedefler senden: en fazla 1 saat veri kaybı (RPO), 4 saatte geri dönüş (RTO), şifreli yedek, uygulama sunucusundan ayrı konum, başarısızlıkta bildirim.
+| Karar / hedef | Uygulama | Durum |
+|---|---|---|
+| **Yedek aralığı 30 dakika** | `backup:scheduled` 30 dakikada bir çalışır. Önceki çalışma sürüyorsa yeni çalıştırma atlanır (kilit). | Hazır |
+| **En fazla 1 saat veri kaybı** | En kötü durum: 30 dk aralık + çalışma süresi (ölçülen ~7–9 sn) ≈ 30 dk. | **Karşılanıyor** (ölçüldü, §5) |
+| **Ayrı konumdaki son kullanılabilir yedeğin yaşının izlenmesi** | Bir yedek ancak ayrı konuma aktarılıp orada doğrulandıktan sonra "kullanılabilir" sayılır. Zamanlanmış iş o zaman hedefe bir işaret dosyası yazar (`status/latest-verified.json`). Gözcü (`backup:watchdog`) yaşı bu işaretten okur. İşaretin gösterdiği yedek hedefte yoksa yaş "bilinmiyor" sayılır ve bildirim gönderilir. | Hazır (test edildi) |
+| **Hedef tehlikeye girmeden önceden bildirim** | Eşikler §2'de. | Hazır (test edildi) |
+| **Anahtar yedeklerle birlikte tutulmaz** | Anahtar dosyası yedek konumunda ya da kanıt klasöründe ise komutlar çalışmayı reddeder. Hedefteki hiçbir nesnede anahtar bulunmadığı test edildi. | Hazır (test edildi) |
+| **Anahtar kurtarma tatbikata dahil** | `backup:key-check`, saklandığı yerden alınan anahtarı geri yüklemeden önce yedekle karşılaştırır. Tatbikat adımları §4'te. | Hazır; gerçek tatbikat barındırmayı bekliyor |
+| **4 saatte geri dönüş** | Verinin geri yüklenmesi 40 sn (bir yıllık pilot verisi, yerel). | Veri kısmı karşılanıyor; sunucu kurulumu dahil tam süre tatbikatta ölçülecek |
+| **Şifreleme** | AES-256-GCM, sunucuda; nesne adı doğrulanıyor | Hazır |
+| **Bildirim** | Webhook (JSON); parolalar gizleniyor | Hazır; gerçek adres senden |
 
-| Hedef | Önceki yöntem (format 1) | Şimdiki yöntem (format 2) | Durum |
+## 2. Yaş izleme ve eşikler
+
+Yaş, ayrı konumdaki son kullanılabilir yedeğin **anlık görüntü zamanından** ölçülür. Bu, sunucu şu anda kaybolsa ne kadar verinin gideceğini gösterir. Normal işleyişte yaş 0–31 dakika arasında dolaşır.
+
+| Düzey | Yaş | Anlamı | Bildirim |
 |---|---|---|---|
-| **En fazla 1 saat veri kaybı** | Karşılamıyordu: zamanlama yoktu, yedek elle alınıyordu | Saatlik çalıştırmada en kötü durum 60 dk + çalışma süresi. Ölçülen çalışma süresi ~7 sn, yani en kötü durum 60 dk 7 sn. **30 dakikada bir çalıştırılırsa en kötü durum ~30 dk.** | **30 dk aralıkla karşılanır** (saatlik aralık sınırı birkaç saniye aşar) |
-| **4 saatte geri dönüş** | Ölçülmemişti | Verinin geri yüklenmesi ölçüldü: **40 sn** (2,1 GB kanıt + 44 MB veritabanı, yerel disk). Ağ aktarımı eklenince: 2,2 GB, 100 Mbit/sn'de ~3 dk, 20 Mbit/sn'de ~15 dk. | **Veri kısmı rahatça karşılanıyor.** Yeni sunucunun kurulması (makine, PostgreSQL, uygulama, DNS) barındırma seçilmeden ölçülemez; tam tatbikat orada yapılmalı. |
-| **Şifreli yedek** | Yoktu | AES-256-GCM, sunucuda şifreleniyor; hedefe yalnızca şifreli nesne gidiyor. Nesne adı da doğrulanıyor. | **Karşılanıyor** (test edildi) |
-| **Sunucudan ayrı konum** | Aynı makinede klasördü | Hedef ayrı bir konum olarak tanımlanıyor; uygulama verisinin içinde bir hedef reddediliyor. | **Yöntem hazır.** Gerçek ayrı konum barındırma kararını bekliyor. Testler aynı makinede ayrı bir klasör kullandı. |
-| **Başarısızlıkta bildirim** | Yoktu | Bildirim üreten durumlar: başarısız yedek, başarısız doğrulama, başarısız bütünlük kontrolü ve son başarılı yedeğin hedeften eski olması (gözcü). Bildirim JSON olarak bir adrese (webhook) gönderiliyor; parola ve anahtar gizleniyor. | **Karşılanıyor** (test edildi). Gerçek bildirim adresi ve alıcılar senden. Gözcü, sunucu tamamen çökerse de çalışabilmesi için ayrı bir makinede çalışmalı. |
+| Normal | < 40 dk | 30 dakikalık aralık işliyor | — |
+| **Uyarı** | ≥ 40 dk | Bir yedek gecikti ya da düştü | "Yedek gecikiyor" |
+| **Kritik** | ≥ 50 dk | Sonraki yedek de gelmezse hedef aşılır | "Bir saatlik veri kaybı hedefi tehlikede"; düzey sürdükçe saatte bir tekrarlanır |
+| **Hedef aşıldı** | ≥ 60 dk | En fazla 1 saat veri kaybı hedefi şu an karşılanmıyor | "Hedef aşıldı"; saatte bir tekrarlanır |
+| Düzelme | < 40 dk'ya dönünce | — | Tek bir "yeniden güncel" bildirimi |
 
-### Ölçüm koşulları (31.10.2026)
+Ayrıca her başarısız yedekleme, başarısız doğrulama ve başarısız bütünlük kontrolü anında bildirim üretir.
 
-- **Veri:** Uygulamanın kendi servisleriyle üretildi (`npm run ops:loadgen -- 20 365 300`). Denetim zincirleri ve kanıt kayıtları gerçek.
-  - 20 işletme, 365 gün
-  - 14.840 görev, 29.439 denetim olayı
-  - 7.300 fotoğraf × 300 KB = 2,1 GB
-  - Veritabanı 44 MB
-- **Varsayım:** Pilotun bir yılı için üst sınır. Gerçek kural kümesi gün başına daha çok görev üretirse veritabanı büyür; o durumda ölçüm tekrarlanmalı.
-- **Ortam:** Bu geliştirme ortamı, yerel disk. Hedef aynı diskte ayrı bir klasördü; bu yüzden ağ süresi ölçüme girmedi, yukarıda ayrıca hesaplandı.
+Eşikler ortam değişkeniyle ayarlanabilir: `BACKUP_AGE_WARN_MINUTES`, `BACKUP_AGE_CRITICAL_MINUTES`, `BACKUP_RPO_MINUTES`.
+
+**Gözcü uygulama sunucusunda çalışmamalı.** Sunucu tamamen çökerse kendi kendine bildirim gönderemez. Gözcünün yedek konumunu yalnızca okuma erişimi yeter; veritabanı ya da anahtar gerekmez.
+
+## 3. Saklama düzeni ve depolama ihtiyacı
+
+**Yedek saklama (pilot önerisi)**
+
+- **Son 48 saat:** her yarım saatlik yedek tutulur (96 yedek).
+- **Son 30 gün:** her günün en son yedeği tutulur (ilk iki gün yukarıdakilerle örtüşür; ek 28 yedek).
+- Toplam en fazla ~124 veritabanı yedeği. Daha eskiler zamanlanmış iş tarafından silinir.
+
+**İş kayıtlarının saklama politikasından ayrıdır.** Yedekler, kayıtların arşivi değildir; yalnızca geri dönüş içindir.
+
+- İş kayıtlarının ne kadar tutulacağını saklama matrisi belirler (`retention_policies`, hukuk görüşü bekleniyor).
+- Bir kayıt saklama politikasına göre silindiğinde, en fazla **30 gün** boyunca eski yedeklerde kalır, sonra yedeklerden de çıkar. Kanıt dosyaları için bu, hiçbir tutulan yedeğin artık kullanmadığı kanıt nesnelerinin her çalışmada silinmesiyle sağlanır (test edildi).
+- Bu 30 günlük süre aydınlatma metninde ve saklama matrisinde belirtilmeli.
+
+**Depolama ihtiyacı** (ölçüme dayalı; 20 işletme, 1 yıl, fotoğraf 300 KB):
+
+| | Günde 1 fotoğraf / işletme | Günde 5 fotoğraf / işletme |
+|---|---|---|
+| Veritabanı dökümü, yıl sonunda (ölçülen) | 4,6 MB | ~5 MB |
+| Manifest, yedek başına (kanıt sayısıyla büyür; ölçülen) | 2,1 MB | ~10,4 MB |
+| 124 tutulan yedek (döküm + manifest) | ~0,8 GB | ~1,8 GB |
+| Kanıt nesneleri (her biri bir kez; şifreleme ek yükü 41 bayt/nesne) | ~2,1 GB | ~10,7 GB |
+| **Toplam, 1. yıl sonu** | **~3 GB** | **~12,5 GB** |
+
+**Öneri:** Pilot için **20 GB** yedek alanı ve %70 dolulukta uyarı. Kanıt kısmı her yıl, saklama politikasının izin verdiği sürece doğrusal büyür.
+
+## 4. Geri dönüş tatbikatı (anahtar kurtarma dahil)
+
+Barındırma seçildikten sonra, boş bir sunucuda, süre tutularak yapılır. Pilot boyunca ayda bir tekrarlanır.
+
+1. **Başlangıç:** Saati kaydet. Senaryo: uygulama sunucusu ve diski tamamen kayıp.
+2. **Anahtarın kurtarılması:** Anahtarı saklandığı yerden (parola kasası / kapalı zarf) yetkili kişi alır. Kim aldı, ne zaman, kaç dakika sürdü kaydedilir.
+3. **Yeni sunucu:** İşletim sistemi, Node.js, PostgreSQL ve uygulama `KURULUM.md`'ye göre kurulur. Uygulama rolü oluşturulur.
+4. **Anahtar kontrolü:** `BACKUP_ENCRYPTION_KEY_FILE` sunucuda, kanıt klasörü ve yedek konumu dışında, geçici bir yere konur. `npm run backup:key-check` çalıştırılır: parmak izi ve manifest çözümü TAMAM olmalı. Yanlış anahtar burada yakalanır; hiçbir şey yazılmadan durulur.
+5. **Geri yükleme:** `npm run restore` çalıştırılır. Kesilirse aynı komut kaldığı yerden devam eder.
+6. **Doğrulama:**
+   - `npm run check:integrity` TAMAM olmalı.
+   - Uygulama HTTPS üzerinden açılır, bir kullanıcı gerçek e-postayla giriş yapar, bir görev görüntülenir.
+   - Telefonda bir kayıt girilir.
+7. **Bitiş:** Saati kaydet. Toplam süre 4 saatin altında mı? Anahtar dosyası sunucudan silinir; anahtar kasaya geri konur.
+8. **Kayıt:** Tatbikat raporu yazılır: süreler, sorunlar, bir sonraki tatbikat tarihi.
+
+## 5. Ölçümler
+
+Ölçüm verisi uygulamanın kendi servisleriyle üretildi (`npm run ops:loadgen`). 20 işletme, 365 gün, 7.300 fotoğraf × 300 KB = 2,1 GB, veritabanı 44 MB. Ortam bu geliştirme ortamıydı ve hedef aynı diskte ayrı bir klasördü; bu yüzden ağ süresi ölçüme girmedi.
 
 | İşlem | Süre |
 |---|---|
-| İlk tam yedek: tüm kanıtlar şifrelenip hedefe gider, sonra doğrulanır | 31 sn |
-| Saatlik iş: yedek, doğrulama, eski yedekleri silme ve bütünlük kontrolü; yeni kanıt yokken | 6,9 sn (yedeğin kendisi 1,2 sn) |
-| Tam derin doğrulama: 7.300 kanıtın tamamı çözülüp karşılaştırılır | 18 sn |
-| Canlı bütünlük kontrolü: 21 zincir, 7.300 dosya | 4,4 sn |
-| Tam geri yükleme, boş hedefe; son kontroller dahil | 40 sn |
+| İlk tam yedek (tüm kanıtlar şifrelenip hedefe) | 31 sn |
+| Yarım saatlik iş, yeni kanıt yokken (yedek, doğrulama, budama, bütünlük) | ~7 sn (yedeğin kendisi 1,2 sn) |
+| Tam derin doğrulama (7.300 kanıtın tamamı çözülerek) | 18 sn |
+| Canlı bütünlük kontrolü | 4,4 sn |
+| Tam geri yükleme, boş hedefe | 40 sn |
+| Ağ üzerinden indirme (hesap, ölçüm değil), 2,2 GB | 100 Mbit/sn'de ~3 dk; 20 Mbit/sn'de ~15 dk |
 
-## 2. Nasıl çalışır
+## 6. Nasıl çalışır
 
-**Tutarlılık.** Veritabanı dökümü ve "kaydedilmiş kanıt" listesi aynı anlık görüntüden (`REPEATABLE READ` snapshot) alınır. Yedek alınırken görev kaydı ve fotoğraf yüklemesi sürse bile, yedekteki dosyalar tam olarak dökümdeki veritabanının "kaydedildi" dediği dosyalardır; ne eksik ne fazla.
+- **Tutarlılık:**
+  - Veritabanı dökümü ve "kaydedilmiş kanıt" listesi aynı anlık görüntüden alınır. Yedek alınırken iş sürse bile, yedekteki dosyalar tam olarak dökümdeki veritabanının kaydettiği dosyalardır.
+  - O anda yüklemesi yarım olan bir fotoğraf, geri yüklenen sistemde "yükleme bekleniyor" olarak kalır; telefon yeniden denediğinde tamamlanır.
+- **Konum ve şifreleme:**
+  - Her nesne sunucuda şifrelenir ve kendi rastgele IV'siyle yazılır; nesne adı da doğrulanır.
+  - Kanıt nesneleri bir kez yüklenir. Adları saklama anahtarının özetidir; işletme ve kayıt kimliklerini göstermez.
+- **Geri yüklemenin aşamaları:** Veritabanı tek işlemde yüklenir, dosyalar değil. Bu yüzden geri yükleme dört aşamada ilerler ve her aşama bir günlük dosyasına yazılır; kesilen her aşama yeniden çalıştırmada tamamlanır ya da temizlenir:
+  1. Kanıtlar hedefin yanında ayrı bir klasöre çözülür ve özetleri kontrol edilir.
+  2. Veritabanı tek işlemde yüklenir.
+  3. Hazırlık klasörü tek bir atomik `rename` ile yerine konur.
+  4. Son kontroller yapılır.
 
-- Anlık görüntüden sonra gelen kayıtlar bir sonraki yedeğe girer.
-- O anda yüklemesi yarım olan fotoğraf, geri yüklenen sistemde "yükleme bekleniyor" olarak kalır. Telefon yeniden denediğinde tamamlanır.
+  Ayrıntılar ve testler: `server/test/acceptance/backup-restore.test.ts`.
 
-**Şifreleme ve konum.**
-
-- Her nesne ayrı ve rastgele bir IV ile şifrelenir.
-- Nesnenin adı da doğrulanır: eski bir manifest yeni yedeğin adıyla konursa reddedilir.
-- Kanıt dosyaları değişmediği için her biri bir kez yüklenir; sonraki yedekler yalnızca yeni dosyaları ekler.
-- Kanıt nesnelerinin adı, saklama anahtarının özetidir; işletme ve kayıt kimliklerini göstermez.
-
-**Saklama.** Son 48 saatin bütün yedekleri ve 30 gün boyunca günde bir yedek tutulur. Kanıt nesneleri silinmez.
-
-## 3. Geri yükleme: veritabanı tek işlem, dosyalar değil
-
-PostgreSQL işlemi dosya sistemini kapsamaz. Bu yüzden geri yükleme dört aşamada ilerler. Her aşama, kanıt klasörünün yanındaki bir günlük dosyasına (`<klasör>.restore-journal.json`) yazılır; kesilen her çalıştırma kaldığı yerden tamamlanabilir ya da temizlenebilir:
-
-1. **Hazırlık (`staging`).**
-   - Kanıtlar hedefin yanındaki ayrı bir klasöre çözülür. Her dosya önce geçici adla yazılır, özeti kontrol edilir, sonra adlandırılır; yani yarım dosya hiç oluşmaz.
-   - Veritabanına dokunulmaz.
-   - Yeniden çalıştırmada özeti tutan dosyalar yeniden kullanılır, tutmayanlar silinir.
-2. **Veritabanı (`staged` → `db_committed`).** `pg_restore --single-transaction` ya tamamen işlenir ya da veritabanını boş bırakır.
-3. **Dosyaların yerine konması (`files_in_place`).** Hazırlık klasörü tek bir `rename` ile kanıt klasörünün yerine geçer. Aynı dosya sisteminde bu işlem atomiktir.
-4. **Son kontroller.** Migration listesi, tablo satır sayıları, denetim zincirleri, her kanıtın özeti ve kayda bağlı olmayan dosya kontrol edilir. Hepsi tamamsa günlük silinir.
-
-Testlerle denenen kesintiler (`server/test/acceptance/backup-restore.test.ts`):
-
-- **Hazırlık yarısında:** Veritabanı boş kalır. Yeniden çalıştırmada doğrulanmış dosyalar kullanılır, bozulmuş bir dosya silinip yeniden indirilir.
-- **Veritabanı yazıldıktan sonra:** Bütünlük kontrolü yarım durumu "sorun var" diye gösterir. Yeniden çalıştırma dosyaları yerine koyar.
-- **Veritabanı işlendi ama günlük güncellenmeden:** Veritabanı yedekle karşılaştırılır; eşleşiyorsa devam edilir.
-- **Dosyalar yerine konduktan sonra:** Yeniden çalıştırmada yalnızca son kontroller yapılır.
-- **`pg_restore` kendi işleminin ortasında hata verirse:** Hiç tablo kalmaz. Yeniden çalıştırma hazırlanmış dosyaları kullanarak tamamlanır.
-- **Dolu hedef ve başka bir yedeğin yarım kalmış geri yüklemesi:** İkisi de reddedilir.
-
-## 4. Komutlar (`server/` içinde)
+## 7. Komutlar ve zamanlama
 
 ```bash
-npm run backup                 # tek seferlik şifreli yedek + doğrulama
-npm run backup:list            # hedefteki yedekler
-npm run backup:verify -- [id] [n]   # şifre çözerek doğrular (varsayılan: en yeni, tüm kanıtlar)
-npm run restore -- [id]        # BOŞ veritabanı + BOŞ kanıt klasörüne; kesilirse aynı komutla devam
-npm run check:integrity        # çalışan sistemde zincirler + kanıt dosyaları
-npm run backup:scheduled       # zamanlanmış iş: yedek → doğrulama → eski yedekleri silme → bütünlük; hata → bildirim
-npm run backup:watchdog        # son başarı hedeften eskiyse bildirim (ayrı makinede çalıştır)
+npm run backup:scheduled      # her 30 dk
+npm run backup:watchdog       # her 5 dk, başka makinede (yalnızca yedek konumuna okuma erişimi)
+npm run backup:list | backup:verify -- [id] [n] | backup:key-check -- [id] | restore -- [id] | check:integrity
 ```
-
-Örnek zamanlama (cron):
 
 ```
 */30 * * * *  cd /srv/goverhub/server && npm run -s backup:scheduled
-*/15 * * * *  cd /srv/goverhub/server && npm run -s backup:watchdog     # tercihen başka bir makinede
+*/5  * * * *  cd /srv/goverhub-gozcu/server && npm run -s backup:watchdog
 ```
 
-Ortam değişkenleri: `BACKUP_TARGET_DIR`, `BACKUP_ENCRYPTION_KEY`, `BACKUP_STATUS_FILE`, `BACKUP_RPO_MINUTES`, `BACKUP_GRACE_MINUTES`, `BACKUP_DEEP_SAMPLE`, `ALERT_WEBHOOK_URL`. Ayrıntı: `server/.env.example`.
-
-**Anahtar:** `BACKUP_ENCRYPTION_KEY` olmadan yedek okunamaz. Bir kopyası hem uygulama sunucusunun hem yedek hedefinin dışında saklanmalı (ör. parola kasası ve kapalı zarf).
-
-## 5. Kararını bekleyenler
-
-| Konu | Önerim |
-|---|---|
-| Yedek aralığı | 30 dakika (1 saat hedefini birkaç saniye payla değil, rahatça karşılar) |
-| Ayrı konum | Türkiye'de, uygulama sunucusundan farklı bir makine ya da nesne depolama (sürüm tutma / değiştirilemezlik özelliği olan). Seçilince aynı arayüzle bağlanır. |
-| Şifreleme anahtarının saklandığı yer | Parola kasası + çevrimdışı kopya; erişebilecek kişiler belirlenmeli |
-| Bildirim adresi ve alıcılar | Bir webhook (ekip sohbet kanalı ya da nöbet aracı) + SMTP bağlanınca e-posta |
-| Yedek saklama süreleri | 48 saat / 30 gün başlangıç; saklama matrisiyle uyumlu olmalı (hukuk görüşü) |
-| Tam geri dönüş tatbikatı | Barındırma seçilince: sıfırdan sunucu kurulumu + geri yükleme, süre ölçülerek. Sonra ayda bir. |
+Ortam değişkenlerinin tamamı `server/.env.example`'da. Anahtar için **`BACKUP_ENCRYPTION_KEY_FILE`** önerilir: sunucuda yalnızca gerektiği sürece bulunan, kanıt klasörü ve yedek konumu dışındaki bir dosya. `BACKUP_ENCRYPTION_KEY` değişkeni de çalışır.
