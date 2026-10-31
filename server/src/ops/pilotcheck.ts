@@ -32,6 +32,9 @@ export async function pilotCheck(env: NodeJS.ProcessEnv, opts: { fetchImpl?: typ
   add('E-posta: SMTP', env.MAIL_TRANSPORT === 'smtp', `MAIL_TRANSPORT=${env.MAIL_TRANSPORT ?? 'dev_outbox'}`);
   add('E-posta: gerçek gönderim doğrulandı', env.MAIL_PRODUCTION_READY === 'true', 'MAIL_PRODUCTION_READY ancak gerçek gönderim doğrulandıktan sonra true yapılır');
   add('Ek doğrulama anahtarı tanımlı', !!env.MFA_ENCRYPTION_KEY);
+  const host = env.HOST ?? '127.0.0.1';
+  add('API yalnızca yerel adreste dinliyor', ['127.0.0.1', '::1', 'localhost'].includes(host), `HOST=${host}`);
+  add('Yalnızca yerel vekile güveniliyor', (env.TRUST_PROXY ?? '').split(',').map(x => x.trim()).filter(Boolean).every(x => ['127.0.0.1', '::1'].includes(x)) && !!env.TRUST_PROXY, `TRUST_PROXY=${env.TRUST_PROXY ?? ''}`);
   add('Yöneticilere ek doğrulama zorunlu', env.MFA_REQUIRED_FOR_PLATFORM !== 'false');
 
   try { await access(env.EVIDENCE_DIR ?? '', constants.W_OK); add('Kanıt klasörü yazılabilir', true, env.EVIDENCE_DIR); }

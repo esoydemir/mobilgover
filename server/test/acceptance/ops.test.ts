@@ -45,7 +45,7 @@ describe('pilot readiness check', () => {
   const pilotEnv = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => ({
     DATABASE_OWNER_URL: process.env.TEST_DATABASE_OWNER_URL, EVIDENCE_DIR: env.evidenceDir, DEMO_MODE: 'false',
     PUBLIC_BASE_URL: 'https://pilot.ornek.com.tr', MAIL_TRANSPORT: 'smtp', MAIL_PRODUCTION_READY: 'true', MFA_ENCRYPTION_KEY: 'x',
-    BACKUP_TARGET_DIR: join(work, 'hedef'), BACKUP_ENCRYPTION_KEY_FILE: '/kasa/anahtar', ALERT_WEBHOOK_URL: 'https://hook.example/x', ...extra });
+    BACKUP_TARGET_DIR: join(work, 'hedef'), BACKUP_ENCRYPTION_KEY_FILE: '/kasa/anahtar', ALERT_WEBHOOK_URL: 'https://hook.example/x', HOST: '127.0.0.1', TRUST_PROXY: '127.0.0.1', ...extra });
   const liveApi = (body: object) => (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch;
   const failing = (items: Awaited<ReturnType<typeof pilotCheck>>) => items.filter(i => i.status === 'fail').map(i => i.name);
 

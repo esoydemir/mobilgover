@@ -28,8 +28,10 @@ export type Config = {
   mailProductionReady: boolean;
   /** Web origins allowed to call the API (the web build of the app). */
   corsOrigins: string[];
-  /** Reverse proxy addresses whose X-Forwarded-For is trusted. */
+  /** Reverse proxy addresses whose X-Forwarded-For is trusted. Explicit IP addresses or CIDR ranges only. */
   trustProxy: string[];
+  /** Address the API listens on. Loopback in pilot: only the reverse proxy on the same server reaches it. */
+  host: string;
 };
 
 export function loadConfig(): Config {
@@ -47,7 +49,8 @@ export function loadConfig(): Config {
     smtp: mailTransport() === 'smtp' ? smtpConfig() : null,
     mailProductionReady: process.env.MAIL_PRODUCTION_READY === 'true',
     corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean),
-    trustProxy: (process.env.TRUST_PROXY ?? '').split(',').map(s => s.trim()).filter(Boolean),
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+    host: listenHost(process.env.HOST, demoMode),
   };
 }
 
@@ -64,4 +67,31 @@ function smtpConfig(): SmtpConfig {
     host: required('MAIL_SMTP_HOST'), port: Number(process.env.MAIL_SMTP_PORT ?? (security === 'tls' ? 465 : 587)), security,
     user: process.env.MAIL_SMTP_USER || undefined, pass: process.env.MAIL_SMTP_PASS || undefined, from: required('MAIL_FROM'),
   };
+}
+
+const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(\/(3[0-2]|[12]?\d))?$/;
+const IPV6 = /^[0-9a-f:]+(\/(12[0-8]|1[01]\d|\d?\d))?$/i;
+
+/**
+ * Only explicit proxy addresses are trusted. Values that would trust every
+ * hop (true, *, all, loopback-keywords of the proxy library) are refused, so a
+ * client can never choose its own address by sending X-Forwarded-For.
+ */
+export function parseTrustProxy(raw: string | undefined): string[] {
+  const list = (raw ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  for (const v of list) {
+    if (!(IPV4.test(v) || (v.includes(':') && IPV6.test(v)))) throw new Error(`TRUST_PROXY yalnızca IP adresi ya da aralığı içerebilir (ör. 127.0.0.1); geçersiz değer: ${v}`);
+    if (/^0\.0\.0\.0\/0$|^::\/0$/.test(v)) throw new Error('TRUST_PROXY bütün adreslere güvenemez.');
+  }
+  return list;
+}
+
+const LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
+/** Loopback by default. A pilot (non-demo) deployment refuses to listen on a public address. */
+export function listenHost(raw: string | undefined, demoMode: boolean): string {
+  const host = (raw ?? '127.0.0.1').trim();
+  if (!demoMode && !LOOPBACK.includes(host) && process.env.ALLOW_DIRECT_API !== 'true') {
+    throw new Error(`Pilot ortamında API yalnızca yerel adreste dinler (HOST=127.0.0.1); dışarıdan erişim vekil sunucu (HTTPS) üzerindendir. Verilen: ${host}`);
+  }
+  return host;
 }

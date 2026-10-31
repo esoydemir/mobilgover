@@ -1,7 +1,7 @@
 import { checkKey, checkRestored, createBackup, listBackups, restoreBackup, verifyBackup, type Report } from './backup';
 import { loadBackupKey } from './crypto';
 import { WebhookNotifier, type Notifier } from './notify';
-import { DEFAULT_THRESHOLDS, runAgeWatch, runScheduledBackup } from './scheduled';
+import { DEFAULT_THRESHOLDS, runAgeWatch, runScheduledBackup, withLock } from './scheduled';
 import { assertSeparate, DirTarget } from './target';
 
 /*
@@ -30,9 +30,13 @@ const num = (k: string, d: number) => Number(process.env[k] ?? d);
 
 if (cmd === 'backup') {
   const k = await key();
-  const m = await createBackup({ ownerUrl: env('DATABASE_OWNER_URL'), evidenceDir: env('EVIDENCE_DIR'), target: target(), key: k });
-  console.log(`Yedek ${m.id} · döküm ${m.dump.size} bayt · ${m.evidence.length} kanıt · ${m.durationMs} ms`);
-  print(await verifyBackup(target(), k, m.id, 20));
+  // Same lock as the scheduled job: a manual backup never runs alongside pruning.
+  const r = await withLock((process.env.BACKUP_STATUS_FILE ?? './var/backup-status.json') + '.lock', 2 * 3_600_000, async () => {
+    const m = await createBackup({ ownerUrl: env('DATABASE_OWNER_URL'), evidenceDir: env('EVIDENCE_DIR'), target: target(), key: k });
+    console.log(`Yedek ${m.id} · döküm ${m.dump.size} bayt · ${m.evidence.length} kanıt · ${m.durationMs} ms`);
+    print(await verifyBackup(target(), k, m.id, 20));
+  });
+  if (r === 'locked') { console.log('Başka bir yedekleme çalışıyor; daha sonra tekrar dene.'); process.exitCode = 1; }
 } else if (cmd === 'list') {
   for (const id of await listBackups(target())) console.log(id);
 } else if (cmd === 'verify') {

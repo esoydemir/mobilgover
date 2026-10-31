@@ -420,26 +420,47 @@ describe('the key is kept apart and its recovery is part of the drill', () => {
 });
 
 describe('retention keeps backups and business records apart', () => {
-  it('evidence of a record that no kept backup contains any more is removed from the target', async () => {
-    // A photo exists only in the oldest backups; after they age out, its object goes too.
+  it('cleanup never breaks a kept backup: the oldest one still restores completely; after it ages out, the newer one does', async () => {
+    // A photo exists only in the older backup.
     const t = tasks.shift()!;
     await fridgeCheck(t);
-    const withPhoto = await createBackup({ ownerUrl: sourceOwner(), evidenceDir: env.evidenceDir, target, key });
+    const older = await createBackup({ ownerUrl: sourceOwner(), evidenceDir: env.evidenceDir, target, key });
     const row = (await q(sourceOwner(), `SELECT e.id, e.storage_key FROM evidence e WHERE e.task_id = $1 AND e.status = 'stored'`, [t]))[0];
     const obj = evidenceObject(row.storage_key);
-    expect(await target.exists(obj)).toBe(true);
     // The business deletes the record under its retention policy (simulated directly; no deletion job exists).
     await q(sourceOwner(), `ALTER TABLE evidence DISABLE TRIGGER USER`);
     await q(sourceOwner(), `UPDATE evidence SET status = 'rejected', storage_key = NULL, rejection_reason = 'test: saklama süresi doldu' WHERE id = $1`, [row.id]);
     await q(sourceOwner(), `ALTER TABLE evidence ENABLE TRIGGER USER`);
     await new Promise(r => setTimeout(r, 1100));
-    await createBackup({ ownerUrl: sourceOwner(), evidenceDir: env.evidenceDir, target, key });
-    // While a kept backup still contains it, it stays.
-    expect(await pruneEvidence(target, key)).not.toContain(obj);
-    // Once the backups containing it are out of the window, it is removed.
-    for (const id of await listBackups(target)) if (id <= withPhoto.id) { await target.remove(`db/${id}.manifest.enc`); await target.remove(`db/${id}.dump.enc`); }
-    expect(await pruneEvidence(target, key)).toContain(obj);
+    const newer = await createBackup({ ownerUrl: sourceOwner(), evidenceDir: env.evidenceDir, target, key });
+    expect(newer.evidence.map(e => e.object)).not.toContain(obj);
+
+    // Cleanup runs (age guard off, so only references protect the object): the older backup still lists it, so it stays.
+    expect(await pruneEvidence(target, key, { minAgeMs: 0 })).not.toContain(obj);
+    // ... and the older backup restores completely, every file verified.
+    const d1 = join(work, 'r-eski');
+    await emptyRestoreTarget(d1);
+    const r1 = await restoreBackup({ target, key, backupId: older.id, targetOwnerUrl: restoreDb.owner, targetEvidenceDir: d1 });
+    expect(r1.checks.filter(c => !c.ok)).toEqual([]);
+    expect(await q(restoreDb.owner, `SELECT status FROM evidence WHERE id = $1`, [row.id])).toEqual([{ status: 'stored' }]);
+
+    // The older backups age out; now the object goes, and the newer backup still restores completely.
+    for (const id of await listBackups(target)) if (id <= older.id) { await target.remove(`db/${id}.manifest.enc`); await target.remove(`db/${id}.dump.enc`); }
+    expect(await pruneEvidence(target, key, { minAgeMs: 0 })).toContain(obj);
     expect(await target.exists(obj)).toBe(false);
+    const d2 = join(work, 'r-yeni');
+    await emptyRestoreTarget(d2);
+    expect((await restoreBackup({ target, key, backupId: newer.id, targetOwnerUrl: restoreDb.owner, targetEvidenceDir: d2 })).ok).toBe(true);
+    // Every kept backup verifies with all its evidence decrypted.
+    for (const id of await listBackups(target)) expect((await verifyBackup(target, key, id, Infinity)).ok).toBe(true);
+  });
+
+  it('a fresh object that no manifest lists yet (a backup still uploading) is not removed', async () => {
+    const enc = join(work, 'yeni.enc');
+    await writeFile(enc, Buffer.from('GHBK yükleniyor'));
+    await target.put('evidence/yukleniyor.enc', enc);
+    expect(await pruneEvidence(target, key)).not.toContain('evidence/yukleniyor.enc');               // default 6 h guard
+    expect(await pruneEvidence(target, key, { now: new Date(Date.now() + 7 * 3_600_000) })).toContain('evidence/yukleniyor.enc');
   });
 
   it('an empty listing removes nothing', async () => {

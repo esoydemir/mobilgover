@@ -11,5 +11,5 @@ const log = (line: Record<string, unknown>) => console.log(JSON.stringify({ t: n
 const mailer: Mailer = config.smtp ? new SmtpMailer(config.smtp, log) : new DevOutboxMailer(db);
 if (config.mailTransport === 'smtp' && !config.mailProductionReady) log({ level: 'warn', event: 'mail_not_production_ready', note: 'SMTP configured but a real delivery has not been confirmed (MAIL_PRODUCTION_READY)' });
 const app = buildApp({ db, store: new LocalStore(config.evidenceDir), mailer, config, log });
-await app.listen({ port: config.port, host: '0.0.0.0' });
+await app.listen({ port: config.port, host: config.host });
 console.log(`GoverHub API http://localhost:${config.port} (demo mode: ${config.demoMode})`);

@@ -22,6 +22,15 @@ sudo adduser --system --group --home /srv/goverhub goverhub
 sudo mkdir -p /srv/goverhub/{app,web,evidence,var} /etc/goverhub && sudo chown -R goverhub:goverhub /srv/goverhub
 ```
 
+**Güvenlik duvarı:** Dışarıya yalnızca 80 ve 443 açık olsun. SSH yalnızca yönetici IP'lerinden kabul edilsin. API (3000) dışarıya hiç açılmaz; zaten yalnızca 127.0.0.1'de dinler ve pilot modunda başka adresi reddeder.
+
+```bash
+sudo ufw default deny incoming && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+sudo ufw allow from <yönetici-IP> to any port 22 proto tcp && sudo ufw enable
+```
+
+Kurulumdan sonra başka bir makineden `curl -m 5 http://<sunucu-IP>:3000/health` çalıştırıldığında **bağlantı kurulamamalı**.
+
 **Kod** (Git paketinden; uzak depo yok):
 
 ```bash

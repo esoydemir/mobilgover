@@ -201,9 +201,15 @@ export async function checkKey(target: BackupTarget, key: Buffer, id: string): P
  * Removes evidence objects that no kept backup refers to. Evidence of records
  * deleted under the business retention policy thus leaves the backups once the
  * last backup that still contains it has aged out (at most the daily window).
- * Must not run concurrently with a backup (the scheduled job holds a lock).
+ *
+ * Safety: an object is removed only if it is unreferenced AND older than
+ * `minAgeMs` (default 6 h). A backup that is still uploading has objects that
+ * no manifest lists yet; the age rule keeps them even if another process prunes
+ * at that moment. Backups and pruning also share one lock on the app server.
  */
-export async function pruneEvidence(target: BackupTarget, key: Buffer): Promise<string[]> {
+export async function pruneEvidence(target: BackupTarget, key: Buffer, opts: { minAgeMs?: number; now?: Date } = {}): Promise<string[]> {
+  const minAge = opts.minAgeMs ?? 6 * 3_600_000;
+  const now = (opts.now ?? new Date()).getTime();
   const referenced = new Set<string>();
   const ids = await listBackups(target);
   // With no backup listed, something is wrong with the target or the listing: delete nothing.
@@ -212,6 +218,8 @@ export async function pruneEvidence(target: BackupTarget, key: Buffer): Promise<
   const removed: string[] = [];
   for (const obj of await target.list('evidence')) {
     if (!obj.endsWith('.enc') || referenced.has(obj)) continue;
+    const at = await target.modifiedAt(obj);
+    if (!at || now - at.getTime() < minAge) continue;
     await target.remove(obj);
     removed.push(obj);
   }

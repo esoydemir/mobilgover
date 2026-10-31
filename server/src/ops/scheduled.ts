@@ -22,8 +22,8 @@ async function writeJson(path: string, v: unknown) {
   await rename(path + '.tmp', path);
 }
 
-/** One run at a time. A lock older than `staleMs` (crashed run) is taken over. */
-async function withLock<T>(path: string, staleMs: number, fn: () => Promise<T>): Promise<T | 'locked'> {
+/** One run at a time (scheduled job and manual backups). A lock older than `staleMs` (crashed run) is taken over. */
+export async function withLock<T>(path: string, staleMs: number, fn: () => Promise<T>): Promise<T | 'locked'> {
   await mkdir(dirname(path), { recursive: true });
   try {
     const fh = await open(path, 'wx'); await fh.writeFile(String(process.pid)); await fh.close();
