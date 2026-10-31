@@ -13,6 +13,7 @@ import { confirmTotpSetup, logout, startEmailLogin, startTotpSetup, verifyEmailL
 import { addMember, createCompany, listMyCompanies } from '../services/companies';
 import type { Mailer } from '../services/mail';
 import { loadPrincipal } from '../services/principal';
+import * as mk from '../services/marketplace';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
@@ -351,6 +352,99 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); await db.system(tx => approve(tx, req.principal, rvId(req))); return { ok: true }; });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
   app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules })); });
+
+  // ── Marketplace: categories and public profiles ──
+  app.get('/service-categories', async () => db.system(async tx => (await tx.query(`SELECT * FROM service_categories ORDER BY name`)).rows));
+  app.get('/professionals/:id', async req => db.system(tx => mk.profileView(tx, z.object({ id: uuid }).parse(req.params).id)));
+
+  // ── Marketplace: provider side ──
+  app.get('/pro/profile', async req => db.system(async tx => {
+    const pr = (await tx.query(`SELECT id FROM professional_profiles WHERE user_id = $1`, [req.principal.userId])).rows[0];
+    return pr ? mk.profileView(tx, pr.id) : null;
+  }));
+  app.post('/pro/profile', async req => {
+    const b = z.object({ kind: z.enum(['individual', 'company']), displayName: z.string().trim().min(2).max(120), headline: z.string().max(200).default(''),
+      city: z.string().trim().min(2).max(60), district: z.string().max(60).nullable().optional(), bio: z.string().max(2000).default('') }).parse(req.body);
+    return db.system(tx => mk.upsertProfile(tx, req.principal, b));
+  });
+  app.post('/pro/verifications', async (req, reply) => {
+    const b = z.object({ kind: z.enum(['identity', 'business_registration', 'credential']), credentialType: z.string().regex(/^[a-z_]+$/).nullable().optional(),
+      issuer: z.string().trim().min(2).max(200), documentRef: z.string().trim().min(2).max(200), scopeNote: z.string().max(500).nullable().optional(),
+      validUntil: z.iso.date().nullable().optional() }).parse(req.body);
+    return reply.code(201).send(await db.system(tx => mk.submitVerification(tx, req.principal, b)));
+  });
+  app.post('/pro/authorizations', async (req, reply) => {
+    const { categoryCode } = z.object({ categoryCode: z.string() }).parse(req.body);
+    return reply.code(201).send(await db.system(tx => mk.requestAuthorization(tx, req.principal, categoryCode)));
+  });
+  app.get('/pro/inbox', async req => db.system(tx => mk.providerInbox(tx, req.principal)));
+  app.post('/pro/requests/:id/quotes', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ scope: z.string().trim().min(5).max(2000), exclusions: z.string().trim().min(2).max(2000), priceNet: z.number().min(0).max(10_000_000),
+      vatRate: z.number().min(0).max(100), materials: z.string().max(2000), durationText: z.string().min(2).max(200), warrantyText: z.string().min(2).max(500),
+      validUntil: z.iso.datetime({ offset: true }) }).parse(req.body);
+    return reply.code(201).send(await db.system(tx => mk.submitQuote(tx, req.principal, id, b)));
+  });
+  app.post('/pro/jobs/:id/check-in', async req => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const { code } = z.object({ code: z.string().max(20) }).parse(req.body);
+    await db.system(tx => mk.checkIn(tx, req.principal, id, code));
+    return { ok: true, note: 'Giriş kaydı yalnızca yerinde bulunmayı gösterir.' };
+  });
+  app.post('/pro/jobs/:id/report', async req => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const { report } = z.object({ report: z.string().max(8000) }).parse(req.body);
+    await db.system(tx => mk.submitReport(tx, req.principal, id, report));
+    return { ok: true };
+  });
+
+  // ── Marketplace: review (platform) ──
+  app.get('/admin/marketplace/queue', async req => { platformGate(req); return db.system(tx => mk.reviewQueue(tx, req.principal)); });
+  app.post('/admin/marketplace/verifications/:id/decide', async req => {
+    platformGate(req);
+    const b = z.object({ decision: z.enum(['verified', 'rejected']), checkMethod: z.string().max(300), notes: z.string().max(2000).default('') }).parse(req.body);
+    await db.system(tx => mk.decideVerification(tx, req.principal, rvId(req), b));
+    return { ok: true };
+  });
+  app.post('/admin/marketplace/authorizations/:id/decide', async req => {
+    platformGate(req);
+    const b = z.object({ decision: z.enum(['approved', 'rejected', 'suspended']), reason: z.string().max(2000) }).parse(req.body);
+    await db.system(tx => mk.decideAuthorization(tx, req.principal, rvId(req), b));
+    return { ok: true };
+  });
+
+  // ── Marketplace: business side ──
+  app.get('/companies/:companyId/providers', async req => {
+    company(req);
+    const { category } = z.object({ category: z.string() }).parse(req.query);
+    return db.system(tx => mk.providersFor(tx, category));
+  });
+  app.post('/companies/:companyId/service-requests', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().trim().min(3).max(200), description: z.string().trim().min(5).max(4000),
+      ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => mk.createRequest(tx, req.principal, companyId, b), 201);
+  });
+  app.get('/companies/:companyId/service-requests', async req => {
+    const companyId = company(req);
+    return db.tenant(companyId, tx => mk.listRequests(tx, req.principal, companyId));
+  });
+  app.get('/companies/:companyId/service-requests/:id', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => mk.requestDetail(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/quotes/:id/accept', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, tx => mk.acceptQuote(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/jobs/:id/acceptance', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ accept: z.boolean(), note: z.string().max(2000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => mk.acceptJob(tx, req.principal, companyId, id, b));
+  });
 
   // ── Retention matrix ──
   app.get('/admin/retention-policies', async req => { platformGate(req); return db.system(tx => listRetention(tx, req.principal)); });

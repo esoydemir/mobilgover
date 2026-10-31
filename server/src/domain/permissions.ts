@@ -4,7 +4,7 @@
  */
 export type CompanyRole = 'owner' | 'hq_manager' | 'site_manager' | 'staff';
 export type GrantKind = 'expert' | 'service_provider' | 'platform_support';
-export type PlatformRole = 'rule_author' | 'rule_reviewer' | 'platform_admin';
+export type PlatformRole = 'rule_author' | 'rule_reviewer' | 'platform_admin' | 'marketplace_reviewer';
 
 export type Action =
   | 'profile.read' | 'profile.write' | 'profile.verify'

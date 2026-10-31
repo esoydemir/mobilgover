@@ -93,10 +93,18 @@ export async function seedPlatform(db: Db) {
   const reviewer = await user(db, 'Ürün sahibi / kural onaylayıcı (demo)');
   const specialist = await user(db, 'Alan uzmanı (demo)');
   const admin = await user(db, 'Platform Yöneticisi (demo)');
+  const marketReviewer = await user(db, 'Pazar yeri inceleyici (demo)');
   const ruleVersionIds: Record<string, string> = {};
   await db.system(async tx => {
     await tx.query(`INSERT INTO platform_roles VALUES ($1,'rule_author'), ($2,'rule_reviewer'), ($3,'platform_admin'), ($4,'rule_reviewer')`, [author.id, reviewer.id, admin.id, specialist.id]);
     await tx.query(`INSERT INTO reviewer_areas VALUES ($1,'food_safety'), ($1,'gas_safety'), ($1,'occupational_safety')`, [specialist.id]);
+    await tx.query(`INSERT INTO platform_roles VALUES ($1,'marketplace_reviewer')`, [marketReviewer.id]);
+    // EXAMPLE categories and credential names; real ones come from the marketplace policy.
+    await tx.query(`INSERT INTO service_categories (code, name, description, required_credentials, is_example) VALUES
+      ('refrigeration_service', 'Soğutma teknik servisi', 'Buzdolabı, soğuk oda ve soğutucu arıza/bakım', '{refrigeration_technician}', true),
+      ('gas_installation_check', 'Gaz tesisatı kontrolü', 'LPG/doğal gaz bağlantı ve kaçak kontrolü', '{gas_installer}', true),
+      ('food_safety_consulting', 'Gıda güvenliği danışmanlığı', 'HACCP planı, hijyen eğitimi ve iç denetim', '{food_engineer}', true)
+      ON CONFLICT DO NOTHING`);
     const src = (await tx.query<{ id: string }>(
       `INSERT INTO legal_sources (code, title, issuer, kind, is_example) VALUES ('EX-SOURCE', 'ÖRNEK KAYNAK — gerçek mevzuat değildir', 'Örnek kurum', 'regulation', true) RETURNING id`)).rows[0]!.id;
     const sv = (await tx.query<{ id: string }>(
@@ -114,7 +122,7 @@ export async function seedPlatform(db: Db) {
       ruleVersionIds[r.code] = d.id;
     }
   });
-  return { author, reviewer, specialist, admin, ruleVersionIds };
+  return { author, reviewer, specialist, admin, marketReviewer, ruleVersionIds };
 }
 
 /** One demo café with a site, people, equipment and a partly filled profile. */
@@ -147,4 +155,25 @@ export async function seedDemoCompany(db: Db, opts: { name?: string; isDemo?: bo
     await recomputeSite(tx, ids.companyId, ids.siteId, owner.id);
   });
   return { ...ids, users: { owner, manager, staff, expert } };
+}
+
+/**
+ * A demo refrigeration provider whose identity and (example) credential were
+ * checked by the demo marketplace reviewer, authorized for one category.
+ */
+export async function seedDemoProvider(db: Db, marketReviewerId: string) {
+  const provider = await user(db, 'Murat Yıldız (demo uzman)');
+  const { upsertProfile, submitVerification, requestAuthorization, decideVerification, decideAuthorization } = await import('../services/marketplace');
+  const me = principal(provider.id);
+  const rev = principal(marketReviewerId, { platformRoles: ['marketplace_reviewer'] });
+  await db.system(async tx => {
+    await upsertProfile(tx, me, { kind: 'individual', displayName: 'Murat Yıldız', headline: 'Soğutma teknisyeni · 11 yıl', city: 'İstanbul', district: 'Kadıköy', bio: 'Ticari soğutucu arıza ve bakım (demo profil).' });
+    const id = await submitVerification(tx, me, { kind: 'identity', issuer: 'T.C. kimlik (demo)', documentRef: 'DEMO-KIMLIK' });
+    const cred = await submitVerification(tx, me, { kind: 'credential', credentialType: 'refrigeration_technician', issuer: 'Örnek belgelendirme kuruluşu', documentRef: 'DEMO-BELGE-001', validUntil: '2030-01-01' });
+    await decideVerification(tx, rev, id.id, { decision: 'verified', checkMethod: 'Demo: belge görüntüsü incelendi', notes: '' });
+    await decideVerification(tx, rev, cred.id, { decision: 'verified', checkMethod: 'Demo: belge numarası sorgulandı', notes: '' });
+    const a = await requestAuthorization(tx, me, 'refrigeration_service');
+    await decideAuthorization(tx, rev, a.id, { decision: 'approved', reason: 'Demo: kimlik ve soğutma teknisyeni belgesi doğrulandı.' });
+  });
+  return provider;
 }
