@@ -28,7 +28,15 @@ export async function uploadContent(db: Db, store: EvidenceStore, p: Principal, 
   else if (!contentMatchesMime(ev.mime, bytes)) rejection = 'Dosya içeriği bildirilen türle uyuşmuyor.';
 
   const key = `${companyId}/${evidenceId}`;
-  if (!rejection) await store.put(key, bytes);
+  if (!rejection) {
+    try { await store.put(key, bytes); } catch (e) {
+      // An earlier attempt wrote the file but did not get to record it (crash, lost connection).
+      // Identical bytes are accepted; different bytes under the same key are never overwritten.
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      const existing = await store.get(key);
+      if (!existing || sha256Hex(existing) !== actual) throw conflict('EVIDENCE_FILE_CONFLICT', 'Bu kanıt için farklı içerikte bir dosya zaten var; kayıt değiştirilmedi.');
+    }
+  }
 
   await db.tenant(companyId, async tx => {
     const upd = await tx.query(

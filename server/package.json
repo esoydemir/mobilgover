@@ -16,7 +16,10 @@
     "backup": "tsx src/ops/cli.ts backup",
     "backup:verify": "tsx src/ops/cli.ts verify",
     "restore": "tsx src/ops/cli.ts restore",
-    "check:integrity": "tsx src/ops/cli.ts integrity"
+    "check:integrity": "tsx src/ops/cli.ts integrity",
+    "backup:list": "tsx src/ops/cli.ts list",
+    "backup:scheduled": "tsx src/ops/cli.ts scheduled",
+    "backup:watchdog": "tsx src/ops/cli.ts watchdog"
   },
   "dependencies": {
     "fastify": "^5.12.7",
