@@ -1,0 +1,25 @@
+[Unit]
+Description=GoverHub API (pilot)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=goverhub
+Group=goverhub
+WorkingDirectory=/srv/goverhub/app/server
+EnvironmentFile=/etc/goverhub/pilot.env
+ExecStart=/usr/bin/env npx tsx src/main.ts
+Restart=on-failure
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/goverhub/evidence /srv/goverhub/var
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,7 @@
 # GoverHub — kurulum
 
+> Geliştirme ve demo kurulumu aşağıda. **Kontrollü pilot kurulumu için: `deploy/README.md`** ve ihtiyaç tablosu `docs/KURULUM_IHTIYACLARI.md`.
+
 ## 0. Teslim edilen paketten geri yükleme
 
 `goverhub.bundle` dosyası tüm commit geçmişini içerir.

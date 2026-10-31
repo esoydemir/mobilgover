@@ -1,0 +1,38 @@
+# GoverHub pilot — single HTTPS address: web app at /, API at /api.
+# Caddy obtains and renews the Let's Encrypt certificate itself (ports 80 and 443 must be open).
+# Replace pilot.ornek.com.tr with the real name; its DNS A record must point to this server.
+pilot.ornek.com.tr {
+	encode zstd gzip
+
+	# API: the /api prefix is stripped; the API listens only on localhost.
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	# Web build of the mobile app (single-page app).
+	handle {
+		root * /srv/goverhub/web
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "geolocation=(), microphone=()"
+		-Server
+	}
+
+	# Uploads up to 15 MB (photos); the API enforces its own limit too.
+	request_body {
+		max_size 16MB
+	}
+
+	# Caddy redacts Authorization and Cookie headers in access logs by default.
+	# Validate this file on the server with: caddy validate --config /etc/caddy/Caddyfile
+	log {
+		output file /var/log/caddy/goverhub-access.log
+	}
+}

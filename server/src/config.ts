@@ -28,6 +28,8 @@ export type Config = {
   mailProductionReady: boolean;
   /** Web origins allowed to call the API (the web build of the app). */
   corsOrigins: string[];
+  /** Reverse proxy addresses whose X-Forwarded-For is trusted. */
+  trustProxy: string[];
 };
 
 export function loadConfig(): Config {
@@ -45,6 +47,7 @@ export function loadConfig(): Config {
     smtp: mailTransport() === 'smtp' ? smtpConfig() : null,
     mailProductionReady: process.env.MAIL_PRODUCTION_READY === 'true',
     corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean),
+    trustProxy: (process.env.TRUST_PROXY ?? '').split(',').map(s => s.trim()).filter(Boolean),
   };
 }
 

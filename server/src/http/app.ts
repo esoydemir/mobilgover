@@ -34,7 +34,9 @@ const companyParams = z.object({ companyId: uuid });
  * Builds the API. Every route: authenticate → check permission in the
  * service → run inside a company-bound transaction (row-level security).
  */
-export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[]; mailProductionReady?: boolean };
+export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[]; mailProductionReady?: boolean;
+  /** Addresses of the reverse proxy whose X-Forwarded-For is trusted (e.g. 127.0.0.1). Without it, every client behind the proxy shares one rate limit. */
+  trustProxy?: string[] };
 /** Structured log sink. Lines carry route templates and status codes only — never bodies, query strings, headers or tokens. */
 export type LogSink = (line: Record<string, unknown>) => void;
 
@@ -44,7 +46,7 @@ const PUBLIC = new Set(['/health', '/env', '/auth/email/start', '/auth/email/ver
 export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; config: AppConfig; log?: LogSink }) {
   const { db, store, mailer, config } = deps;
   const log: LogSink = deps.log ?? (() => {});
-  const app = Fastify({ logger: false, bodyLimit: 1024 * 1024 });
+  const app = Fastify({ logger: false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy?.length ? config.trustProxy : false });
   app.addHook('onResponse', async (req, reply) => {
     log({ level: 'info', method: req.method, route: req.routeOptions.url ?? 'unknown', status: reply.statusCode, ms: Math.round(reply.elapsedTime) });
   });

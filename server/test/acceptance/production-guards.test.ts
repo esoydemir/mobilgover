@@ -42,3 +42,31 @@ describe('production guards', () => {
     expect(r.status).toBe(422);
   });
 });
+
+describe('behind a reverse proxy', () => {
+  const burst = async (app: Env['app'], xff: string, n: number) => {
+    let last = 0;
+    for (let i = 0; i < n; i++) last = (await app.inject({ method: 'GET', url: '/health', headers: { 'x-forwarded-for': xff } })).statusCode;
+    return last;
+  };
+  it('with the proxy trusted, clients are limited separately', async () => {
+    const { buildApp } = await import('../../src/http/app');
+    const { DevOutboxMailer } = await import('../../src/services/mail');
+    const app = buildApp({ db: env.db, store: env.store, mailer: new DevOutboxMailer(env.db),
+      config: { demoMode: false, allowExampleRules: false, maxUploadBytes: 1024, mfaEncryptionKey: null, mfaRequiredForPlatform: true, trustProxy: ['127.0.0.1'] } });
+    try {
+      expect(await burst(app, '203.0.113.10', 301)).toBe(429);
+      expect(await burst(app, '203.0.113.11', 1)).toBe(200);
+    } finally { await app.close(); }
+  });
+  it('without it, everyone behind the proxy shares one limit (why TRUST_PROXY must be set)', async () => {
+    const { buildApp } = await import('../../src/http/app');
+    const { DevOutboxMailer } = await import('../../src/services/mail');
+    const app = buildApp({ db: env.db, store: env.store, mailer: new DevOutboxMailer(env.db),
+      config: { demoMode: false, allowExampleRules: false, maxUploadBytes: 1024, mfaEncryptionKey: null, mfaRequiredForPlatform: true } });
+    try {
+      expect(await burst(app, '203.0.113.10', 301)).toBe(429);
+      expect(await burst(app, '203.0.113.11', 1)).toBe(429);
+    } finally { await app.close(); }
+  });
+});

@@ -21,7 +21,11 @@
     "backup:scheduled": "tsx src/ops/cli.ts scheduled",
     "backup:watchdog": "tsx src/ops/cli.ts watchdog",
     "ops:loadgen": "tsx src/ops/loadgen.ts",
-    "backup:key-check": "tsx src/ops/cli.ts key-check"
+    "backup:key-check": "tsx src/ops/cli.ts key-check",
+    "admin:list": "tsx src/ops/admin.ts list",
+    "admin:grant": "tsx src/ops/admin.ts grant",
+    "admin:revoke": "tsx src/ops/admin.ts revoke",
+    "pilot:check": "tsx src/ops/pilotcheck.ts"
   },
   "dependencies": {
     "fastify": "^5.12.7",

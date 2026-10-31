@@ -29,6 +29,8 @@ Tam pilot akışı ve çevrimdışı akış, Playwright cihaz profilleriyle çal
 
 ## 3. Gerçek telefon testi nasıl yapılır
 
+**Kontrollü pilotta:** pilot sunucusu `deploy/README.md` ile kurulduktan sonra test, o HTTPS adresinde aşağıdaki listeyle yapılır. Aynı adres düzeni (web `/`, API `/api`) bu ortamda iPhone 14 öykünmesiyle denendi: giriş tamamlandı, tarayıcı izni (CORS) gerekmedi.
+
 Bir https adresi gerekiyor. Üç yol var; en hızlısından en kalıcısına:
 
 1. **Kendi bilgisayarında geçici tünel.** `KURULUM.md` ile sunucuyu ve web derlemesini çalıştır. Ardından iki adresi https tüneliyle dışarı aç: web ve API (ör. Cloudflare Tunnel veya ngrok; ikisinin de ücretsiz katmanı var).

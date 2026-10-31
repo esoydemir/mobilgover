@@ -1,0 +1,4 @@
+# /etc/cron.d/goverhub-watchdog — on the BACKUP / WATCHDOG server (Sunucu 2), NOT on the application server
+# Every 5 minutes: age of the last usable backup in the target; staged alerts at 40 / 50 / 60 minutes.
+SHELL=/bin/bash
+*/5 * * * * goverhub cd /srv/goverhub/app/server && set -a && . /etc/goverhub/watchdog.env && set +a && npx tsx src/ops/cli.ts watchdog >> /srv/goverhub/var/watchdog.log 2>&1
