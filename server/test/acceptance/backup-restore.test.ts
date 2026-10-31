@@ -488,6 +488,21 @@ describe('command line, as separate processes', () => {
     expect((await cli(['key-check'], src)).out).toContain('SONUÇ: TAMAM');
     const w = await cli(['watchdog'], { BACKUP_TARGET_DIR: common.BACKUP_TARGET_DIR, BACKUP_WATCH_STATE_FILE: join(work, 'cli-izleme.json'), BACKUP_ENCRYPTION_KEY: '' });
     expect(w.out).toContain('bilinmiyor'); // a plain backup run writes no "usable" marker; only the scheduled job does
+    // The weekly full verification alerts when a shared evidence object is damaged.
+    const got: any[] = [];
+    const srv = createServer((req, res) => { let b = ''; req.on('data', c => (b += c)); req.on('end', () => { got.push(JSON.parse(b)); res.end('ok'); }); });
+    await new Promise<void>(r => srv.listen(0, '127.0.0.1', r));
+    try {
+      const evDir = join(common.BACKUP_TARGET_DIR, 'evidence');
+      const victim = join(evDir, (await readdir(evDir))[0]!);
+      const orig = await readFile(victim);
+      const bad = Buffer.from(orig); bad[30] = bad[30]! ^ 1;
+      await writeFile(victim, bad);
+      const v = await cli(['verify'], { ...src, ALERT_WEBHOOK_URL: `http://127.0.0.1:${(srv.address() as AddressInfo).port}/hook` });
+      expect(v.code).toBe(1);
+      expect(got.map(a => a.subject)).toEqual(['Yedeğin tam doğrulaması başarısız']);
+      await writeFile(victim, orig);
+    } finally { srv.close(); }
   }, 120_000);
 });
 

@@ -2,3 +2,5 @@
 # Backup every 30 minutes: backup → verify in the target → mark usable → prune → integrity check. Failures alert.
 SHELL=/bin/bash
 */30 * * * * goverhub cd /srv/goverhub/app/server && set -a && . /etc/goverhub/pilot.env && set +a && npx tsx src/ops/cli.ts scheduled >> /srv/goverhub/var/backup.log 2>&1
+# Weekly: decrypt and check ALL evidence objects of the newest backup (shared objects are used by every backup). A failure alerts.
+15 3 * * 0 goverhub cd /srv/goverhub/app/server && set -a && . /etc/goverhub/pilot.env && set +a && npx tsx src/ops/cli.ts verify >> /srv/goverhub/var/backup-verify.log 2>&1

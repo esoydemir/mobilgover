@@ -1,6 +1,8 @@
 # Kaynak araştırması: ilk beş aday konu (P-01 … P-05)
 
-Tarih: 01.11.2026 · Durum: **İNCELEMENE SUNULUYOR. Hiçbir kural yayımlanmadı ya da uygulamaya taslak olarak bile aktarılmadı.**
+Tarih: 01.11.2026 · Durum: **DOĞRULANMAMIŞ TASLAK — incelemene sunuluyor.** Hiçbir kural yayımlanmadı ya da uygulamaya taslak olarak bile aktarılmadı.
+
+> **Bu belgedeki madde numaraları, künyeler ve yükümlülükler onaylanmış değildir.** Resmî güncel metin ve sonraki değişiklikler kontrol edilmeden hiçbiri kural olarak kabul edilmemeli. Doğrulama bir alan uzmanı tarafından resmî kaynaktan yapılacak.
 
 ## Okumadan önce: doğrulama düzeyi
 

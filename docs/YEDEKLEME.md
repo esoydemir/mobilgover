@@ -34,29 +34,78 @@ Eşikler ortam değişkeniyle ayarlanabilir: `BACKUP_AGE_WARN_MINUTES`, `BACKUP_
 
 ## 3. Saklama düzeni ve depolama ihtiyacı
 
-**Yedek saklama (pilot önerisi)**
+### Yöntem: tam veritabanı dökümü + ortak (paylaşılan) kanıt dosyaları
 
-- **Son 48 saat:** her yarım saatlik yedek tutulur (96 yedek).
-- **Son 30 gün:** her günün en son yedeği tutulur (ilk iki gün yukarıdakilerle örtüşür; ek 28 yedek).
-- Toplam en fazla ~124 veritabanı yedeği. Daha eskiler zamanlanmış iş tarafından silinir.
+Yöntem ne "her seferinde tam kopya" ne de zincirleme "artımlı" yedek. Her yedek üç parçadan oluşur:
 
-**İş kayıtlarının saklama politikasından ayrıdır.** Yedekler, kayıtların arşivi değildir; yalnızca geri dönüş içindir.
-
-- İş kayıtlarının ne kadar tutulacağını saklama matrisi belirler (`retention_policies`, hukuk görüşü bekleniyor).
-- Bir kayıt saklama politikasına göre silindiğinde, en fazla **30 gün** boyunca eski yedeklerde kalır, sonra yedeklerden de çıkar. Kanıt dosyaları için bu, hiçbir tutulan yedeğin artık kullanmadığı kanıt nesnelerinin her çalışmada silinmesiyle sağlanır (test edildi).
-- Bu 30 günlük süre aydınlatma metninde ve saklama matrisinde belirtilmeli.
-
-**Depolama ihtiyacı** (ölçüme dayalı; 20 işletme, 1 yıl, fotoğraf 300 KB):
-
-| | Günde 1 fotoğraf / işletme | Günde 5 fotoğraf / işletme |
+| Parça | Her yedekte mi? | Neden |
 |---|---|---|
-| Veritabanı dökümü, yıl sonunda (ölçülen) | 4,6 MB | ~5 MB |
-| Manifest, yedek başına (kanıt sayısıyla büyür; ölçülen) | 2,1 MB | ~10,4 MB |
-| 124 tutulan yedek (döküm + manifest) | ~0,8 GB | ~1,8 GB |
-| Kanıt nesneleri (her biri bir kez; şifreleme ek yükü 41 bayt/nesne) | ~2,1 GB | ~10,7 GB |
-| **Toplam, 1. yıl sonu** | **~3 GB** | **~12,5 GB** |
+| Veritabanı dökümü (şifreli) | **Evet, tam döküm** | Küçük (yıl sonunda 4,4 MB). Tek dosyadan geri yüklenir; önceki yedeklere bağımlı değildir. |
+| Manifest (şifreli) | **Evet** | O yedeğin içerdiği her kanıt dosyasının adı ve özeti. Kanıt sayısıyla büyür (dosya başına ~280 bayt). |
+| Kanıt dosyaları (şifreli) | **Hayır, ortak** | Fotoğraflar değişmez. Her dosya hedefe **bir kez** yüklenir; onu içeren bütün yedekler aynı nesneyi kullanır. |
 
-**Öneri:** Pilot için **20 GB** yedek alanı ve %70 dolulukta uyarı. Kanıt kısmı her yıl, saklama politikasının izin verdiği sürece doğrusal büyür.
+Her yedek kendi başına geri yüklenebilir: kendi dökümü, kendi manifesti ve manifestin gösterdiği ortak kanıt nesneleri yeter.
+
+Ortak saklamanın karşılığı şu: bir kanıt nesnesi bozulursa onu içeren bütün yedekler etkilenir. Önlemler:
+- Her yarım saatte 20 nesne rastgele çözülüp özeti kontrol ediliyor.
+- Haftada bir en yeni yedeğin bütün kanıtları çözülerek doğrulanıyor (cron'a eklendi).
+- Hedef seçilirken sürüm tutma ya da değiştirilemezlik özelliği tercih edilmeli.
+
+### Saklama (pilot)
+
+- Son 48 saat: her yarım saatlik yedek (96).
+- Son 30 gün: her günün son yedeği (ilk iki gün yukarıdakilerle örtüşür; ek 28).
+- Toplam ~124 veritabanı yedeği. Kanıt nesneleri yalnızca **hiçbir tutulan yedek kullanmıyorsa** silinir.
+
+**Temizliğin eski yedeği bozmaması (test edildi):**
+- Bir fotoğraf yalnızca eski bir yedekte bulunsa da, o yedek tutulduğu sürece silinmiyor. Kayıt silindikten ve temizlik çalıştıktan sonra bile o eski yedek baştan sona geri yüklenebiliyor.
+- Eski yedek süresini doldurup silinince nesne de gidiyor; yeni yedek tam geri yükleniyor.
+- Ek güvenceler:
+  - Henüz hiçbir manifeste yazılmamış (yüklenmesi süren) nesneler 6 saat boyunca silinmiyor.
+  - Elle alınan yedek, zamanlanmış işle aynı kilidi kullanıyor.
+  - Hedefte hiç yedek görünmüyorsa temizlik hiçbir şey silmiyor.
+- Kural bozulursa (referans kontrolü kaldırıldığında) test başarısız oluyor.
+
+**İş kayıtlarının saklama politikasından ayrıdır.** Yedekler arşiv değildir. Saklama politikasıyla silinen bir kayıt en fazla 30 gün daha eski yedeklerde kalır, sonra yedeklerden de çıkar. Bu süre aydınlatma metnine ve saklama matrisine yazılmalı.
+
+### Ölçüm: 124 gerçek yedeğin toplam boyutu (01.11.2026)
+
+Uygulamanın kendi servisleriyle üretilen veri: 20 işletme, 365 gün, 7.300 fotoğraf × 300 KB = 2.139 MB, veritabanı 43 MB. Bu veriyle art arda **124 gerçek yedek** alındı ve hedef klasör ölçüldü:
+
+| Hedefteki içerik | Ölçülen |
+|---|---|
+| Kanıt nesneleri (7.300, her biri bir kez; şifreleme ek yükü nesne başına 41 bayt) | **2.139 MB** |
+| 124 veritabanı dökümü (ortalama 4,42 MB) | 548 MB |
+| 124 manifest (ortalama 1,97 MB) | 244 MB |
+| **Toplam** | **2.932 MB** |
+| *Karşılaştırma: her yedek tam kopya olsaydı (124 × 2,2 GB)* | *~270 GB* |
+
+Süreler: ilk yedek 31,7 sn (bütün kanıtlar ilk kez yükleniyor), sonraki her yedek ortalama 1,0 sn. En eski yedek bütün kanıtları çözülerek doğrulandı.
+
+Bu ölçüm bir **üst sınır**dır: 124 yedeğin hepsi yıl sonundaki veri boyutuyla alındı. Gerçekte 30 günlük penceredeki eski yedekler biraz daha küçüktür.
+
+### Kapasite hesabı ve düzeltilmiş öneri
+
+**Formül:** `Kapasite ≈ E + N × (D + M)`
+
+- `E`: tutulan kayıtlardaki fotoğrafların toplamı
+- `N`: tutulan yedek sayısı (124)
+- `D`: döküm boyutu
+- `M`: manifest boyutu (kanıt sayısı × ~280 bayt)
+
+**Önceki 20 GB önerisi nereden geliyordu:** İşletme başına günde 5 fotoğraf varsayımının **hesabıydı** (ölçüm değildi): 12,5 GB ÷ 0,7 (%70 doluluk uyarısı) ≈ 18 → 20 GB. Bugünkü örnek kurallar işletme başına günde ~1 fotoğraf üretiyor. Ölçüm bu senaryoda 2,9 GB çıktı.
+
+| Senaryo (20 işletme) | 1. yıl sonu | 2. yıl sonu (kayıtlar silinmezse) | Durum |
+|---|---|---|---|
+| Günde 1 fotoğraf / işletme | **2,9 GB (ölçüldü)** | ~5,9 GB (hesap) | Bugünkü örnek kurallar |
+| Günde 5 fotoğraf / işletme | ~12,5 GB (hesap) | ~25 GB (hesap) | Gerçek kural kümesi daha fazla fotoğraf isterse |
+
+**Düzeltilmiş öneri:**
+- Yedek konumu için **10 GB ile başla, %70'te (7 GB) uyarı.** Bugünkü kural yoğunluğunda bu iki yılı aşar.
+- Onaylı kural kümesi belli olunca günlük fotoğraf sayısıyla formül yeniden hesaplanır. Günde 5 fotoğraf çıkarsa 1. yıl için 20 GB'a yükseltilir.
+- Disk sonradan büyütülebilir; bunu sağlayıcı seçerken sormak yeterli.
+
+**İyileştirme payı (yapılmadı, yeni özellik sayılır):** Manifestler sıkıştırılmıyor. Sıkıştırılırsa 244 MB'lık pay belirgin biçimde azalır ve sunucular arası trafik düşer. Pilot için gerekli değil.
 
 ## 4. Geri dönüş tatbikatı (anahtar kurtarma dahil)
 

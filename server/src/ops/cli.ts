@@ -1,6 +1,6 @@
 import { checkKey, checkRestored, createBackup, listBackups, restoreBackup, verifyBackup, type Report } from './backup';
 import { loadBackupKey } from './crypto';
-import { WebhookNotifier, type Notifier } from './notify';
+import { notifyAll, WebhookNotifier, type Notifier } from './notify';
 import { DEFAULT_THRESHOLDS, runAgeWatch, runScheduledBackup, withLock } from './scheduled';
 import { assertSeparate, DirTarget } from './target';
 
@@ -40,7 +40,10 @@ if (cmd === 'backup') {
 } else if (cmd === 'list') {
   for (const id of await listBackups(target())) console.log(id);
 } else if (cmd === 'verify') {
-  print(await verifyBackup(target(), await key(), a1 || await newest(), a2 ? Number(a2) : Infinity));
+  const id = a1 || await newest();
+  const r = await verifyBackup(target(), await key(), id, a2 ? Number(a2) : Infinity);
+  print(r);
+  if (!r.ok) await notifyAll(notifiers(), { kind: 'backup_failed', subject: 'Yedeğin tam doğrulaması başarısız', details: [`Yedek: ${id}`, ...r.checks.filter(c => !c.ok).map(c => `${c.name}${c.detail ? `: ${c.detail}` : ''}`)] });
 } else if (cmd === 'key-check') {
   print(await checkKey(target(), await key(), a1 || await newest()));
 } else if (cmd === 'restore') {

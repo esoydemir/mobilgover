@@ -1,48 +1,55 @@
-# Kontrollü pilot için senden gerekenler (tek liste)
+# Kontrollü pilot için senden gerekenler (aşamalara ayrılmış)
 
-Teknik olarak hazırlanabilen her şey hazır ve test edildi:
+Hiçbir maddede parola, gizli anahtar ya da erişim bilgisi istenmiyor. Bunlar doğrudan sunucudaki ortam dosyasına ya da parola kasasına girilir; bana gönderilmez.
 
-- Yedekleme, gözcü ve bildirim
-- SMTP adaptörü
-- HTTPS kurulum dosyaları
-- Rol yönetimi komutları
-- Hazırlık kontrolü (`pilot:check`)
-- Tatbikat ve telefon testi kılavuzları
+## İlk adım (yalnızca bu)
 
-Aşağıdakiler yalnızca sende.
+**Barındırma sağlayıcısında iki Ubuntu 24.04 sunucu aç:**
+- Sunucu 1 (uygulama): 2 vCPU, 4 GB RAM, 40 GB SSD.
+- Sunucu 2 (yedek ve gözcü): 1 vCPU, 2 GB RAM, 30 GB SSD.
+- İkisi **farklı veri merkezlerinde** olsun.
 
-## A. Hemen gerekenler (kurulumu engelliyor)
+Bana yalnızca şunları yaz:
+- sağlayıcının adı,
+- iki sunucunun genel IP adresleri,
+- pilot için kullanacağın alan adı (ör. `pilot.<alan-adı>.com.tr`).
 
-| # | Gereken | Neden | Biçim |
-|---|---|---|---|
-| 1 | **Barındırma sağlayıcısı** (Türkiye): Sunucu 1 + Sunucu 2 | Pilot ortamı | Sağlayıcı adı + iki sunucunun IP'leri (kapasite: `KURULUM_IHTIYACLARI.md`) |
-| 2 | **Yedek konumu seçeneği**: A (ikinci sunucunun diski) ya da B (S3 uyumlu nesne depolama) | Ayrı, şifreli yedek | A ise hazır. B ise sağlayıcı adını ver, adaptörü yazayım |
-| 3 | **Alan adı** ve DNS yönetim erişimi | HTTPS sertifikası, e-posta (SPF/DKIM/DMARC) | Ör. `pilot.<alan-adı>.com.tr` |
-| 4 | **SMTP sağlayıcısı** (Türkiye) ve bilgileri | Gerçek e-postayla giriş | Sunucu adı, port, kullanıcı, parola, gönderen adres. Parolayı bana değil, doğrudan sunucudaki ortam dosyasına girin |
-| 5 | **Kurulumu kim yapacak** | Bu ortam dış sunuculara SSH ile bağlanamıyor | (a) Sen ya da yöneticin `deploy/README.md`'yi uygular, çıktıları iletir; ya da (b) bu ortama erişim açılır (ayrı güvenlik kararı) |
-| 6 | **Bildirim adresi** (webhook) ve bildirimleri izleyecek kişi | Yedekleme ve bütünlük uyarıları | Webhook URL'si + kişi |
-| 7 | **Şifreleme anahtarının saklanacağı yer** ve anahtara erişebilecek en az iki kişi | Anahtar yedeklerden ayrı tutulmalı; tatbikatta kurtarılacak | Kasa adı / yöntem + kişiler |
+Gereksinimlerin tamamı: `KURULUM_IHTIYACLARI.md`.
 
-## B. İçerik ve onaylar (pilotta kural çalışması için)
+## Aşama 1 — İlk teknik kurulum için zorunlu
 
-| # | Gereken | Durum |
+Bu aşamanın sonunda sunucular kurulur, HTTPS çalışır, yedekleme ve gözcü başlar, `pilot:check` çalıştırılabilir. Henüz gerçek kullanıcı ya da işletme verisi yoktur.
+
+| # | Gereken | Not |
 |---|---|---|
-| 8 | **P-01…P-05 kaynak araştırmasının incelenmesi** | `kurallar/KAYNAK_ARASTIRMASI_P01-P05.md` hazır. Hangi konular pilota girecek? Yasal ve iyi uygulama ayrımını onaylıyor musun? |
-| 9 | **Alan uzmanı** (gıda güvenliği; ayrıca İSG ve yangın konuları için) ve e-postaları | Kaynakların resmî metinle doğrulanması ve uzman incelemesi. Bu olmadan kurallar onaylanamaz |
-| 10 | **Platform rollerine kişiler** | Kural yazarı, kural onaylayıcı (sen), platform yöneticisi; e-posta adresleri |
-| 11 | **Resmî kaynak sitelerine erişim**: `mevzuat.gov.tr` ve `resmigazete.gov.tr` bu ortamda kapalı | Açılırsa güncel konsolide metinleri kendim kontrol edip "doğrulanmadı" işaretlerini kapatabilirim. Ortamın ağ ayarlarından izin verilmesi gerekir |
-| 12 | **Pilot işletmeler** (kaç tane, kimler) ve ilk kullanıcıların e-postaları | Davetler ve kapasite teyidi |
+| 1 | Barındırma sağlayıcısı (Türkiye) ve iki sunucu, farklı veri merkezlerinde | Yukarıdaki ilk adım |
+| 2 | Yedek konumu: **A** (Sunucu 2'nin diski; bugün çalışır) ya da B (S3 uyumlu depolama; adaptör gerekir) | Önerim A + Sunucu 2'de günlük disk anlık görüntüsü |
+| 3 | Alan adı ve DNS yönetimi (A kaydı) | HTTPS sertifikası için |
+| 5 | Kurulumu kim yapacak: sen ya da yöneticin `deploy/README.md` ile, çıktıları bana iletirsiniz | Bu çalışma ortamı sunuculara SSH ile bağlanamıyor |
+| 6 | Bildirim adresi (webhook) ve bildirimleri izleyecek kişi | Yedekleme ilk gün başlar; uyarılar bir yere düşmeli |
+| 7 | Şifreleme anahtarının saklanacağı kasa ve anahtara erişebilecek en az iki kişi | Anahtarı kurulumu yapan kişi üretir ve doğrudan kasaya koyar |
 
-## C. Hukuki metinler (gerçek kullanıcıdan önce)
+## Aşama 2 — Gerçek işletme verisiyle pilot başlamadan
 
-| # | Gereken | Neden |
+| # | Gereken | Not |
 |---|---|---|
-| 13 | **KVKK aydınlatma metni** (ve gerekiyorsa açık rıza metni) | Gerçek kişilerin verisi işlenecek. Metin hukuk görüşüyle hazırlanmalı; ben yazmam. Hazır olunca uygulamaya bağlanır |
-| 14 | **Saklama süreleri** (10 kayıt türü) | Onaylanmadıkça hiçbir kayıt silinmiyor. Yedeklerde 30 gün ek kalma süresi bu metinde belirtilmeli |
+| 4 | SMTP sağlayıcısı (Türkiye), gönderen adres, alan adına SPF/DKIM/DMARC kayıtları | İlk gerçek gönderimi birlikte doğrulayıp "üretime hazır" işaretleriz |
+| 8 | P-01…P-05 kaynak araştırmasının incelenmesi: hangi konular pilota girecek | Araştırma **doğrulanmamış taslak**. Madde numaraları ve yükümlülükler resmî güncel metinle kontrol edilmeden onaylanmış sayılmaz |
+| 9a | **Gıda güvenliği** alan uzmanı | P-01…P-05'i resmî metinle doğrular ve uygulamada inceler; bu olmadan kural onaylanamaz |
+| 10 | Platform rollerine kişiler: kural yazarı, kural onaylayıcı (sen), platform yöneticisi | Her biri kendi e-postasıyla girip ek doğrulama kurar |
+| 12a | İlk pilot işletme(ler) ve ilk kullanıcıların e-postaları | Önerim 1–3 işletmeyle başlamak |
+| 13 | KVKK aydınlatma metni | Hukuk görüşüyle; gerçek kişilerin verisi girilmeden önce |
+| 14 | Saklama süreleri (10 kayıt türü) ve yedeklerde ek 30 günlük kalma süresinin aydınlatma metnine yazılması | Onaylanmadıkça hiçbir kayıt silinmez |
+| 15 | Gerçek telefon testi: bir iPhone, bir Android ve testi yapacak kişi (30–45 dk) | `TELEFON_TESTI.md` §3 |
+| 16 | Sıfırdan geri dönüş tatbikatı: geçici bir sunucu, yarım gün, anahtarı kasadan getirecek kişi | `YEDEKLEME.md` §4; hedef 4 saat |
 
-## D. Doğrulama günleri
+## Aşama 3 — Sonraki aşamaya bırakılabilir
 
-| # | Gereken |
-|---|---|
-| 15 | **Gerçek telefon testi** için bir iPhone ve bir Android, ve testi yapacak kişi (30–45 dk) |
-| 16 | **Geri dönüş tatbikatı** için boş bir sunucu, yarım gün ve anahtarı kasadan getirecek yetkili kişi |
+| # | Gereken | Neden bekleyebilir |
+|---|---|---|
+| 9b | İSG ve yangın güvenliği alan uzmanları | P-06…P-14 konuları pilotun ilk kural kümesinde değilse |
+| 11 | `mevzuat.gov.tr` ve `resmigazete.gov.tr` için bu ortama ağ izni | Doğrulamayı alan uzmanı resmî metinden yapabilir. İzin verilirse kontrolleri ben de yaparım |
+| 12b | Pilotun 20 işletmeye genişlemesi | İlk işletmelerle süreç oturduktan sonra |
+| — | Yedeğin ikinci bir sağlayıcıda kopyası | Sağlayıcı genelindeki riskler için; pilotta kabul edilebilir |
+| — | Seçenek B (nesne depolama) | A yeterli; nesne depolamaya geçilirse adaptör yazılır |
+| — | iOS/Android mağaza dağıtımı | Pilot telefon tarayıcısından yapılır (`MOBIL_DAGITIM.md`) |
