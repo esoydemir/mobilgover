@@ -29,7 +29,12 @@ export async function startEmailLogin(db: Db, mailer: Mailer, rawEmail: string) 
     const id = (await tx.query<{ id: string }>(`INSERT INTO login_challenges (email, code_hash, expires_at) VALUES ($1, '', now() + make_interval(mins => $2)) RETURNING id`, [email, CODE_TTL_MIN])).rows[0]!.id;
     await tx.query(`UPDATE login_challenges SET code_hash = $2 WHERE id = $1`, [id, codeHash(id, code)]);
   });
-  await mailer.send(email, 'GoverHub giriş kodun', `Giriş kodun: ${code}\nKod ${CODE_TTL_MIN} dakika geçerlidir. Bu isteği sen yapmadıysan bu e-postayı yok say.`);
+  try {
+    await mailer.send(email, 'GoverHub giriş kodun', `Giriş kodun: ${code}\nKod ${CODE_TTL_MIN} dakika geçerlidir. Bu isteği sen yapmadıysan bu e-postayı yok say.`);
+  } catch {
+    // The code was never delivered; the user is told to try again later, nothing about the address or the code leaks.
+    throw new AppError(503, 'MAIL_UNAVAILABLE', 'Giriş kodu şu an gönderilemedi. Birkaç dakika sonra tekrar dene.');
+  }
   return { sent: true, expiresInMinutes: CODE_TTL_MIN };
 }
 

@@ -1,5 +1,6 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { redact } from '../ops/notify';
 import type { Config } from '../config';
 import type { Db, Tx } from '../db/pool';
 import { AppError, forbidden, notFound } from '../domain/errors';
@@ -33,14 +34,20 @@ const companyParams = z.object({ companyId: uuid });
  * Builds the API. Every route: authenticate → check permission in the
  * service → run inside a company-bound transaction (row-level security).
  */
-export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[] };
+export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[]; mailProductionReady?: boolean };
+/** Structured log sink. Lines carry route templates and status codes only — never bodies, query strings, headers or tokens. */
+export type LogSink = (line: Record<string, unknown>) => void;
 
 /** Routes that work without a session. */
 const PUBLIC = new Set(['/health', '/env', '/auth/email/start', '/auth/email/verify', '/auth/mfa/verify', '/dev/outbox/latest']);
 
-export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; config: AppConfig }) {
+export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; config: AppConfig; log?: LogSink }) {
   const { db, store, mailer, config } = deps;
+  const log: LogSink = deps.log ?? (() => {});
   const app = Fastify({ logger: false, bodyLimit: 1024 * 1024 });
+  app.addHook('onResponse', async (req, reply) => {
+    log({ level: 'info', method: req.method, route: req.routeOptions.url ?? 'unknown', status: reply.statusCode, ms: Math.round(reply.elapsedTime) });
+  });
 
   for (const mime of ALLOWED_MIME) {
     app.addContentTypeParser(mime, { parseAs: 'buffer', bodyLimit: config.maxUploadBytes }, (_req, body, done) => done(null, body));
@@ -87,7 +94,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     if (err.code === '42501') return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Kayıt bulunamadı.' } });
     if (err.statusCode === 413) return reply.code(413).send({ error: { code: 'TOO_LARGE', message: 'Dosya çok büyük.' } });
     if (err.statusCode && err.statusCode < 500) return reply.code(err.statusCode).send({ error: { code: 'BAD_REQUEST', message: err.message } });
-    console.error(err);
+    log({ level: 'error', route: _req.routeOptions.url ?? 'unknown', code: err.code ?? null, message: redact(String(err.message ?? err)) });
     return reply.code(500).send({ error: { code: 'INTERNAL', message: 'Beklenmeyen bir hata oluştu; kayıt yapılmadı.' } });
   });
 
@@ -143,6 +150,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     mode: config.demoMode ? 'demo' : 'pilot',
     exampleRulesAllowed: config.allowExampleRules,
     mailTransport: mailer.kind,
+    // True only after a person confirmed a real delivery through the chosen provider.
+    mailProductionReady: mailer.kind === 'smtp' && config.mailProductionReady === true,
   }));
 
   // ── Sign-in ──

@@ -19,7 +19,8 @@
     "check:integrity": "tsx src/ops/cli.ts integrity",
     "backup:list": "tsx src/ops/cli.ts list",
     "backup:scheduled": "tsx src/ops/cli.ts scheduled",
-    "backup:watchdog": "tsx src/ops/cli.ts watchdog"
+    "backup:watchdog": "tsx src/ops/cli.ts watchdog",
+    "ops:loadgen": "tsx src/ops/loadgen.ts"
   },
   "dependencies": {
     "fastify": "^5.12.7",

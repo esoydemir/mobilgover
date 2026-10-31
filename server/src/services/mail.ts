@@ -1,12 +1,12 @@
 import type { Db } from '../db/pool';
 
 /**
- * Outgoing mail. Only the development outbox exists today: messages are stored
- * in `dev_mail_outbox` and never leave the server. A real transport (SMTP or a
- * provider API) is added once the Turkey-hosted mail provider is chosen.
+ * Outgoing mail. `dev_outbox` stores messages in `dev_mail_outbox` (development
+ * and demo only, never leaves the server). `smtp` (smtp.ts) sends through any
+ * provider's SMTP service.
  */
 export interface Mailer {
-  readonly kind: 'dev_outbox';
+  readonly kind: 'dev_outbox' | 'smtp';
   send(to: string, subject: string, body: string): Promise<void>;
 }
 

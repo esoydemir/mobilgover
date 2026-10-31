@@ -32,7 +32,7 @@ export default function AccountRoute() {
       <Card border={env?.mode === 'demo' ? tint.warn(0.35) : tint.info(0.35)}>
         <Eyebrow>ORTAM</Eyebrow>
         <Text testID="env-mode" style={[type(14, 700, { color: env?.mode === 'demo' ? C.warn : C.info }), { marginTop: 8 }]}>{env?.mode === 'demo' ? 'DEMO · örnek veri' : env?.mode === 'pilot' ? 'PİLOT · gerçek kayıtlar' : 'Bilinmiyor (çevrimdışı başlatıldı)'}</Text>
-        <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 6 }]}>Sunucu: {API_URL}{env ? ` · e-posta: ${env.mailTransport === 'dev_outbox' ? 'geliştirme kutusu (gerçek gönderim yok)' : env.mailTransport}` : ''}</Text>
+        <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 6 }]}>Sunucu: {API_URL}{env ? ` · e-posta: ${env.mailTransport === 'dev_outbox' ? 'geliştirme kutusu (gerçek gönderim yok)' : env.mailTransport === 'smtp' ? (env.mailProductionReady ? 'SMTP' : 'SMTP · gerçek gönderim henüz doğrulanmadı') : env.mailTransport}` : ''}</Text>
       </Card>
       <Card>
         <Eyebrow>EK DOĞRULAMA (KİMLİK DOĞRULAYICI UYGULAMA)</Eyebrow>

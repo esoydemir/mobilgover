@@ -1,11 +1,15 @@
 import { loadConfig } from './config';
 import { Db } from './db/pool';
 import { buildApp } from './http/app';
-import { DevOutboxMailer } from './services/mail';
+import { DevOutboxMailer, type Mailer } from './services/mail';
+import { SmtpMailer } from './services/smtp';
 import { LocalStore } from './storage/local';
 
 const config = loadConfig();
 const db = Db.connect(config.databaseUrl);
-const app = buildApp({ db, store: new LocalStore(config.evidenceDir), mailer: new DevOutboxMailer(db), config });
+const log = (line: Record<string, unknown>) => console.log(JSON.stringify({ t: new Date().toISOString(), ...line }));
+const mailer: Mailer = config.smtp ? new SmtpMailer(config.smtp, log) : new DevOutboxMailer(db);
+if (config.mailTransport === 'smtp' && !config.mailProductionReady) log({ level: 'warn', event: 'mail_not_production_ready', note: 'SMTP configured but a real delivery has not been confirmed (MAIL_PRODUCTION_READY)' });
+const app = buildApp({ db, store: new LocalStore(config.evidenceDir), mailer, config, log });
 await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`GoverHub API http://localhost:${config.port} (demo mode: ${config.demoMode})`);

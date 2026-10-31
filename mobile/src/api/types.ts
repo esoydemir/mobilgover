@@ -1,4 +1,4 @@
-export type Env = { mode: 'demo' | 'pilot'; exampleRulesAllowed: boolean; mailTransport: string };
+export type Env = { mode: 'demo' | 'pilot'; exampleRulesAllowed: boolean; mailTransport: string; mailProductionReady?: boolean };
 
 export type Me = {
   userId: string; email: string | null; displayName: string; mfaEnabled: boolean; mfaSatisfied: boolean;
