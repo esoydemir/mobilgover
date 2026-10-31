@@ -46,6 +46,7 @@ export const GRANT_SCOPES: Record<string, Action[]> = {
 
 export type Principal = {
   userId: string;
+  sessionId?: string;
   email?: string | null;
   displayName?: string;
   /** This session passed a second factor. */

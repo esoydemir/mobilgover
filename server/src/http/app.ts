@@ -9,8 +9,8 @@ import { verifyCompanyChain } from '../services/audit';
 import { uploadContent } from '../services/evidence';
 import { closeNonconformity, completeStep, getNonconformity } from '../services/nonconformities';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite } from '../services/obligations';
-import { confirmTotpSetup, logout, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
-import { addMember, createCompany, listMyCompanies } from '../services/companies';
+import { confirmTotpSetup, listSessions, logout, revokeOtherSessions, revokeSession, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
+import { acceptInvitation, addMember, createCompany, listMyCompanies, listMyInvitations, setMemberStatus } from '../services/companies';
 import type { Mailer } from '../services/mail';
 import { loadPrincipal } from '../services/principal';
 import * as mk from '../services/marketplace';
@@ -164,6 +164,11 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return confirmTotpSetup(db, config.mfaEncryptionKey, req.principal.userId, (req.headers.authorization ?? '').slice(7), code.trim());
   });
   app.post('/auth/logout', async req => { await logout(db, (req.headers.authorization ?? '').slice(7)); return { ok: true }; });
+  app.get('/auth/sessions', async req => listSessions(db, req.principal.userId, req.principal.sessionId));
+  app.post('/auth/sessions/:sessionId/revoke', async req => revokeSession(db, req.principal.userId, z.object({ sessionId: uuid }).parse(req.params).sessionId));
+  app.post('/auth/sessions/revoke-others', async req => revokeOtherSessions(db, req.principal.userId, req.principal.sessionId));
+  app.get('/me/invitations', async req => listMyInvitations(db, req.principal));
+  app.post('/me/invitations/:membershipId/accept', async req => acceptInvitation(db, req.principal, z.object({ membershipId: uuid }).parse(req.params).membershipId));
 
   // Demo deployments only: read the sign-in mail that the dev outbox kept. Never available in pilot.
   app.get('/dev/outbox/latest', async req => {
@@ -190,8 +195,15 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const companyId = company(req);
     if (!can(req.principal, 'members.manage', { companyId }).ok) throw forbidden();
     return db.system(async tx => (await tx.query(
-      `SELECT u.id, u.display_name, u.email, m.role, m.site_id, (u.email_verified_at IS NOT NULL) AS signed_in
+      `SELECT m.id AS membership_id, u.id, u.display_name, u.email, m.role, m.site_id, m.status, m.invite_expires_at, m.suspend_reason,
+              (m.status = 'invited' AND m.invite_expires_at <= now()) AS invite_expired, (u.email_verified_at IS NOT NULL) AS signed_in
          FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.company_id = $1 ORDER BY m.created_at`, [companyId])).rows);
+  });
+  app.post('/companies/:companyId/members/:membershipId/:action', async (req, reply) => {
+    const companyId = company(req);
+    const { membershipId, action } = z.object({ membershipId: uuid, action: z.enum(['suspend', 'reactivate', 'cancel_invite']) }).parse(req.params);
+    const b = z.object({ reason: z.string().max(500).default('') }).parse(req.body ?? {});
+    return mutate(req, reply, companyId, tx => setMemberStatus(tx, req.principal, companyId, membershipId, action, b.reason));
   });
   app.post('/companies/:companyId/members', async (req, reply) => {
     const companyId = company(req);

@@ -5,7 +5,11 @@ import { useSession } from '../api/session';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
 import { Card, Eyebrow, GhostButton, PrimaryButton } from '../components/ui';
+import { fmtDateTime } from '../features/dates';
+import { Invitations } from '../features/Invitations';
 import { ROLE_LABEL } from '../features/labels';
+import { useApi } from '../api/useApi';
+import { View } from 'react-native';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
@@ -16,6 +20,7 @@ export default function AccountRoute() {
   const [setup, setSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const sessions = useApi<{ id: string; created_at: string; last_used_at: string | null; current: boolean }[]>('/auth/sessions');
   const admin = role === 'owner' || role === 'hq_manager' || (me?.platformRoles.length ?? 0) > 0;
   return (
     <Screen title="Hesap ve güvenlik" titleEn="Account">
@@ -47,6 +52,23 @@ export default function AccountRoute() {
           </>
         ) : null}
         {error ? <ErrorBox message={error} /> : null}
+      </Card>
+      <Invitations />
+      <Card style={{ gap: 8 }}>
+        <Eyebrow>AÇIK OTURUMLAR</Eyebrow>
+        {(sessions.data ?? []).map(x => (
+          <View key={x.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={[type(12, 400, { color: x.current ? C.lime : C.t2 }), { flex: 1 }]}>
+              {x.current ? 'Bu cihaz' : 'Başka cihaz'} · açıldı {fmtDateTime(x.created_at)}{x.last_used_at ? ` · son ${fmtDateTime(x.last_used_at)}` : ''}
+            </Text>
+            {!x.current ? <GhostButton label="Kapat" height={32} size={11} onPress={async () => { try { await call('POST', `/auth/sessions/${x.id}/revoke`); await sessions.reload(); showToast('Oturum kapatıldı'); } catch (e) { setError(errorText(e)); } }} /> : null}
+          </View>
+        ))}
+        {(sessions.data?.length ?? 0) > 1 ? (
+          <GhostButton testID="revoke-others" label="Diğer tüm cihazlardan çıkış yap" height={38} size={12}
+            onPress={async () => { try { const r = await call<{ revoked: number }>('POST', '/auth/sessions/revoke-others'); await sessions.reload(); showToast(`${r.revoked} oturum kapatıldı`); } catch (e) { setError(errorText(e)); } }} />
+        ) : null}
+        <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Telefonunu kaybedersen başka bir cihazdan giriş yapıp buradan kapat.</Text>
       </Card>
       <GhostButton testID="logout" label="Çıkış yap" color={C.crit} border={tint.crit(0.35)} onPress={logout} />
     </Screen>

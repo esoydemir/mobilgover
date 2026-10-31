@@ -3,6 +3,7 @@ import type { Db } from '../db/pool';
 import { AppError, invalid } from '../domain/errors';
 import { decryptSecret, encryptSecret, newTotpSecret, otpauthUri, verifyTotp } from '../domain/totp';
 import type { Mailer } from './mail';
+import { appendAudit } from './audit';
 import { hashToken } from './principal';
 
 const CODE_TTL_MIN = 10;
@@ -114,6 +115,36 @@ export async function confirmTotpSetup(db: Db, key: string | null, userId: strin
   return { enabled: true };
 }
 
+/** Ends this session. The row is kept (revoked) so the session list stays truthful. */
 export async function logout(db: Db, token: string) {
-  await db.system(tx => tx.query(`DELETE FROM sessions WHERE token_hash = $1`, [hashToken(token)]));
+  await db.system(tx => tx.query(`UPDATE sessions SET revoked_at = now(), revoke_reason = 'logout' WHERE token_hash = $1 AND revoked_at IS NULL`, [hashToken(token)]));
+}
+
+/** The user's own sessions; tokens are never returned, only ids and times. */
+export async function listSessions(db: Db, userId: string, currentId: string | undefined) {
+  return db.system(async tx => (await tx.query(
+    `SELECT id, created_at, last_used_at, expires_at, mfa_satisfied FROM sessions
+      WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now() ORDER BY created_at DESC`, [userId])).rows
+    .map(r => ({ ...r, current: r.id === currentId })));
+}
+
+/** A user can end any one of their own sessions (e.g. a lost phone). Someone else's session id is "not found". */
+export async function revokeSession(db: Db, userId: string, sessionId: string) {
+  return db.system(async tx => {
+    const r = await tx.query(`UPDATE sessions SET revoked_at = now(), revoke_reason = 'user_revoked'
+                               WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL RETURNING id`, [sessionId, userId]);
+    if (!r.rowCount) throw new AppError(404, 'NOT_FOUND', 'Oturum bulunamadı.');
+    await appendAudit(tx, { companyId: null, actorId: userId, eventType: 'session.revoked', entityType: 'session', entityId: sessionId, payload: {} });
+    return { revoked: 1 };
+  });
+}
+
+/** Signs out every other device of this user. */
+export async function revokeOtherSessions(db: Db, userId: string, currentId: string | undefined) {
+  return db.system(async tx => {
+    const r = await tx.query(`UPDATE sessions SET revoked_at = now(), revoke_reason = 'other_sessions_revoked'
+                               WHERE user_id = $1 AND revoked_at IS NULL AND id IS DISTINCT FROM $2::uuid`, [userId, currentId ?? null]);
+    await appendAudit(tx, { companyId: null, actorId: userId, eventType: 'session.others_revoked', entityType: 'user', entityId: userId, payload: { count: r.rowCount } });
+    return { revoked: r.rowCount };
+  });
 }

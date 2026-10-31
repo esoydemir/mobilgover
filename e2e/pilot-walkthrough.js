@@ -129,6 +129,8 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
     // ── 6. Site manager: CAPA steps, cannot close own work ──
     await login('selin@modakafe.test');
+    // Invited, not yet a member: the invitation is accepted before any access.
+    await id('invite-accept').waitFor({ timeout: 15000 }); await shot('davet-kabul'); await id('invite-accept').click(); await wait(3000);
     await goMore('more-ncrs'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
     const steps = ['Ürünler yedek üniteye taşındı, sıcaklık 3 °C.', 'Kapı contası değiştirildi (uzman raporu).', 'Conta aşınmış; bakım planında conta kontrolü yoktu.', 'Conta kontrolü aylık bakım listesine eklendi.', 'Üç gün boyunca ölçümler 2–4 °C aralığında.'];
     for (const s of steps) { await id('ncr-step-notes').fill(s); await id('ncr-step-save').click(); await wait(3500); }

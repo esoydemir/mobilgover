@@ -1,5 +1,5 @@
 import type { Db, Tx } from '../db/pool';
-import { forbidden, invalid } from '../domain/errors';
+import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type CompanyRole, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { recomputeSite } from './obligations';
@@ -31,10 +31,24 @@ export async function listMyCompanies(db: Db, p: Principal) {
       grants: p.grants.filter(g => g.companyId === c.id).map(g => ({ kind: g.kind, scopes: g.scopes })) })));
 }
 
-/** Adds a person by e-mail. They sign in with that address; no password is ever set here. */
+const RANK: Record<CompanyRole, number> = { owner: 4, hq_manager: 3, site_manager: 2, staff: 1 };
+const INVITE_DAYS = 7;
+
+/** Highest company-wide rank the actor holds here; site-scoped roles do not manage people. */
+function managerRank(p: Principal, companyId: string): number {
+  const ranks = p.memberships.filter(m => m.companyId === companyId && !m.siteId).map(m => RANK[m.role]);
+  return ranks.length ? Math.max(...ranks) : 0;
+}
+
+/**
+ * Invites a person by e-mail. The membership stays "invited" (no access) until
+ * that person signs in with this address and accepts it within 7 days.
+ * An actor can only give a role below their own.
+ */
 export async function addMember(tx: Tx, p: Principal, companyId: string, input: { email: string; role: CompanyRole; siteId: string | null }) {
   if (!can(p, 'members.manage', { companyId }).ok) throw forbidden();
   if (input.role === 'owner') throw forbidden('Sahiplik devri bu akışta yapılamaz.');
+  if (RANK[input.role] >= managerRank(p, companyId)) throw forbidden('Kendi rolünle aynı ya da daha yüksek bir rol veremezsin.');
   if ((input.role === 'staff' || input.role === 'site_manager') && !input.siteId) throw invalid('Personel ve şube yöneticisi bir şubeye bağlanmalı.');
   const email = input.email.trim().toLowerCase();
   // users/memberships are not tenant tables; the company is checked above and below.
@@ -44,7 +58,60 @@ export async function addMember(tx: Tx, p: Principal, companyId: string, input: 
   }
   await tx.query(`INSERT INTO users (display_name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING`, [email.split('@')[0], email]);
   const userId = (await tx.query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [email])).rows[0]!.id;
-  await tx.query(`INSERT INTO memberships (user_id, company_id, site_id, role) VALUES ($1,$2,$3,$4)`, [userId, companyId, input.siteId, input.role]);
-  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'member.added', entityType: 'user', entityId: userId, payload: { role: input.role, siteId: input.siteId } });
-  return { userId };
+  if (userId === p.userId) throw invalid('Kendini davet edemezsin.');
+  const m = await tx.query<{ id: string; invite_expires_at: string }>(
+    `INSERT INTO memberships (user_id, company_id, site_id, role, status, invited_by, invite_expires_at, activated_at)
+     VALUES ($1,$2,$3,$4,'invited',$5, now() + make_interval(days => $6), NULL) RETURNING id, invite_expires_at`,
+    [userId, companyId, input.siteId, input.role, p.userId, INVITE_DAYS]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'member.invited', entityType: 'membership', entityId: m.rows[0]!.id, payload: { userId, role: input.role, siteId: input.siteId } });
+  return { userId, membershipId: m.rows[0]!.id, status: 'invited', inviteExpiresAt: m.rows[0]!.invite_expires_at };
+}
+
+/** Open invitations for the signed-in user (matched by their verified e-mail account). */
+export async function listMyInvitations(db: Db, p: Principal) {
+  return db.system(async tx => (await tx.query(
+    `SELECT m.id, m.role, m.site_id, m.invite_expires_at, c.name AS company_name, s.name AS site_name, u.email AS invited_by_email
+       FROM memberships m JOIN companies c ON c.id = m.company_id LEFT JOIN sites s ON s.id = m.site_id LEFT JOIN users u ON u.id = m.invited_by
+      WHERE m.user_id = $1 AND m.status = 'invited' AND m.invite_expires_at > now() ORDER BY m.created_at`, [p.userId])).rows);
+}
+
+/** The invited person accepts. Only they can; an expired invitation must be sent again. */
+export async function acceptInvitation(db: Db, p: Principal, membershipId: string) {
+  return db.system(async tx => {
+    const r = await tx.query<{ company_id: string; status: string; expired: boolean }>(
+      `SELECT company_id, status, invite_expires_at <= now() AS expired FROM memberships WHERE id = $1 AND user_id = $2 FOR UPDATE`, [membershipId, p.userId]);
+    const m = r.rows[0];
+    if (!m || m.status !== 'invited') throw notFound('Davet');
+    if (m.expired) throw new AppError(410, 'INVITE_EXPIRED', 'Davetin süresi dolmuş; işletmeden yeniden davet iste.');
+    await tx.query(`UPDATE memberships SET status = 'active', activated_at = now() WHERE id = $1`, [membershipId]);
+    await appendAudit(tx, { companyId: m.company_id, actorId: p.userId, eventType: 'member.invite_accepted', entityType: 'membership', entityId: membershipId, payload: {} });
+    return { companyId: m.company_id, status: 'active' };
+  });
+}
+
+/**
+ * Suspends or reactivates a member. Nobody can act on themselves, on an owner,
+ * or on someone of equal or higher rank. Access ends on the member's next request.
+ */
+export async function setMemberStatus(tx: Tx, p: Principal, companyId: string, membershipId: string, action: 'suspend' | 'reactivate' | 'cancel_invite', reason: string) {
+  if (!can(p, 'members.manage', { companyId }).ok) throw forbidden();
+  const r = await tx.query<{ user_id: string; role: CompanyRole; status: string }>(
+    `SELECT user_id, role, status FROM memberships WHERE id = $1 AND company_id = $2 FOR UPDATE`, [membershipId, companyId]);
+  const m = r.rows[0];
+  if (!m) throw notFound('Üyelik');
+  if (m.user_id === p.userId) throw forbidden('Kendi üyeliğini değiştiremezsin.');
+  if (RANK[m.role] >= managerRank(p, companyId)) throw forbidden('Kendi rolünle aynı ya da daha yüksek roldeki birini değiştiremezsin.');
+  if (action === 'suspend') {
+    if (m.status !== 'active') throw conflict('MEMBER_STATE', 'Yalnızca etkin üyelik pasifleştirilebilir.');
+    if (reason.trim().length < 5) throw invalid('Gerekçe yaz.');
+    await tx.query(`UPDATE memberships SET status = 'suspended', suspended_at = now(), suspended_by = $2, suspend_reason = $3 WHERE id = $1`, [membershipId, p.userId, reason.trim()]);
+  } else if (action === 'reactivate') {
+    if (m.status !== 'suspended') throw conflict('MEMBER_STATE', 'Üyelik pasif değil.');
+    await tx.query(`UPDATE memberships SET status = 'active', activated_at = now(), suspended_at = NULL, suspended_by = NULL, suspend_reason = NULL WHERE id = $1`, [membershipId]);
+  } else {
+    if (m.status !== 'invited') throw conflict('MEMBER_STATE', 'Bekleyen bir davet yok.');
+    await tx.query(`DELETE FROM memberships WHERE id = $1`, [membershipId]);
+  }
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: `member.${action}`, entityType: 'membership', entityId: membershipId, payload: { userId: m.user_id, role: m.role, reason: reason.trim() || null } });
+  return { membershipId, status: action === 'suspend' ? 'suspended' : action === 'reactivate' ? 'active' : 'cancelled' };
 }

@@ -8,6 +8,7 @@ import { EnvBadge } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
 import { GhostButton, PrimaryButton } from '../components/ui';
 import { EquipmentEditor } from '../features/EquipmentEditor';
+import { Invitations } from '../features/Invitations';
 import { ProfileQuestions } from '../features/ProfileQuestions';
 import { goRoot } from '../state/app';
 import { C, tint, type } from '../theme';
@@ -43,6 +44,7 @@ export default function SetupRoute() {
 
       {step === 0 && (
         <>
+          <Invitations onAccepted={() => goRoot('/')} />
           <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 })}>İşletmeni oluştur</Text>
           <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Pilot kapsamı: yemek hazırlayan tek şubeli kafe/restoran. Sen işletme sahibi olarak eklenirsin.</Text>
           <Field label="İşletme adı" testID="setup-name" value={name} onChangeText={setName} placeholder="ör. Moda Kafe" />

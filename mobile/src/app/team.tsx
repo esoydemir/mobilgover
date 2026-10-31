@@ -5,45 +5,60 @@ import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
-import { Card, Eyebrow, FilterChip, PrimaryButton, s } from '../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, s } from '../components/ui';
 import { ROLE_LABEL as ROLE } from '../features/labels';
 import { useUi } from '../state/app';
-import { C, type } from '../theme';
+import { C, tint, type } from '../theme';
 
-type Member = { id: string; display_name: string; email: string; role: string; site_id: string | null; signed_in: boolean };
+type Member = { membership_id: string; id: string; display_name: string; email: string; role: string; site_id: string | null; signed_in: boolean;
+  status: 'invited' | 'active' | 'suspended'; invite_expired: boolean; invite_expires_at: string | null; suspend_reason: string | null };
+
+const STATUS = (m: Member) => m.status === 'active' ? '' : m.status === 'suspended' ? ` · pasif (${m.suspend_reason})` : m.invite_expired ? ' · davetin süresi doldu' : ' · davet bekliyor';
 
 /** People in the business. New members sign in with their own e-mail; no passwords are set here. */
 export default function TeamRoute() {
-  const { company, siteId, call } = useSession();
+  const { company, siteId, call, me } = useSession();
   const { showToast } = useUi();
   const q = useApi<Member[]>(company ? `/companies/${company.id}/members` : null);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'site_manager' | 'staff'>('site_manager');
   const [error, setError] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const act = async (m: Member, action: 'suspend' | 'reactivate' | 'cancel_invite') => {
+    setError(null);
+    try { await call('POST', `/companies/${company!.id}/members/${m.membership_id}/${action}`, { reason: reason.trim() }, `${action}-${m.membership_id}-${Date.now()}`); setReason(''); await q.reload(); showToast(action === 'suspend' ? 'Pasifleştirildi; erişimi hemen kapandı' : action === 'reactivate' ? 'Yeniden etkin' : 'Davet iptal edildi'); }
+    catch (e) { setError(errorText(e)); }
+  };
   return (
     <Screen title="Ekip" titleEn="Team">
       {(q.data ?? []).map(m => (
-        <View key={m.id + m.role} style={[s.row, { borderRadius: 18, padding: 14 }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={type(14, 600)}>{m.email ?? m.display_name}</Text>
-            <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 2 }]}>{ROLE[m.role]}{m.signed_in ? '' : ' · henüz giriş yapmadı'}</Text>
+        <View key={m.membership_id} style={[s.row, { borderRadius: 18, padding: 14, flexWrap: 'wrap', gap: 8 }]}>
+          <View style={{ flex: 1, minWidth: 160 }}>
+            <Text style={type(14, 600, { color: m.status === 'active' ? C.t1 : C.t3 })}>{m.email ?? m.display_name}</Text>
+            <Text style={[type(11.5, 400, { color: m.status === 'suspended' ? C.crit : C.t3 }), { marginTop: 2 }]}>{ROLE[m.role]}{STATUS(m)}</Text>
           </View>
+          {m.role !== 'owner' && m.id !== me?.userId ? (
+            m.status === 'active' ? <GhostButton label="Pasifleştir" height={32} size={11} disabled={reason.trim().length < 5} color={C.crit} border={tint.crit(0.35)} onPress={() => act(m, 'suspend')} />
+            : m.status === 'suspended' ? <GhostButton label="Yeniden etkinleştir" height={32} size={11} onPress={() => act(m, 'reactivate')} />
+            : <GhostButton label="Daveti iptal et" height={32} size={11} onPress={() => act(m, 'cancel_invite')} />
+          ) : null}
         </View>
       ))}
       {q.error ? <ErrorBox message={q.error} /> : null}
+      <Field label="Pasifleştirme gerekçesi (pasifleştirmek için gerekli)" value={reason} onChangeText={setReason} placeholder="ör. İşten ayrıldı" />
+      {error ? <ErrorBox message={error} /> : null}
       <Card style={{ gap: 10 }}>
-        <Eyebrow>KİŞİ EKLE</Eyebrow>
+        <Eyebrow>KİŞİ DAVET ET</Eyebrow>
         <Field label="E-posta" testID="team-email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
         <View style={{ flexDirection: 'row', gap: 7 }}>
           <FilterChip label="Şube yöneticisi" active={role === 'site_manager'} onPress={() => setRole('site_manager')} />
           <FilterChip label="Personel" active={role === 'staff'} onPress={() => setRole('staff')} />
         </View>
         <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Personel yalnızca kendisine atanan görevleri görür. Şube yöneticisi uygunsuzlukları yürütebilir ve kapanışı doğrulayabilir.</Text>
-        {error ? <ErrorBox message={error} /> : null}
-        <PrimaryButton testID="team-add" label="Ekle" height={44} size={13} disabled={!email.includes('@')}
+        <PrimaryButton testID="team-add" label="Davet et" height={44} size={13} disabled={!email.includes('@')}
           onPress={async () => {
             setError(null);
-            try { await call('POST', `/companies/${company!.id}/members`, { email: email.trim(), role, siteId }); setEmail(''); showToast('Kişi eklendi', 'Kendi e-postasıyla giriş yapabilir.'); await q.reload(); }
+            try { await call('POST', `/companies/${company!.id}/members`, { email: email.trim(), role, siteId }); setEmail(''); showToast('Davet gönderildi', 'Kendi e-postasıyla giriş yapıp kabul edince erişimi açılır (7 gün geçerli).'); await q.reload(); }
             catch (e) { setError(errorText(e)); }
           }} />
       </Card>
