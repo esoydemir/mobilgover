@@ -63,6 +63,8 @@ npx expo start --web               # tarayıcıda
 npx expo start                     # telefonda (geliştirme derlemesi)
 ```
 
+Telefon tarayıcısında denerken uygulamayı **https** adresinden aç. Tarayıcılar fotoğraf özetini (SHA-256) yalnızca güvenli sayfalarda hesaplar; düz `http://192.168…` adresinde fotoğraf eklenemez. Ayrıntılar: `docs/TELEFON_TESTI.md`. Native derleme ve mağaza: `docs/MOBIL_DAGITIM.md`.
+
 ## 4. Testler
 
 ```bash
