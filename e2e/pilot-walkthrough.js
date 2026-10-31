@@ -7,11 +7,21 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 (async () => {
   const b = await chromium.launch();
-  const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId: 'Europe/Istanbul', locale: 'tr-TR', recordVideo: { dir: OUT + '/video', size: { width: 390, height: 844 } } });
+  // DEVICE=<Playwright device name> runs the same flow in mobile-browser emulation (touch, mobile UA, device viewport).
+  const { devices } = require('playwright');
+  const dev = process.env.DEVICE ? devices[process.env.DEVICE] : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 };
+  if (!dev) throw new Error('Unknown DEVICE ' + process.env.DEVICE);
+  const ctx = await b.newContext({ ...dev, timezoneId: 'Europe/Istanbul', locale: 'tr-TR', recordVideo: { dir: OUT + '/video', size: dev.viewport } });
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
-  const shot = async name => { n++; await p.screenshot({ path: `${OUT}/${String(n).padStart(2, '0')}-${name}.png` }); log('shot', name); };
+  const overflow = [];
+  const shot = async name => {
+    n++; await p.screenshot({ path: `${OUT}/${String(n).padStart(2, '0')}-${name}.png` }); log('shot', name);
+    // Mobile layout check: nothing may scroll sideways.
+    const w = await p.evaluate(() => ({ doc: document.documentElement.scrollWidth, view: window.innerWidth }));
+    if (w.doc > w.view) overflow.push(`${name}: ${w.doc}px > ${w.view}px`);
+  };
   const id = t => p.getByTestId(t).first();
   const text = t => p.getByText(t, { exact: true }).first();
   const part = t => p.getByText(t, { exact: false }).first();
@@ -153,6 +163,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     await p.mouse.wheel(0, 900); await wait(800); await shot('denetim-dosyasi-eksikler');
 
     // Offline sync is recorded separately in offline.js (the app must stay loaded while offline).
+    log('horizontal overflow:', overflow.length ? overflow.join('; ') : 'none');
     log('page errors:', errs.length ? errs.slice(0, 5).join(' | ') : 'none');
   } catch (e) {
     log('FAILED:', e.message.split('\n')[0]);

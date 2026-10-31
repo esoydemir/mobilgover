@@ -7,3 +7,9 @@ Gerçek web arayüzü + gerçek API + gerçek PostgreSQL üzerinde, kullanıcı 
 3. `node pilot-walkthrough.js <çıktı-klasörü> <örnek.jpg>` ardından `node offline-sync.js <çıktı-klasörü>`.
 
 Not: Web sürümü çevrimdışıyken sayfanın yeniden yüklenmesini desteklemez (service worker yok); çevrimdışı gösterimde uygulama açık kalır. Telefonda bu sınırlama yoktur.
+
+## Mobil tarayıcı öykünmesi
+
+`DEVICE="Pixel 7"` veya `DEVICE="iPhone 14"` ile iki betik aynı akışı Playwright cihaz profilinde çalıştırır (dokunmatik, mobil tarayıcı kimliği, cihaz ekranı). Her çalıştırmadan önce veritabanını sıfırla; aksi halde ikinci çalıştırma ilkinin tamamladığı görevi açar. `pilot-walkthrough.js` her ekran görüntüsünde yatay taşmayı ölçer. Bu öykünmedir, gerçek telefon değildir.
+
+`ORIGINS=http://localhost:8099,http://<lan-ip>:8098 node secure-context.js <klasör>`: aynı görev sayfasını güvenli ve güvensiz adresten açar. Tarayıcı fotoğraf özetini yalnızca https/localhost'ta hesaplar; güvensiz adreste uygulama uyarı göstermelidir.

@@ -5,7 +5,11 @@ let n = 40;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 (async () => {
   const b = await chromium.launch();
-  const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId: 'Europe/Istanbul', locale: 'tr-TR', recordVideo: { dir: OUT + '/video-offline', size: { width: 390, height: 844 } } });
+  // DEVICE=<Playwright device name> runs the same flow in mobile-browser emulation (touch, mobile UA, device viewport).
+  const { devices } = require('playwright');
+  const dev = process.env.DEVICE ? devices[process.env.DEVICE] : { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 };
+  if (!dev) throw new Error('Unknown DEVICE ' + process.env.DEVICE);
+  const ctx = await b.newContext({ ...dev, timezoneId: 'Europe/Istanbul', locale: 'tr-TR', recordVideo: { dir: OUT + '/video-offline', size: dev.viewport } });
   const p = await ctx.newPage();
   const shot = async name => { n++; await p.screenshot({ path: `${OUT}/${n}-${name}.png` }); log('shot', name); };
   const id = t => p.getByTestId(t).first();

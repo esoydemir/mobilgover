@@ -24,6 +24,8 @@ const OP_TEXT: Record<Op['status'], [string, string]> = {
   conflict: ['çakışma', C.crit],
 };
 
+const INSECURE_WEB = 'Bu sayfa güvenli bağlantıyla (https) açılmadığı için tarayıcı fotoğrafın özetini hesaplayamıyor; fotoğraf eklenemez. Uygulamayı https adresinden aç.';
+
 export default function TaskDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { company, siteId, role } = useSession();
@@ -194,8 +196,11 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
   }
 
   if (r.kind === 'photo' || r.kind === 'document') {
+    // Browsers only offer the hashing API on secure pages (https or localhost).
+    const insecureWeb = Platform.OS === 'web' && !globalThis.crypto?.subtle;
     const pick = async () => {
       setError(null);
+      if (insecureWeb) { setError(INSECURE_WEB); return; }
       try {
         const opts: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.5, base64: true };
         let res = Platform.OS === 'web' ? await ImagePicker.launchImageLibraryAsync(opts) : await ImagePicker.launchCameraAsync(opts);
@@ -220,6 +225,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
           <Text style={type(12.5, 600, { color: C.t2 })}>{Platform.OS === 'web' ? 'Fotoğraf seç' : 'Fotoğraf çek'}</Text>
         </Tap>
         <Text style={[type(11, 400, { color: C.t3, lh: 1.4 }), { marginTop: 8 }]}>Dosyanın özeti (SHA-256) cihazda hesaplanır; sunucu aynı özeti doğrulamadan kanıt saymaz.</Text>
+        {insecureWeb ? <Text testID="insecure-web" style={[type(11.5, 600, { color: C.warn, lh: 1.45 }), { marginTop: 8 }]}>{INSECURE_WEB}</Text> : null}
         {error ? <ErrorBox message={error} /> : null}
       </Card>
     );
