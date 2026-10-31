@@ -2,11 +2,13 @@
 
 Türkiye'deki KOBİ'lerin kendilerine uygulanan yükümlülükleri anlaması, günlük işe çevirmesi, kanıt toplaması, uygunsuzlukları çözmesi ve denetime hazırlanması için platform.
 
+> **Bağımsız proje.** Bu depo kendi kod tabanıdır. GitHub'daki `esoydemir/goverhub` adı benzeyen **başka bir projedir**; bu projeyle birleştirilmez, oraya gönderim yapılmaz ve oradaki kod, şema, test ya da inceleme kayıtları burada kullanılmaz. Ayrıntı: `docs/DEVAMLILIK.md`.
+
 | Klasör | İçerik |
 |---|---|
 | `server/` | API ve kural motoru (TypeScript, Fastify, PostgreSQL). Kurulum ve testler: `server/README.md` |
 | `mobile/` | Mobil uygulama (Expo). Gerçek API'ye bağlı; çevrimdışı kayıt kuyruğu var. Demo/pilot ortamı başlıkta etiketli |
-| `docs/` | `PILOT.md` (güncel durum, test sınıflandırması, açık bağımlılıklar), `DURUM.md`, `MIMARI.md` (mimari, veri modeli, tehdit modeli), `KABUL.md` (kabul kriterleri), `DEVAMLILIK.md` (önceki projeyle ilişki), `TELEFON_TESTI.md`, `MOBIL_DAGITIM.md` |
+| `docs/` | `PILOT.md` (güncel durum, test sınıflandırması, açık bağımlılıklar), `DURUM.md`, `MIMARI.md` (mimari, veri modeli, tehdit modeli), `KABUL.md` (kabul kriterleri), `DEVAMLILIK.md` (proje kimliği ve bağımsızlık), `TELEFON_TESTI.md`, `MOBIL_DAGITIM.md` |
 | `e2e/` | Gerçek arayüz + gerçek API ile kayıtlı pilot gösterimi |
 | `project/`, `chats/` | Claude Design tasarım teslimi (aşağıdaki bölüm) |
 

@@ -1,6 +1,6 @@
 # Pilot aşaması — durum, kanıt ve açık bağımlılıklar
 
-Son güncelleme: 31.10.2026 (ikinci tur). Bu aşamada mobil uygulama gerçek API'ye bağlandı; uzman ağı ve hizmet pazarı eklendi. İkinci turda üyelik yaşam döngüsü, pazar yeri onay süreleri, çevrimdışı otomatik testler ve mobil tarayıcı öykünmesi eklendi. Önceki GoverHub projesiyle ilişki için: `DEVAMLILIK.md`.
+Son güncelleme: 31.10.2026 (ikinci tur). Bu aşamada mobil uygulama gerçek API'ye bağlandı; uzman ağı ve hizmet pazarı eklendi. İkinci turda üyelik yaşam döngüsü, pazar yeri onay süreleri, çevrimdışı otomatik testler ve mobil tarayıcı öykünmesi eklendi. Bu proje bağımsızdır; adı benzeyen `esoydemir/goverhub` başka bir projedir (bkz. `DEVAMLILIK.md`).
 
 ## 1. Alınan kararlar ve uygulanışı
 
@@ -74,7 +74,6 @@ Diğer senaryolar için `KABUL.md` geçerli.
 | Barındırma, nesne depolama, yedek/geri yükleme tatbikatı | Gerçek veri taşınamaz | Barındırma kararı |
 | Telefon tarayıcısında gerçek test | Öykünme geçti; fotoğraf için https şart | Telefonun erişebileceği https adresi (tünel veya pilot sunucusu) — `TELEFON_TESTI.md` |
 | iOS/Android derlemesi (EAS) ve mağaza | Uygulama yalnızca web derlemesiyle denendi | Apple/Google hesapları — `MOBIL_DAGITIM.md` |
-| Önceki projeyle birleşme kararı | İki ayrı kod tabanı | Sen — `DEVAMLILIK.md` §5 |
 | Saklama süreleri | Matris boş; hiçbir şey silinmiyor | Hukuk görüşü |
 | Web'de çevrimdışı yeniden yükleme | Web sürümü çevrimdışıyken yenilenemez (service worker yok); telefon uygulamasını etkilemez | Web pilotu istenirse eklenir |
 | Expo derleme araçlarındaki npm uyarıları | Uygulamanın çalışma kodunda değil, derleme araçlarında (zod, glob, minimatch); önerilen "düzeltme" Expo'yu eski sürüme düşürmek | Expo güncellemesi beklenir |

@@ -1,6 +1,4 @@
 -- Membership lifecycle (invite → active → suspended) and revocable sessions.
--- Counterparts of the earlier project's invited/active/suspended memberships
--- and session-family revocation.
 
 ALTER TABLE memberships
   ADD COLUMN status            text NOT NULL DEFAULT 'active' CHECK (status IN ('invited','active','suspended')),
