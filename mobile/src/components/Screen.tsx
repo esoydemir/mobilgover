@@ -49,7 +49,13 @@ function BrandHeader() {
         <Text style={type(20, 800, { family: 'outfit', color: C.ink })}>G</Text>
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={type(11, 500, { color: C.t2 })}>{h.greeting}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={type(11, 500, { color: C.t2 })}>{h.greeting}</Text>
+          {/* The app is not connected to the API yet; say so instead of implying real records. */}
+          <View accessibilityLabel="Demo: örnek veri, sunucuya bağlı değil" style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, borderWidth: 1, borderColor: tint.warn(0.4) }}>
+            <Text style={type(8.5, 700, { ls: 0.08, color: C.warn })}>DEMO · ÖRNEK VERİ</Text>
+          </View>
+        </View>
         <Text style={[type(16, 700, { ls: -0.015 }), { marginTop: 2 }]}>{h.org}</Text>
       </View>
       <RoundIcon label="Ara" onPress={() => openSheet('search')}><SearchIcon /></RoundIcon>

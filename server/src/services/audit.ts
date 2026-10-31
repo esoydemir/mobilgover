@@ -2,7 +2,8 @@ import type { Tx } from '../db/pool';
 import { GENESIS, eventHash, verifyChain, type ChainVerification } from '../domain/hashchain';
 
 export type AuditInput = {
-  companyId: string;
+  /** null = platform-level chain (rule publishing, admin actions). */
+  companyId: string | null;
   actorId: string | null;
   eventType: string;
   entityType: string;
@@ -16,9 +17,9 @@ export type AuditInput = {
  * serialises appends so sequence numbers and previous hashes never fork.
  */
 export async function appendAudit(tx: Tx, e: AuditInput): Promise<{ seq: number; hash: string }> {
-  await tx.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [e.companyId]);
+  await tx.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [e.companyId ?? 'platform']);
   const last = await tx.query<{ seq: number; hash: string }>(
-    `SELECT seq, hash FROM audit_events WHERE company_id = $1 ORDER BY seq DESC LIMIT 1`, [e.companyId]);
+    `SELECT seq, hash FROM audit_events WHERE company_id IS NOT DISTINCT FROM $1 ORDER BY seq DESC LIMIT 1`, [e.companyId]);
   const seq = (last.rows[0]?.seq ?? 0) + 1;
   const prevHash = last.rows[0]?.hash ?? GENESIS;
   const occurredAt = new Date().toISOString();

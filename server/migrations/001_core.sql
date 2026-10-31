@@ -203,8 +203,7 @@ CREATE TABLE task_templates (
   hazard_type             text NOT NULL,
   emergency_instruction   text,
   emergency_approved_by   uuid REFERENCES users(id),
-  UNIQUE (rule_version_id, code),
-  CHECK (emergency_instruction IS NULL OR emergency_approved_by IS NOT NULL)
+  UNIQUE (rule_version_id, code)
 );
 
 -- Content of a version is frozen once it leaves draft; only the status moves.
@@ -229,12 +228,18 @@ BEGIN
 END $$;
 CREATE TRIGGER rule_version_guard BEFORE UPDATE ON rule_versions FOR EACH ROW EXECUTE FUNCTION rule_version_guard();
 
+-- Templates are editable while the rule is a draft. During review the only
+-- permitted change is the reviewer approving the emergency instruction.
 CREATE FUNCTION task_template_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE st text;
 BEGIN
-  IF (SELECT status FROM rule_versions WHERE id = COALESCE(OLD.rule_version_id, NEW.rule_version_id)) <> 'draft' THEN
-    RAISE EXCEPTION 'task templates of a non-draft rule version are frozen';
+  SELECT status INTO st FROM rule_versions WHERE id = COALESCE(NEW.rule_version_id, OLD.rule_version_id);
+  IF st = 'draft' THEN RETURN COALESCE(NEW, OLD); END IF;
+  IF st = 'in_review' AND TG_OP = 'UPDATE'
+     AND (to_jsonb(NEW) - 'emergency_approved_by') = (to_jsonb(OLD) - 'emergency_approved_by') THEN
+    RETURN NEW;
   END IF;
-  RETURN COALESCE(NEW, OLD);
+  RAISE EXCEPTION 'task templates of a % rule version are frozen', st;
 END $$;
 CREATE TRIGGER task_template_guard BEFORE INSERT OR UPDATE OR DELETE ON task_templates FOR EACH ROW EXECUTE FUNCTION task_template_guard();
 
@@ -518,8 +523,9 @@ REVOKE ALL ON FUNCTION demo_reset() FROM PUBLIC;
 -- ─── Runtime role grants ────────────────────────────────────────────────────
 -- No UPDATE/DELETE on append-only tables; triggers enforce the rest.
 
+GRANT USAGE ON SCHEMA public TO goverhub_app;
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO goverhub_app;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO goverhub_app;
-GRANT UPDATE ON companies, sites, equipment, tasks, evidence, nonconformities, rule_versions, access_grants TO goverhub_app;
+GRANT UPDATE ON companies, sites, equipment, tasks, evidence, nonconformities, rule_versions, task_templates, access_grants TO goverhub_app;
 GRANT DELETE ON sessions TO goverhub_app;
 GRANT EXECUTE ON FUNCTION demo_reset() TO goverhub_app;

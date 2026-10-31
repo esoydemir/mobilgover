@@ -19,11 +19,10 @@ export async function loadPrincipal(db: Db, token: string): Promise<Principal | 
       `SELECT user_id FROM sessions WHERE token_hash = $1 AND expires_at > now()`, [hashToken(token)]);
     const userId = s.rows[0]?.user_id;
     if (!userId) return null;
-    const [roles, members, grants] = await Promise.all([
-      tx.query(`SELECT role FROM platform_roles WHERE user_id = $1`, [userId]),
-      tx.query(`SELECT company_id, site_id, role FROM memberships WHERE user_id = $1`, [userId]),
-      tx.query(`SELECT company_id, kind, scopes FROM access_grants WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`, [userId]),
-    ]);
+    // One connection runs one query at a time; keep these sequential.
+    const roles = await tx.query(`SELECT role FROM platform_roles WHERE user_id = $1`, [userId]);
+    const members = await tx.query(`SELECT company_id, site_id, role FROM memberships WHERE user_id = $1`, [userId]);
+    const grants = await tx.query(`SELECT company_id, kind, scopes FROM access_grants WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`, [userId]);
     return {
       userId,
       platformRoles: roles.rows.map(r => r.role),

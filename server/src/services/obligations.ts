@@ -2,6 +2,7 @@ import type { Tx } from '../db/pool';
 import { decide } from '../domain/applicability';
 import type { Facts } from '../domain/conditions';
 import { forbidden, invalid, notFound } from '../domain/errors';
+import { canonical } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { currentFacts } from './profile';
@@ -48,8 +49,9 @@ export async function recomputeSite(tx: Tx, companyId: string, siteId: string, a
     if (!d) continue;
     const factsSnap = snapshot(facts, rv.required_facts);
     if (prev && prev.rule_version_id === rv.id && prev.decision === d.decision
-        && JSON.stringify(prev.missing_facts) === JSON.stringify(d.missingFacts)
-        && JSON.stringify(prev.facts_snapshot) === JSON.stringify(factsSnap)) continue;
+        // jsonb reorders object keys, so compare canonical forms.
+        && canonical(prev.missing_facts) === canonical(d.missingFacts)
+        && canonical(prev.facts_snapshot) === canonical(factsSnap)) continue;
 
     const ins = await tx.query<{ id: string }>(
       `INSERT INTO obligations (company_id, site_id, rule_id, rule_version_id, decision, decided_by, reason, trace, facts_snapshot, missing_facts)

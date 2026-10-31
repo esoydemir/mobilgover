@@ -30,11 +30,12 @@ export function decide(rule: RuleForDecision, facts: Facts, onDate: string): App
   if (trace.result === 'false') {
     return { decision: 'not_applicable', trace, missingFacts: [], reason: 'Koşullar doğrulanmış profil bilgileriyle karşılanmıyor.' };
   }
-  if (rule.ambiguityNote) {
-    return { decision: 'needs_review', trace, missingFacts, reason: `Uzman incelemesi gerekiyor: ${rule.ambiguityNote}` };
-  }
+  // Missing information is asked for first: a reviewer cannot judge without it either.
   if (trace.result === 'unknown') {
     return { decision: 'needs_info', trace, missingFacts, reason: 'Karar için eksik veya onaylanmamış profil bilgisi var.' };
+  }
+  if (rule.ambiguityNote) {
+    return { decision: 'needs_review', trace, missingFacts, reason: `Uzman incelemesi gerekiyor: ${rule.ambiguityNote}` };
   }
   return { decision: 'applies', trace, missingFacts: [], reason: 'Koşullar doğrulanmış profil bilgileriyle karşılanıyor.' };
 }

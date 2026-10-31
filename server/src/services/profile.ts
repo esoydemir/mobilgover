@@ -21,7 +21,10 @@ export async function currentFacts(tx: Tx, companyId: string, siteId: string, as
       ORDER BY key, (site_id IS NULL), recorded_at DESC`,
     [companyId, siteId, asOf ?? null]);
   const facts: Facts = {};
-  for (const row of r.rows) if (isFactKey(row.key)) facts[row.key] = toRecord(row);
+  for (const row of r.rows) {
+    const key: string = row.key;
+    if (isFactKey(key)) facts[key] = toRecord(row);
+  }
   return facts;
 }
 
