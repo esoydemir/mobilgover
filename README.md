@@ -5,8 +5,9 @@ Türkiye'deki KOBİ'lerin kendilerine uygulanan yükümlülükleri anlaması, g�
 | Klasör | İçerik |
 |---|---|
 | `server/` | API ve kural motoru (TypeScript, Fastify, PostgreSQL). Kurulum ve testler: `server/README.md` |
-| `mobile/` | Mobil uygulama (Expo). Şu an **örnek veriyle** çalışan arayüz; API'ye henüz bağlı değil |
-| `docs/` | `DURUM.md` (doğrulanmış durum, varsayımlar, sorular), `MIMARI.md` (mimari, veri modeli, tehdit modeli), `KABUL.md` (kabul kriterleri ve test durumu) |
+| `mobile/` | Mobil uygulama (Expo). Gerçek API'ye bağlı; çevrimdışı kayıt kuyruğu var. Demo/pilot ortamı başlıkta etiketli |
+| `docs/` | `PILOT.md` (güncel durum, test sınıflandırması, açık bağımlılıklar), `DURUM.md`, `MIMARI.md` (mimari, veri modeli, tehdit modeli), `KABUL.md` (kabul kriterleri) |
+| `e2e/` | Gerçek arayüz + gerçek API ile kayıtlı pilot gösterimi |
 | `project/`, `chats/` | Claude Design tasarım teslimi (aşağıdaki bölüm) |
 
 Depodaki tüm mevzuat kaynakları, kurallar ve limitler **örnektir**; gerçek mevzuat iddiası taşımaz.

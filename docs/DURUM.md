@@ -1,5 +1,7 @@
 # GoverHub — durum tespiti
 
+> **Güncel durum için `PILOT.md`'ye bak.** Bu belge ilk dilim teslimindeki tespittir; mobil uygulama artık gerçek API'ye bağlı, giriş, pazar yeri ve çevrimdışı kuyruk eklendi.
+
 Son güncelleme: 31.10.2026. Bu belge, depoda **gerçekten bulunan ve çalıştırılarak doğrulanan** durumu anlatır.
 
 ## 1. Kaynaklar

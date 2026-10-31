@@ -26,7 +26,11 @@ CREATE DATABASE goverhub OWNER goverhub_owner;
 | `DATABASE_OWNER_URL` | Sahip rolüyle bağlantı (yalnızca migration) |
 | `EVIDENCE_DIR` | Kanıt dosyaları dizini |
 | `PORT` | HTTP portu (varsayılan 3000) |
-| `DEMO_MODE` | `true` yalnızca demo ortamında: örnek kuralların yayınına ve demo sıfırlamaya izin verir |
+| `DEMO_MODE` | `true` yalnızca demo ortamında: örnek kuralların yayınına, demo sıfırlamaya ve geliştirme posta kutusunun okunmasına izin verir |
+| `MFA_ENCRYPTION_KEY` | 32 bayt base64 (`openssl rand -base64 32`); ek doğrulama gizli anahtarlarını şifreler |
+| `MFA_REQUIRED_FOR_PLATFORM` | `true` (varsayılan): kural ve pazar yeri yönetimi ek doğrulama ister |
+| `MAIL_TRANSPORT` | Şimdilik yalnızca `dev_outbox`: giriş kodları gönderilmez, veritabanında tutulur. **Gerçek pilot için e-posta sağlayıcısı gerekir.** |
+| `CORS_ORIGINS` | Uygulamanın web derlemesinin adresleri (virgülle) |
 
 ## Çalıştırma
 

@@ -49,14 +49,16 @@ npm run dev
 - Demo: `DEMO_MODE=true`. Örnek kurallar ve demo sıfırlama açıktır.
 - Pilot: `DEMO_MODE=false`. Örnek kurallar yayınlanamaz, demo sıfırlama kapalıdır.
 
-Ayrıntılar ve tüm ortam değişkenleri: `server/README.md`.
+Ayrıntılar ve tüm ortam değişkenleri: `server/README.md`. Web derlemesini kullanacaksan `CORS_ORIGINS` değişkenine o adresi yaz.
+
+**E-posta:** Şu an yalnızca `dev_outbox` var; kodlar gönderilmez. Demo ortamında giriş ekranı kodu bu kutudan alabilir; pilot ortamında bu uç kapalıdır. Gerçek kullanıcılar için e-posta sağlayıcısı bağlanmalı (bkz. `docs/PILOT.md`).
 
 ## 3. Mobil (`mobile/`)
 
 ```bash
 cd mobile
 npm install
-cp .env.example .env               # EXPO_PUBLIC_API_URL=sunucu adresi
+cp .env.example .env               # EXPO_PUBLIC_API_URL=sunucu adresi (demo ve pilot için ayrı derleme)
 npx expo start --web               # tarayıcıda
 npx expo start                     # telefonda (geliştirme derlemesi)
 ```
