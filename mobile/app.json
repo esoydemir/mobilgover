@@ -25,7 +25,15 @@
     },
     "plugins": [
       "expo-font",
-      "expo-router"
+      [
+        "expo-router",
+        {
+          "asyncRoutes": {
+            "web": false,
+            "default": false
+          }
+        }
+      ]
     ],
     "scheme": "goverhub",
     "backgroundColor": "#050505"

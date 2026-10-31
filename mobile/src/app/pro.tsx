@@ -8,6 +8,7 @@ import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../components/states';
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../components/ui';
 import { addDays, fmtDateTime } from '../features/dates';
+import { QUOTE_STATUS, credentialLabel } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
@@ -53,7 +54,7 @@ function ProfileCard({ v }: { v: ProfileView }) {
       <Card>
         <Eyebrow>NE KONTROL EDİLDİ</Eyebrow>
         <Row label="Kimlik" status={v.identity.status} note={v.identity.method} />
-        {v.credentials.map(c => <Row key={c.id} label={`Mesleki belge: ${c.credential_type}`} status={c.expired ? 'expired' : c.status} note={`${c.issuer}${c.valid_until ? ` · ${c.valid_until}'e kadar` : ''}${c.check_method ? ` · ${c.check_method}` : ''}`} />)}
+        {v.credentials.map(c => <Row key={c.id} label={credentialLabel(c.credential_type)} status={c.expired ? 'expired' : c.status} note={`${c.issuer}${c.valid_until ? ` · ${c.valid_until}'e kadar` : ''}${c.check_method ? ` · ${c.check_method}` : ''}`} />)}
         {v.businessRegistration.map(b => <Row key={b.id} label="İşletme kaydı" status={b.status} />)}
         <Text style={[type(10.5, 600, { ls: 0.1, color: C.t3 }), { marginTop: 14 }]}>KONTROL EDİLMEYEN</Text>
         {v.notChecked.map(n => <Text key={n} style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>• {n}</Text>)}
@@ -135,7 +136,7 @@ function MyProfessionalArea() {
         </View>
         {ver.kind === 'credential' ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            {credentialTypes.map(c => <FilterChip key={c} label={c} px={12} active={ver.credentialType === c} onPress={() => setVer(v => ({ ...v, credentialType: c }))} />)}
+            {credentialTypes.map(c => <FilterChip key={c} label={credentialLabel(c)} px={12} active={ver.credentialType === c} onPress={() => setVer(v => ({ ...v, credentialType: c }))} />)}
           </View>
         ) : null}
         <Field label="Veren kurum" testID="ver-issuer" value={ver.issuer} onChangeText={v => setVer(x => ({ ...x, issuer: v }))} />
@@ -155,7 +156,7 @@ function MyProfessionalArea() {
               <Text style={[type(14, 600), { flex: 1 }]}>{c.name}</Text>
               {c.is_example ? <ExampleBadge label="ÖRNEK" /> : null}
             </View>
-            <Text style={type(11.5, 400, { color: C.t3 })}>Gerekli belge: {c.required_credentials.join(', ') || '—'} + doğrulanmış kimlik</Text>
+            <Text style={type(11.5, 400, { color: C.t3 })}>Gerekli: {c.required_credentials.map(credentialLabel).join(', ') || '—'} + doğrulanmış kimlik</Text>
             {st ? <Pill label={st === 'approved' ? 'ONAYLI' : st === 'pending' ? 'İNCELEMEDE' : st.toUpperCase()} fg={st === 'approved' ? C.lime : st === 'pending' ? C.warn : C.crit} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
               : <GhostButton testID={`auth-${c.code}`} label="Bu kategori için başvur" height={38} size={12.5} onPress={() => act(() => call('POST', '/pro/authorizations', { categoryCode: c.code }), 'Başvuru gönderildi')} />}
           </Card>
@@ -183,7 +184,7 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
       <Text style={type(11, 600, { ls: 0.08, color: C.t3 })}>{r.category_name.toUpperCase()} · {r.city} · {fmtDateTime(r.created_at)}</Text>
       <Text style={type(14.5, 600)}>{r.title}</Text>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{r.description}</Text>
-      {r.my_quote_status ? <Text style={type(12, 600, { color: C.lime })}>Teklifin: {r.my_quote_status}</Text> : !open ? (
+      {r.my_quote_status ? <Text style={type(12, 600, { color: C.lime })}>Teklifin: {QUOTE_STATUS[r.my_quote_status] ?? r.my_quote_status}</Text> : !open ? (
         <GhostButton testID="quote-open" label="Teklif ver" height={40} size={12.5} onPress={() => setOpen(true)} />
       ) : (
         <View style={{ gap: 10 }}>

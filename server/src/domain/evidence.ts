@@ -31,6 +31,10 @@ export const limitSchema = z.object({
 });
 export type Limit = z.infer<typeof limitSchema>;
 
+/** Turkish labels for measured quantities shown to users. */
+export const QUANTITY_LABEL: Record<string, string> = { temperature: 'sıcaklık' };
+const qLabel = (q: string) => QUANTITY_LABEL[q] ?? q;
+
 export type SelectedLimit = { ok: true; limit: Limit } | { ok: false; code: 'LIMIT_UNDEFINED' | 'UNIT_MISMATCH'; message: string };
 
 /** Picks the one limit that applies; never falls back to a generic number. */
@@ -67,7 +71,7 @@ export function assessEvidence(reqs: EvidenceRequirement[], ev: CollectedEvidenc
     if (r.kind === 'measurement') {
       const ms = ev.measurements.filter(m => m.quantity === r.quantity);
       if (!ms.length) missing.push(`Ölçüm: ${r.quantity} (${r.unit})`);
-      else if (ms.some(m => !m.withinLimit)) nonconforming.push(`Ölçüm limit dışı: ${r.quantity}`);
+      else if (ms.some(m => !m.withinLimit)) nonconforming.push(`Ölçüm limit dışı: ${qLabel(r.quantity)}`);
     } else if (r.kind === 'photo' || r.kind === 'document') {
       const label = r.kind === 'photo' ? 'Fotoğraf' : 'Belge';
       const stored = ev.files.filter(f => f.kind === r.kind && f.status === 'stored').length;

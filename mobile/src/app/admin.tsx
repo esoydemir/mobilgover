@@ -7,6 +7,7 @@ import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, SectionLabel } from '../components/states';
 import { Card, FilterChip, GhostButton, PrimaryButton } from '../components/ui';
+import { credentialLabel } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
@@ -83,7 +84,7 @@ export default function AdminRoute() {
           {queue.data?.verifications.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Bekleyen belge yok.</Text> : null}
           {(queue.data?.verifications ?? []).map(v => (
             <Card key={v.id} style={{ gap: 6 }}>
-              <Text style={type(13.5, 600)}>{v.display_name} · {v.kind === 'identity' ? 'Kimlik' : v.kind === 'credential' ? `Mesleki belge: ${v.credential_type}` : 'İşletme kaydı'}</Text>
+              <Text style={type(13.5, 600)}>{v.display_name} · {v.kind === 'identity' ? 'Kimlik' : v.kind === 'credential' ? credentialLabel(v.credential_type ?? '') : 'İşletme kaydı'}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>{v.issuer} · {v.document_ref}{v.valid_until ? ` · ${v.valid_until}'e kadar` : ''}</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <GhostButton testID="ver-approve" label="Doğrulandı" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 5}
@@ -97,7 +98,7 @@ export default function AdminRoute() {
           {(queue.data?.authorizations ?? []).map(a => (
             <Card key={a.id} style={{ gap: 6 }}>
               <Text style={type(13.5, 600)}>{a.display_name} · {a.category_name}</Text>
-              <Text style={type(12, 400, { color: C.t2 })}>Gerekli: kimlik + {a.required_credentials.join(', ')}</Text>
+              <Text style={type(12, 400, { color: C.t2 })}>Gerekli: kimlik + {a.required_credentials.map(credentialLabel).join(', ')}</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <GhostButton testID="auth-approve" label="Onayla" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 5}
                   onPress={() => act(() => call('POST', `/admin/marketplace/authorizations/${a.id}/decide`, { decision: 'approved', reason: note.trim() }), 'Kategori onaylandı')} />

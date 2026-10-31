@@ -6,11 +6,11 @@ import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
 import { Card, Eyebrow, FilterChip, PrimaryButton, s } from '../components/ui';
+import { ROLE_LABEL as ROLE } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, type } from '../theme';
 
 type Member = { id: string; display_name: string; email: string; role: string; site_id: string | null; signed_in: boolean };
-const ROLE: Record<string, string> = { owner: 'İşletme sahibi', hq_manager: 'Merkez yöneticisi', site_manager: 'Şube yöneticisi', staff: 'Personel' };
 
 /** People in the business. New members sign in with their own e-mail; no passwords are set here. */
 export default function TeamRoute() {

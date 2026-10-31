@@ -12,6 +12,7 @@ import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, StepMark } from '../..
 import { fmtDateTime } from '../../features/dates';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
+import { SEVERITY_LABEL } from '../../features/labels';
 import { RISK } from '../ncrs';
 
 type Step = 'containment' | 'correction' | 'root_cause' | 'corrective_action' | 'effectiveness_check';
@@ -73,7 +74,7 @@ export default function NcrRoute() {
 
       <Card>
         <Eyebrow>{n.depth === 'capa' ? 'DÜZELTİCİ FAALİYET AKIŞI (TAM CAPA)' : 'DÜZELTME AKIŞI'}</Eyebrow>
-        <Text style={[type(11.5, 400, { color: C.t3, lh: 1.45 }), { marginTop: 6 }]}>Derinlik riske göre: önem {n.risk_rationale.severity}{n.risk_rationale.escalatedBy ? `, tekrar nedeniyle +${n.risk_rationale.escalatedBy} seviye` : ''}. {n.risk_rationale.policy}</Text>
+        <Text style={[type(11.5, 400, { color: C.t3, lh: 1.45 }), { marginTop: 6 }]}>Derinlik riske göre: önem {SEVERITY_LABEL[n.risk_rationale.severity] ?? n.risk_rationale.severity}{n.risk_rationale.escalatedBy ? `, tekrar nedeniyle +${n.risk_rationale.escalatedBy} seviye` : ''}. {n.risk_rationale.policy}</Text>
         <View style={{ marginTop: 14 }}>
           {n.requiredSteps.map(s => {
             const rec = n.steps.find(x => x.step === s);

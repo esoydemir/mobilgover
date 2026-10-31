@@ -5,6 +5,7 @@ import { useSession } from '../api/session';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
 import { Card, Eyebrow, GhostButton, PrimaryButton } from '../components/ui';
+import { ROLE_LABEL } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
@@ -21,7 +22,7 @@ export default function AccountRoute() {
       <Card>
         <Eyebrow>HESAP</Eyebrow>
         <Text style={[type(14, 600), { marginTop: 8 }]}>{me?.email}</Text>
-        <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>{company?.name ?? 'İşletme yok'}{role ? ` · ${role}` : ''}{me?.platformRoles.length ? ` · platform: ${me.platformRoles.join(', ')}` : ''}</Text>
+        <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>{company?.name ?? 'İşletme yok'}{role ? ` · ${ROLE_LABEL[role] ?? role}` : ''}{me?.platformRoles.length ? ` · platform: ${me.platformRoles.join(', ')}` : ''}</Text>
       </Card>
       <Card border={env?.mode === 'demo' ? tint.warn(0.35) : tint.info(0.35)}>
         <Eyebrow>ORTAM</Eyebrow>

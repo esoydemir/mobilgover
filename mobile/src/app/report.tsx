@@ -44,9 +44,9 @@ export default function ReportRoute() {
   const d = ind.data;
 
   const rings: RingDomain[] = d ? [
-    { key: 'onTime', label: 'ZAMANINDA', value: `${d.components.onTime.numerator}/${d.components.onTime.denominator}`, unit: pct(d.components.onTime.value), pct: d.components.onTime.value ?? 0, tone: tone(d.components.onTime.value) },
-    { key: 'conforming', label: 'UYGUN SONUÇ', value: `${d.components.conforming.numerator}/${d.components.conforming.denominator}`, unit: pct(d.components.conforming.value), pct: d.components.conforming.value ?? 0, tone: tone(d.components.conforming.value) },
-    { key: 'evidence', label: 'KANIT KAPSAMI', value: `${d.components.evidenceCoverage.numerator}/${d.components.evidenceCoverage.denominator}`, unit: pct(d.components.evidenceCoverage.value), pct: d.components.evidenceCoverage.value ?? 0, tone: tone(d.components.evidenceCoverage.value) },
+    { key: 'onTime', label: 'ZAMAN', value: `${d.components.onTime.numerator}/${d.components.onTime.denominator}`, unit: pct(d.components.onTime.value), pct: d.components.onTime.value ?? 0, tone: tone(d.components.onTime.value) },
+    { key: 'conforming', label: 'SONUÇ', value: `${d.components.conforming.numerator}/${d.components.conforming.denominator}`, unit: pct(d.components.conforming.value), pct: d.components.conforming.value ?? 0, tone: tone(d.components.conforming.value) },
+    { key: 'evidence', label: 'KANIT', value: `${d.components.evidenceCoverage.numerator}/${d.components.evidenceCoverage.denominator}`, unit: pct(d.components.evidenceCoverage.value), pct: d.components.evidenceCoverage.value ?? 0, tone: tone(d.components.evidenceCoverage.value) },
   ] : [];
 
   const exportFile = async () => {
@@ -78,6 +78,7 @@ export default function ReportRoute() {
           </View>
           {d.scoreCappedBy ? <Text style={type(12, 600, { color: C.crit })}>Puan sınırlandı: {d.scoreCappedBy}. Kritik risk ortalamanın içinde gizlenmez.</Text> : null}
           <ScoreRings width={width} domains={rings} />
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.5 })}>Dıştan içe: ZAMAN = son tarihinden önce yapılan kontroller · SONUÇ = uygun çıkan sonuçlar · KANIT = kanıtı eksiksiz saklanan kontroller.</Text>
           <Card>
             <Eyebrow>DİĞER GÖSTERGELER</Eyebrow>
             {[['Gecikmiş kontrol', d.components.overdueTasks], ['Açık kritik / yüksek risk', d.components.openCriticalRisks], ['Tekrarlayan uygunsuzluk', d.components.recurringNonconformities],
