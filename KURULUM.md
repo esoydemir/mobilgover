@@ -51,7 +51,7 @@ npm run dev
 
 Ayrıntılar ve tüm ortam değişkenleri: `server/README.md`. Web derlemesini kullanacaksan `CORS_ORIGINS` değişkenine o adresi yaz.
 
-**E-posta:** Şu an yalnızca `dev_outbox` var; kodlar gönderilmez. Demo ortamında giriş ekranı kodu bu kutudan alabilir; pilot ortamında bu uç kapalıdır. Gerçek kullanıcılar için e-posta sağlayıcısı bağlanmalı (bkz. `docs/PILOT.md`).
+**E-posta:** `MAIL_TRANSPORT=dev_outbox` demo içindir; kodlar gönderilmez, giriş ekranı kodu bu kutudan alır (pilot ortamında bu uç kapalı). Pilot için `MAIL_TRANSPORT=smtp` ve sağlayıcının SMTP bilgileri girilir. İlk gerçek gönderim doğrulanana kadar `MAIL_PRODUCTION_READY=false` kalır.
 
 ## 3. Mobil (`mobile/`)
 
@@ -83,4 +83,4 @@ Uyarı: Testler her çalışmada test veritabanlarının `public` şemasını si
 
 ## 5. Yedekleme
 
-`server/` içinde `npm run backup -- <klasör>` ve `npm run restore -- <klasör>`. Ayrıntılar ve kurallar: `docs/YEDEKLEME.md`.
+`server/` içinde `npm run backup:scheduled` (30 dakikada bir) ve `npm run backup:watchdog` (15 dakikada bir, tercihen başka makinede). Geri yükleme: `npm run restore`. Hedefler, ölçüm ve kurallar: `docs/YEDEKLEME.md`.

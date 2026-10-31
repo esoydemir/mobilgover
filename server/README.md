@@ -29,7 +29,10 @@ CREATE DATABASE goverhub OWNER goverhub_owner;
 | `DEMO_MODE` | `true` yalnızca demo ortamında: örnek kuralların yayınına, demo sıfırlamaya ve geliştirme posta kutusunun okunmasına izin verir |
 | `MFA_ENCRYPTION_KEY` | 32 bayt base64 (`openssl rand -base64 32`); ek doğrulama gizli anahtarlarını şifreler |
 | `MFA_REQUIRED_FOR_PLATFORM` | `true` (varsayılan): kural ve pazar yeri yönetimi ek doğrulama ister |
-| `MAIL_TRANSPORT` | Şimdilik yalnızca `dev_outbox`: giriş kodları gönderilmez, veritabanında tutulur. **Gerçek pilot için e-posta sağlayıcısı gerekir.** |
+| `MAIL_TRANSPORT` | `dev_outbox` (kodlar veritabanında kalır; yalnızca geliştirme/demo) veya `smtp` |
+| `MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_SMTP_SECURITY`, `MAIL_SMTP_USER`, `MAIL_SMTP_PASS`, `MAIL_FROM` | SMTP gönderimi; TLS zorunlu (`tls` = 465, `starttls` = 587) |
+| `MAIL_PRODUCTION_READY` | Yalnızca seçilen sağlayıcıyla gerçek gönderim doğrulandıktan sonra bir kişi `true` yapar; `/env` bunu bildirir |
+| `BACKUP_*`, `ALERT_WEBHOOK_URL` | Yedekleme ve bildirim; bkz. `../docs/YEDEKLEME.md` |
 | `CORS_ORIGINS` | Uygulamanın web derlemesinin adresleri (virgülle) |
 
 ## Çalıştırma
@@ -65,7 +68,7 @@ npm run typecheck
 ```
 
 ## Yedekleme ve geri yükleme
-`npm run backup -- <klasör>`, `npm run backup:verify -- <klasör>`, `npm run restore -- <klasör>`, `npm run check:integrity`. Kurallar ve tatbikat: `../docs/YEDEKLEME.md`.
+`npm run backup`, `backup:list`, `backup:verify`, `restore`, `check:integrity`, `backup:scheduled`, `backup:watchdog`. Kurallar ve tatbikat: `../docs/YEDEKLEME.md`.
 
 ## Örnek içerik uyarısı
 `src/seed/demo.ts` içindeki tüm kaynaklar, kurallar, limitler (ör. 0–4 °C) ve acil talimatlar **örnektir**, gerçek mevzuatı temsil etmez. Gerçek kurallar ancak resmî kaynak doğrulanıp bir inceleyici tarafından onaylandıktan sonra eklenmelidir. Sunucu, demo dışı ortamda örnek kural yayınını reddeder.

@@ -40,12 +40,12 @@ Kayıt: `e2e/pilot-walkthrough.js` ve `e2e/offline-sync.js`. Ortam: demo modu, g
 | Tür | Dosyalar | Sayı | Ne doğrular | Neyi doğrulamaz |
 |---|---|---|---|---|
 | Saf mantık (birim) | `server/test/domain/*` | 31 | Üç değerli koşul mantığı, karar sırası, saat dilimi ve takvim, limit seçimi, kanıt yeterliliği, risk derinliği, bağımsız kapanış, gösterge formülü, karma zinciri, yetki matrisi | Veritabanı, ağ, arayüz |
-| Gerçek entegrasyon (sunucu) | `slice`, `auth`, `members`, `marketplace`, `production-guards`, `backup-restore` | 60 | Gerçek PostgreSQL (RLS, tetikleyiciler, kısıtlar) ve gerçek HTTP API: giriş ve ek doğrulama, davet, rol sınırı, pasifleştirme, oturum iptali, işletmeler arası izolasyon, kanıt bütünlüğü, CAPA, denetim dosyası, pazar yeri onay süresi ve paylaşım, demo/pilot korumaları, yedekten ikinci veritabanına geri yükleme ve bütünlük doğrulaması | **Kurallar ve kategoriler örnek veridir.** Testler motorun davranışını doğrular, mevzuatın doğruluğunu değil. |
+| Gerçek entegrasyon (sunucu) | `slice`, `auth`, `members`, `marketplace`, `production-guards`, `backup-restore`, `mail` | 87 | Gerçek PostgreSQL (RLS, tetikleyiciler, kısıtlar) ve gerçek HTTP API: giriş ve ek doğrulama, davet, rol sınırı, pasifleştirme, oturum iptali, işletmeler arası izolasyon, kanıt bütünlüğü, CAPA, denetim dosyası, pazar yeri onay süresi ve paylaşım, demo/pilot korumaları, şifreli yedek, yedek alınırken süren yazmalarla tutarlılık, kesilen geri yüklemenin sürdürülmesi, bildirimler, SMTP gönderimi (yerel STARTTLS sunucusuna karşı) ve giriş kodu kuralları | **Kurallar ve kategoriler örnek veridir.** Testler motorun davranışını doğrular, mevzuatın doğruluğunu değil. |
 | Gerçek entegrasyon (mobil kod + sunucu) | `server/test/acceptance/offline-sync.test.ts` | 8 | Mobil uygulamanın kendi kuyruk motoru ve HTTP istemcisi, rastgele portta gerçek HTTP üzerinden gerçek API'ye karşı çalışır: kapat-aç, gönderim ortasında kapanma, tekrar gönderim, yarım/kesik fotoğraf, kaybolan yanıt, oturum bitişi, başka kullanıcı, iki cihaz çakışması | React ekranları ve cihaz depolaması (bellek içi disk kullanılır) |
 | Uçtan uca arayüz gösterimi | `e2e/*` | 2 akış × 3 profil | Gerçek web arayüzü + API + PostgreSQL; masaüstü 390 px, Pixel 7 ve iPhone 14 öykünmesi; yatay taşma kontrolü; `secure-context.js` https/http farkı | Otomatik doğrulama paketi değil; **gerçek telefon değil** (bkz. `TELEFON_TESTI.md`) |
 | Mobil birim testi | — | 0 | — | Ekran bileşenleri için ayrı birim testi yok |
 
-Son çalıştırma: 99/99 sunucu testi geçti (31 birim + 68 entegrasyon). Sunucu ve mobil tür kontrolü temiz. Mutasyon kontrolü yapıldı: pazar yeri süre korumaları ve çevrimdışı motorun dört koruması geçici olarak kaldırıldığında ilgili testler kırıldı, geri alınınca geçti.
+Son çalıştırma: 126/126 sunucu testi geçti (31 birim + 95 entegrasyon). Sunucu ve mobil tür kontrolü temiz. Mutasyon kontrolü yapıldı: pazar yeri süre korumaları, çevrimdışı motorun dört koruması, yedeklemenin üç koruması (snapshot, nesne adı doğrulaması, yarım dosyanın yeniden kullanılmaması) ve SMTP'nin üç koruması (zorunlu TLS, adres gizleme, 503) geçici olarak kaldırıldığında ilgili testler kırıldı, geri alınınca geçti.
 
 ## 4. Zorunlu senaryoların güncel durumu
 
@@ -69,9 +69,9 @@ Diğer senaryolar için `KABUL.md` geçerli.
 
 | Bağımlılık | Etkisi | Kimden |
 |---|---|---|
-| **E-posta sağlayıcısı (Türkiye barındırmalı)** | **Gerçek pilot kullanıcısı giriş kodunu alamaz.** Şu an yalnızca geliştirme giden kutusu var; pilotta bu uç kapalı. | Sağlayıcı seçimi → ardından gönderim adaptörü yazılır |
-| Gerçek mevzuat içeriği | Pilot ortamı örnek kural yayınlamaz; gerçek kural olmadan pilotta yükümlülük ve görev oluşmaz | Sen + alan uzmanları (kaynak hükmü, yorum, limitler) |
-| Barındırma ve yedeklerin saklanacağı yer | Yedekleme, geri yükleme ve tatbikat hazır ve test edildi (`YEDEKLEME.md`); sıklık, RPO/RTO ve saklama yeri kararı bekliyor | Barındırma kararı + sen |
+| **E-posta sağlayıcısı (Türkiye barındırmalı)** | SMTP adaptörü hazır ve test edildi; **üretime hazır değil**: gerçek sağlayıcıyla gerçek gönderim doğrulanmadı (`/env` → `mailProductionReady: false`) | Sağlayıcı seçimi + SMTP bilgileri; ilk gerçek gönderimi birlikte doğrulayıp işaretleriz |
+| Gerçek mevzuat içeriği | Pilot ortamı örnek kural yayınlamaz; gerçek kural olmadan pilotta yükümlülük ve görev oluşmaz | Sen + alan uzmanları: `docs/kurallar/GoverHub_Kural_Taslak_Tablosu.xlsx` |
+| Barındırma, yedek konumu, anahtar ve bildirim adresi | Şifreli, ayrı konumlu, bildirimli yedekleme hazır ve ölçüldü (`YEDEKLEME.md` §1); gerçek konum ve tam geri dönüş tatbikatı barındırmayı bekliyor | Barındırma kararı + sen |
 | Telefon tarayıcısında gerçek test | Öykünme geçti; fotoğraf için https şart | Telefonun erişebileceği https adresi (tünel veya pilot sunucusu) — `TELEFON_TESTI.md` |
 | iOS/Android derlemesi (EAS) ve mağaza | Uygulama yalnızca web derlemesiyle denendi | Apple/Google hesapları — `MOBIL_DAGITIM.md` |
 | Saklama süreleri | Matris boş; hiçbir şey silinmiyor | Hukuk görüşü |
