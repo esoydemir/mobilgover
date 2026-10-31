@@ -1,3 +1,18 @@
+# GoverHub
+
+Türkiye'deki KOBİ'lerin kendilerine uygulanan yükümlülükleri anlaması, günlük işe çevirmesi, kanıt toplaması, uygunsuzlukları çözmesi ve denetime hazırlanması için platform.
+
+| Klasör | İçerik |
+|---|---|
+| `server/` | API ve kural motoru (TypeScript, Fastify, PostgreSQL). Kurulum ve testler: `server/README.md` |
+| `mobile/` | Mobil uygulama (Expo). Şu an **örnek veriyle** çalışan arayüz; API'ye henüz bağlı değil |
+| `docs/` | `DURUM.md` (doğrulanmış durum, varsayımlar, sorular), `MIMARI.md` (mimari, veri modeli, tehdit modeli), `KABUL.md` (kabul kriterleri ve test durumu) |
+| `project/`, `chats/` | Claude Design tasarım teslimi (aşağıdaki bölüm) |
+
+Depodaki tüm mevzuat kaynakları, kurallar ve limitler **örnektir**; gerçek mevzuat iddiası taşımaz.
+
+---
+
 # CODING AGENTS: READ THIS FIRST
 
 This is a **handoff bundle** from Claude Design (claude.ai/design).
