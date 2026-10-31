@@ -40,15 +40,18 @@ export const draftSchema = z.object({
   effectiveFrom: z.iso.date(),
   effectiveTo: z.iso.date().nullable().default(null),
   changeReason: z.string().min(5),
+  /** Subject areas (e.g. food_safety, gas_safety) whose specialist must review before approval. */
+  requiredReviewAreas: z.array(z.string().regex(/^[a-z_]+$/)).default([]),
   templates: z.array(templateSchema).min(1),
 });
-export type DraftInput = z.infer<typeof draftSchema>;
+export type DraftInput = z.input<typeof draftSchema>;
 
 const has = (p: Principal, r: Principal['platformRoles'][number]) => p.platformRoles.includes(r);
 
 /** Creates a new draft version. Conditions are validated against the fact catalogue before they are stored. */
-export async function createDraft(tx: Tx, p: Principal, input: DraftInput) {
+export async function createDraft(tx: Tx, p: Principal, raw: DraftInput) {
   if (!has(p, 'rule_author')) throw forbidden('Kural taslağı yalnızca kural yazarı oluşturabilir.');
+  const input = draftSchema.parse(raw);
   const cond = validateCondition(input.condition);
   if (!cond.ok) throw invalid('Kural koşulu geçersiz.', cond.errors);
   for (const t of input.templates) {
@@ -71,10 +74,10 @@ export async function createDraft(tx: Tx, p: Principal, input: DraftInput) {
   const v = (await tx.query<{ n: number }>(`SELECT COALESCE(max(version), 0) + 1 AS n FROM rule_versions WHERE rule_id = $1`, [rule.id])).rows[0]!.n;
   const rv = (await tx.query<{ id: string }>(
     `INSERT INTO rule_versions (rule_id, version, kind, is_example, provision_ids, condition, required_facts, ambiguity_note,
-       obligation_title, obligation_summary, effective_from, effective_to, change_reason, author_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+       obligation_title, obligation_summary, effective_from, effective_to, change_reason, author_id, required_review_areas)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
     [rule.id, v, input.kind, input.isExample, input.provisionIds, JSON.stringify(cond.condition), cond.facts, input.ambiguityNote,
-      input.obligationTitle, input.obligationSummary, input.effectiveFrom, input.effectiveTo, input.changeReason, p.userId])).rows[0]!;
+      input.obligationTitle, input.obligationSummary, input.effectiveFrom, input.effectiveTo, input.changeReason, p.userId, input.requiredReviewAreas])).rows[0]!;
   for (const t of input.templates) {
     await tx.query(
       `INSERT INTO task_templates (rule_version_id, code, title, instructions, recurrence, evidence, limits, severity, hazard_type, emergency_instruction)
@@ -100,12 +103,46 @@ export async function submitForReview(tx: Tx, p: Principal, id: string) {
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.submitted', entityType: 'rule_version', entityId: id, payload: { code: rv.code } });
 }
 
+/**
+ * Specialist review for one subject area. Only someone registered for that
+ * area may record it, and never the author.
+ */
+export async function areaReview(tx: Tx, p: Principal, id: string, area: string, decision: 'approved' | 'changes_requested', notes: string) {
+  const rv = await version(tx, id);
+  if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
+  if (!rv.required_review_areas.includes(area)) throw invalid(`Bu kural "${area}" alanında inceleme gerektirmiyor.`);
+  if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi alan incelemesi yapamaz.');
+  const ok = (await tx.query(`SELECT 1 FROM reviewer_areas WHERE user_id = $1 AND area = $2`, [p.userId, area])).rowCount;
+  if (!ok) throw forbidden(`"${area}" alanında inceleme yetkin yok.`);
+  if (notes.trim().length < 5) throw invalid('İnceleme notu yaz.');
+  await tx.query(`INSERT INTO rule_area_reviews (rule_version_id, area, reviewer_id, decision, notes) VALUES ($1,$2,$3,$4,$5)`, [id, area, p.userId, decision, notes]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.area_reviewed', entityType: 'rule_version', entityId: id, payload: { area, decision } });
+}
+
+/** Area reviews still missing (latest decision per area must be "approved"). */
+async function pendingAreas(tx: Tx, rv: any): Promise<string[]> {
+  const r = await tx.query(`SELECT DISTINCT ON (area) area, decision FROM rule_area_reviews WHERE rule_version_id = $1 ORDER BY area, created_at DESC`, [rv.id]);
+  const approved = new Set(r.rows.filter(x => x.decision === 'approved').map(x => x.area));
+  return rv.required_review_areas.filter((a: string) => !approved.has(a));
+}
+
+export async function listRuleVersions(tx: Tx, p: Principal, status?: string) {
+  if (!p.platformRoles.length) throw forbidden();
+  const rows = (await tx.query(
+    `SELECT rv.id, r.code, rv.version, rv.status, rv.kind, rv.is_example, rv.obligation_title, rv.required_review_areas, rv.author_id, rv.reviewer_id, rv.created_at, rv.published_at
+       FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE ($1::text IS NULL OR rv.status = $1) ORDER BY r.code, rv.version`, [status ?? null])).rows;
+  for (const r of rows) r.pendingAreaReviews = r.status === 'in_review' ? await pendingAreas(tx, r) : [];
+  return rows;
+}
+
 /** Human review gate. The reviewer must differ from the author and also approves any emergency instruction. */
 export async function approve(tx: Tx, p: Principal, id: string) {
   if (!has(p, 'rule_reviewer')) throw forbidden('Onay yalnızca kural inceleyicisi tarafından verilebilir.');
   const rv = await version(tx, id);
   if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını onaylayamaz.');
+  const missing = await pendingAreas(tx, rv);
+  if (missing.length) throw conflict('AREA_REVIEW_MISSING', `Önce alan uzmanı incelemesi gerekiyor: ${missing.join(', ')}`, { missing });
   await tx.query(`UPDATE task_templates SET emergency_approved_by = $2 WHERE rule_version_id = $1 AND emergency_instruction IS NOT NULL`, [id, p.userId]);
   await tx.query(`UPDATE rule_versions SET status = 'approved', reviewer_id = $2, reviewed_at = now() WHERE id = $1`, [id, p.userId]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.approved', entityType: 'rule_version', entityId: id, payload: { code: rv.code } });

@@ -259,12 +259,18 @@ describe('history stays intact', () => {
     const prov = (await env.ownerDb.query(`SELECT id FROM provisions LIMIT 1`)).rows[0].id;
     const author = client(env, platform.author.token), reviewer = client(env, platform.reviewer.token), admin = client(env, platform.admin.token);
     const v2 = await author.post('/admin/rule-versions', { ...base, provisionIds: [prov], changeReason: 'Örnek: limit notu güncellendi',
-      templates: base.templates.map(t => ({ ...t, limits: t.limits.map(l => ({ ...l, note: 'v2 notu' })) })) });
+      templates: base.templates.map(t => ({ ...t, limits: (t.limits ?? []).map(l => ({ ...l, note: 'v2 notu' })) })) });
     expect(v2.status).toBe(201);
     expect(v2.body.version).toBe(2);
     await author.post(`/admin/rule-versions/${v2.body.id}/submit`);
     expect((await author.post(`/admin/rule-versions/${v2.body.id}/approve`)).status).toBe(403); // author cannot approve own rule
-    await reviewer.post(`/admin/rule-versions/${v2.body.id}/approve`);
+    // Food-safety content needs the area specialist before the product owner can approve.
+    const early = await reviewer.post(`/admin/rule-versions/${v2.body.id}/approve`);
+    expect(early.body.error.code).toBe('AREA_REVIEW_MISSING');
+    expect((await reviewer.post(`/admin/rule-versions/${v2.body.id}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Kendi alanım değil' })).status).toBe(403);
+    const specialist = client(env, platform.specialist.token);
+    expect((await specialist.post(`/admin/rule-versions/${v2.body.id}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Limit notu incelendi.' })).status).toBe(200);
+    expect((await reviewer.post(`/admin/rule-versions/${v2.body.id}/approve`)).status).toBe(200);
     const impact = (await reviewer.get(`/admin/rule-versions/${v2.body.id}/impact`)).body;
     expect(impact.ruleCode).toBe('EX-COLD-CHAIN');
     expect((await admin.post(`/admin/rule-versions/${v2.body.id}/publish`)).status).toBe(200);

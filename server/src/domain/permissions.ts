@@ -12,16 +12,19 @@ export type Action =
   | 'equipment.read' | 'equipment.write'
   | 'task.read' | 'task.execute' | 'task.generate'
   | 'ncr.read' | 'ncr.act' | 'ncr.verify_close'
-  | 'indicators.read' | 'audit.export' | 'audit.verify';
+  | 'indicators.read' | 'audit.export' | 'audit.verify'
+  | 'members.manage' | 'service.request';
 
 /** What each company role may do. `site` = only within the member's site when the membership is site-scoped. */
 export const ROLE_MATRIX: Record<CompanyRole, Action[]> = {
   owner: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify'],
+    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
+    'members.manage', 'service.request'],
   hq_manager: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify'],
+    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
+    'members.manage', 'service.request'],
   site_manager: ['profile.read', 'obligation.read', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export'],
+    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'service.request'],
   // Staff see and do their own assigned work, including emergency instructions; no scores, penalties or other people's data.
   staff: ['task.read', 'task.execute', 'ncr.read', 'ncr.act', 'equipment.read'],
 };
@@ -43,6 +46,11 @@ export const GRANT_SCOPES: Record<string, Action[]> = {
 
 export type Principal = {
   userId: string;
+  email?: string | null;
+  displayName?: string;
+  /** This session passed a second factor. */
+  mfaSatisfied?: boolean;
+  mfaEnabled?: boolean;
   platformRoles: PlatformRole[];
   memberships: { companyId: string; siteId: string | null; role: CompanyRole }[];
   grants: { companyId: string; kind: GrantKind; scopes: string[] }[];

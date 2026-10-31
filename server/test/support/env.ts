@@ -5,6 +5,7 @@ import pg from 'pg';
 import { Db } from '../../src/db/pool';
 import { migrate } from '../../src/db/migrate';
 import { buildApp } from '../../src/http/app';
+import { DevOutboxMailer } from '../../src/services/mail';
 import { LocalStore } from '../../src/storage/local';
 
 /**
@@ -19,7 +20,7 @@ export function testUrls() {
   return { app, owner };
 }
 
-export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: boolean } = {}) {
+export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: boolean; mfaRequiredForPlatform?: boolean } = {}) {
   const urls = testUrls();
   const owner = new pg.Client({ connectionString: urls.owner });
   await owner.connect();
@@ -29,8 +30,13 @@ export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: b
   const db = Db.connect(urls.app);
   const dir = await mkdtemp(join(tmpdir(), 'gh-evidence-'));
   const store = new LocalStore(dir);
-  const config = { demoMode: opts.demoMode ?? true, allowExampleRules: opts.allowExampleRules ?? true, maxUploadBytes: 15 * 1024 * 1024 };
-  const app = buildApp({ db, store, config });
+  const config = {
+    demoMode: opts.demoMode ?? true, allowExampleRules: opts.allowExampleRules ?? true, maxUploadBytes: 15 * 1024 * 1024,
+    // Test-only key; real deployments read MFA_ENCRYPTION_KEY from the environment.
+    mfaEncryptionKey: Buffer.alloc(32, 7).toString('base64'),
+    mfaRequiredForPlatform: opts.mfaRequiredForPlatform ?? false,
+  };
+  const app = buildApp({ db, store, mailer: new DevOutboxMailer(db), config });
   /** Direct connection as the owner, for assertions the API deliberately cannot make. */
   const ownerDb = new pg.Client({ connectionString: urls.owner });
   await ownerDb.connect();

@@ -4,7 +4,7 @@ import { appendAudit } from '../services/audit';
 import { recomputeSite } from '../services/obligations';
 import { createSession } from '../services/principal';
 import { recordFact, syncEquipmentTypes } from '../services/profile';
-import { approve, createDraft, publish, submitForReview, type DraftInput } from '../services/rules';
+import { approve, areaReview, createDraft, publish, submitForReview, type DraftInput } from '../services/rules';
 
 /**
  * Demo content. EVERY rule, source and limit here is an EXAMPLE: it shows how
@@ -17,7 +17,7 @@ export const EXAMPLE_RULES: Omit<DraftInput, 'provisionIds'>[] = [
     condition: { all: [{ fact: 'activity.food_preparation', op: 'eq', value: true }, { fact: 'storage.cold', op: 'eq', value: true }] },
     obligationTitle: 'Soğuk muhafaza ünitelerinin sıcaklığını kayıt altında tut',
     obligationSummary: 'Gıda hazırlayan ve soğuk depolama kullanan işletmeler ünite sıcaklıklarını düzenli ölçüp kaydeder.',
-    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm', requiredReviewAreas: ['food_safety'],
     templates: [{
       code: 'fridge_temp', title: 'Soğutucu sıcaklık kontrolü', instructions: 'Ünitenin iç sıcaklığını kalibreli termometreyle ölç, değeri gir ve termometre ekranının fotoğrafını ekle.',
       recurrence: { freq: 'daily', at: '18:00', perEquipmentType: 'refrigerator' },
@@ -31,7 +31,7 @@ export const EXAMPLE_RULES: Omit<DraftInput, 'provisionIds'>[] = [
     code: 'EX-LPG-CHECK', title: 'LPG bağlantı kontrolü (örnek)', kind: 'legal_requirement', isExample: true, ambiguityNote: null,
     condition: { fact: 'utility.lpg', op: 'eq', value: true },
     obligationTitle: 'LPG tesisatını düzenli kontrol et', obligationSummary: 'LPG kullanan işletmeler hortum, vana ve havalandırmayı düzenli kontrol eder.',
-    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm', requiredReviewAreas: ['gas_safety'],
     templates: [{
       code: 'lpg_monthly', title: 'Aylık LPG bağlantı kontrolü', instructions: 'Kontrol listesindeki maddeleri yerinde incele.',
       recurrence: { freq: 'monthly', day: 1, at: '10:00' },
@@ -60,7 +60,7 @@ export const EXAMPLE_RULES: Omit<DraftInput, 'provisionIds'>[] = [
     ambiguityNote: 'Örnek: eşiğin şube mi şirket mi bazında sayılacağı kaynakta net değil.',
     condition: { fact: 'staff.count', op: 'gte', value: 10 },
     obligationTitle: 'İSG hizmeti desteği al', obligationSummary: 'Belirli çalışan sayısının üzerindeki işletmeler için örnek yükümlülük.',
-    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm', requiredReviewAreas: ['occupational_safety'],
     templates: [{
       code: 'isg_review', title: 'İSG risk değerlendirmesi gözden geçirme', instructions: 'Risk değerlendirmesini gözden geçir ve onayla.',
       recurrence: { freq: 'monthly', day: 1, at: '11:00' },
@@ -89,11 +89,14 @@ async function user(db: Db, name: string) {
 /** Platform users, example sources and published example rules. Idempotent per database. */
 export async function seedPlatform(db: Db) {
   const author = await user(db, 'Kural Yazarı (demo)');
-  const reviewer = await user(db, 'Kural İnceleyici (demo)');
+  // The product owner approves pilot content; specialists review their own areas.
+  const reviewer = await user(db, 'Ürün sahibi / kural onaylayıcı (demo)');
+  const specialist = await user(db, 'Alan uzmanı (demo)');
   const admin = await user(db, 'Platform Yöneticisi (demo)');
   const ruleVersionIds: Record<string, string> = {};
   await db.system(async tx => {
-    await tx.query(`INSERT INTO platform_roles VALUES ($1,'rule_author'), ($2,'rule_reviewer'), ($3,'platform_admin')`, [author.id, reviewer.id, admin.id]);
+    await tx.query(`INSERT INTO platform_roles VALUES ($1,'rule_author'), ($2,'rule_reviewer'), ($3,'platform_admin'), ($4,'rule_reviewer')`, [author.id, reviewer.id, admin.id, specialist.id]);
+    await tx.query(`INSERT INTO reviewer_areas VALUES ($1,'food_safety'), ($1,'gas_safety'), ($1,'occupational_safety')`, [specialist.id]);
     const src = (await tx.query<{ id: string }>(
       `INSERT INTO legal_sources (code, title, issuer, kind, is_example) VALUES ('EX-SOURCE', 'ÖRNEK KAYNAK — gerçek mevzuat değildir', 'Örnek kurum', 'regulation', true) RETURNING id`)).rows[0]!.id;
     const sv = (await tx.query<{ id: string }>(
@@ -103,12 +106,15 @@ export async function seedPlatform(db: Db) {
     for (const r of EXAMPLE_RULES) {
       const d = await createDraft(tx, principal(author.id, { platformRoles: ['rule_author'] }), { ...r, provisionIds: r.kind === 'legal_requirement' ? [prov] : [] });
       await submitForReview(tx, principal(author.id, { platformRoles: ['rule_author'] }), d.id);
+      for (const area of r.requiredReviewAreas ?? []) {
+        await areaReview(tx, principal(specialist.id, { platformRoles: ['rule_reviewer'] }), d.id, area, 'approved', 'Örnek içerik olarak incelendi (demo).');
+      }
       await approve(tx, principal(reviewer.id, { platformRoles: ['rule_reviewer'] }), d.id);
       await publish(tx, principal(admin.id, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true });
       ruleVersionIds[r.code] = d.id;
     }
   });
-  return { author, reviewer, admin, ruleVersionIds };
+  return { author, reviewer, specialist, admin, ruleVersionIds };
 }
 
 /** One demo café with a site, people, equipment and a partly filled profile. */

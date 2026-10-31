@@ -9,10 +9,15 @@ import { verifyCompanyChain } from '../services/audit';
 import { uploadContent } from '../services/evidence';
 import { closeNonconformity, completeStep, getNonconformity } from '../services/nonconformities';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite } from '../services/obligations';
+import { confirmTotpSetup, logout, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
+import { addMember, createCompany, listMyCompanies } from '../services/companies';
+import type { Mailer } from '../services/mail';
 import { loadPrincipal } from '../services/principal';
+import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
-import { approve, createDraft, draftSchema, previewImpact, publish, submitForReview } from '../services/rules';
+import { approve, areaReview, createDraft, draftSchema, listRuleVersions, previewImpact, publish, submitForReview } from '../services/rules';
+import { FACTS } from '../domain/facts';
 import { addEvidence, completeTask, generateTasks, listTasks, recordMeasurement, taskDetail } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
 
@@ -27,8 +32,13 @@ const companyParams = z.object({ companyId: uuid });
  * Builds the API. Every route: authenticate → check permission in the
  * service → run inside a company-bound transaction (row-level security).
  */
-export function buildApp(deps: { db: Db; store: EvidenceStore; config: Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes'> }) {
-  const { db, store, config } = deps;
+export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'>;
+
+/** Routes that work without a session. */
+const PUBLIC = new Set(['/health', '/env', '/auth/email/start', '/auth/email/verify', '/auth/mfa/verify', '/dev/outbox/latest']);
+
+export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; config: AppConfig }) {
+  const { db, store, mailer, config } = deps;
   const app = Fastify({ logger: false, bodyLimit: 1024 * 1024 });
 
   for (const mime of ALLOWED_MIME) {
@@ -38,7 +48,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; config: Pick<Conf
   // Simple per-token rate limit; a shared store (e.g. Redis) replaces this when running several instances.
   const hits = new Map<string, { n: number; reset: number }>();
   app.addHook('onRequest', async (req, reply) => {
-    if (req.url === '/health') return;
+    const path = req.url.split('?')[0]!;
     const header = req.headers.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     const key = token ? sha256(token) : `ip:${req.ip}`;
@@ -46,6 +56,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; config: Pick<Conf
     const h = hits.get(key);
     if (!h || h.reset < now) hits.set(key, { n: 1, reset: now + 60_000 });
     else if (++h.n > 300) return reply.code(429).send({ error: { code: 'RATE_LIMITED', message: 'Çok fazla istek; bir dakika sonra tekrar dene.' } });
+    if (PUBLIC.has(path)) return;
     if (!token) return reply.code(401).send({ error: { code: 'UNAUTHENTICATED', message: 'Oturum gerekli.' } });
     const p = await loadPrincipal(db, token);
     if (!p) return reply.code(401).send({ error: { code: 'UNAUTHENTICATED', message: 'Oturum geçersiz veya süresi dolmuş.' } });
@@ -102,12 +113,71 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; config: Pick<Conf
     return reply.code(out.status).send(out.body);
   }
 
+  /** Rule and platform administration needs a second factor on the session. */
+  const platformGate = (req: FastifyRequest) => {
+    if (config.mfaRequiredForPlatform && !req.principal.mfaSatisfied) {
+      throw new AppError(403, 'MFA_REQUIRED', 'Bu işlem için ek doğrulama (kimlik doğrulayıcı uygulama) gerekiyor.');
+    }
+  };
+
   app.get('/health', async () => ({ ok: true }));
 
-  app.get('/me', async req => ({
-    userId: req.principal.userId, platformRoles: req.principal.platformRoles,
-    memberships: req.principal.memberships, grants: req.principal.grants,
+  // Lets the app show clearly whether it is talking to demo or pilot data.
+  app.get('/env', async () => ({
+    mode: config.demoMode ? 'demo' : 'pilot',
+    exampleRulesAllowed: config.allowExampleRules,
+    mailTransport: mailer.kind,
   }));
+
+  // ── Sign-in ──
+  app.post('/auth/email/start', async req => {
+    const { email } = z.object({ email: z.string().max(254) }).parse(req.body);
+    return startEmailLogin(db, mailer, email);
+  });
+  app.post('/auth/email/verify', async req => {
+    const b = z.object({ email: z.string().max(254), code: z.string().max(12) }).parse(req.body);
+    return verifyEmailLogin(db, b.email, b.code.trim());
+  });
+  app.post('/auth/mfa/verify', async req => {
+    const b = z.object({ ticket: z.string().max(100), code: z.string().max(12) }).parse(req.body);
+    return verifyMfaLogin(db, config.mfaEncryptionKey, b.ticket, b.code.trim());
+  });
+  app.post('/auth/mfa/totp/setup', async req => startTotpSetup(db, config.mfaEncryptionKey, req.principal.userId));
+  app.post('/auth/mfa/totp/confirm', async req => {
+    const { code } = z.object({ code: z.string().max(12) }).parse(req.body);
+    return confirmTotpSetup(db, config.mfaEncryptionKey, req.principal.userId, (req.headers.authorization ?? '').slice(7), code.trim());
+  });
+  app.post('/auth/logout', async req => { await logout(db, (req.headers.authorization ?? '').slice(7)); return { ok: true }; });
+
+  // Demo deployments only: read the sign-in mail that the dev outbox kept. Never available in pilot.
+  app.get('/dev/outbox/latest', async req => {
+    if (!config.demoMode) throw notFound('Sayfa');
+    const { email } = z.object({ email: z.string() }).parse(req.query);
+    const r = await db.system(tx => tx.query(`SELECT subject, body, created_at FROM dev_mail_outbox WHERE to_email = $1 ORDER BY id DESC LIMIT 1`, [email.trim().toLowerCase()]));
+    if (!r.rows[0]) throw notFound('Posta');
+    return r.rows[0];
+  });
+
+  app.get('/me', async req => ({
+    userId: req.principal.userId, email: req.principal.email, displayName: req.principal.displayName,
+    mfaEnabled: req.principal.mfaEnabled, mfaSatisfied: req.principal.mfaSatisfied,
+    platformRoles: req.principal.platformRoles, memberships: req.principal.memberships, grants: req.principal.grants,
+  }));
+
+  // ── Companies ──
+  app.get('/companies', async req => listMyCompanies(db, req.principal));
+  app.post('/companies', async (req, reply) => {
+    const b = z.object({ name: z.string().trim().min(2).max(120), siteName: z.string().trim().min(2).max(120), timezone: z.string().default('Europe/Istanbul') }).parse(req.body);
+    return reply.code(201).send(await createCompany(db, req.principal, b, config.demoMode));
+  });
+  app.post('/companies/:companyId/members', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ email: z.email(), role: z.enum(['hq_manager', 'site_manager', 'staff']), siteId: uuid.nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => addMember(tx, req.principal, companyId, b), 201);
+  });
+
+  /** Profile questions the rules can use, with labels for the app. */
+  app.get('/fact-catalog', async () => Object.entries(FACTS).map(([key, d]) => ({ key, ...d })));
 
   // ── Profile ──
   app.get('/companies/:companyId/sites/:siteId/profile', async req => {
@@ -260,19 +330,48 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; config: Pick<Conf
   });
 
   // ── Rules (platform) ──
+  const rvId = (req: FastifyRequest) => z.object({ id: uuid }).parse(req.params).id;
+  app.get('/admin/rule-versions', async req => {
+    platformGate(req);
+    const { status } = z.object({ status: z.enum(['draft', 'in_review', 'approved', 'published', 'retired']).optional() }).parse(req.query);
+    return db.system(tx => listRuleVersions(tx, req.principal, status));
+  });
+  app.post('/admin/rule-versions/:id/area-review', async req => {
+    platformGate(req);
+    const b = z.object({ area: z.string(), decision: z.enum(['approved', 'changes_requested']), notes: z.string().max(4000) }).parse(req.body);
+    await db.system(tx => areaReview(tx, req.principal, rvId(req), b.area, b.decision, b.notes));
+    return { ok: true };
+  });
   app.post('/admin/rule-versions', async (req, reply) => {
+    platformGate(req);
     const b = draftSchema.parse(req.body);
     return reply.code(201).send(await db.system(tx => createDraft(tx, req.principal, b)));
   });
-  const rvId = (req: FastifyRequest) => z.object({ id: uuid }).parse(req.params).id;
-  app.post('/admin/rule-versions/:id/submit', async req => { await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
-  app.post('/admin/rule-versions/:id/approve', async req => { await db.system(tx => approve(tx, req.principal, rvId(req))); return { ok: true }; });
-  app.get('/admin/rule-versions/:id/impact', async req => db.system(tx => previewImpact(tx, req.principal, rvId(req))));
-  app.post('/admin/rule-versions/:id/publish', async req => db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules })));
+  app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
+  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); await db.system(tx => approve(tx, req.principal, rvId(req))); return { ok: true }; });
+  app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
+  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules })); });
+
+  // ── Retention matrix ──
+  app.get('/admin/retention-policies', async req => { platformGate(req); return db.system(tx => listRetention(tx, req.principal)); });
+  app.post('/admin/retention-policies/:type/propose', async req => {
+    platformGate(req);
+    const { type } = z.object({ type: z.string() }).parse(req.params);
+    const b = z.object({ periodMonths: z.number().int(), legalBasis: z.string().max(2000) }).parse(req.body);
+    await db.system(tx => proposeRetention(tx, req.principal, type, b.periodMonths, b.legalBasis));
+    return { ok: true };
+  });
+  app.post('/admin/retention-policies/:type/approve', async req => {
+    platformGate(req);
+    const { type } = z.object({ type: z.string() }).parse(req.params);
+    await db.system(tx => approveRetention(tx, req.principal, type));
+    return { ok: true };
+  });
 
   // ── Demo ──
   // Deletes demo companies only; the database function refuses everything else.
   app.post('/admin/demo/reset', async req => {
+    platformGate(req);
     if (!config.demoMode) throw forbidden('Demo sıfırlama bu ortamda kapalı.');
     if (!req.principal.platformRoles.includes('platform_admin')) throw forbidden();
     const deleted = await db.system(async tx => (await tx.query<{ n: number }>(`SELECT demo_reset() AS n`)).rows[0]!.n);
