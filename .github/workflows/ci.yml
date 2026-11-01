@@ -56,6 +56,11 @@ jobs:
       - name: Bağımlılıklar
         working-directory: server
         run: npm ci
+      # Çevrimdışı eşitleme testi mobil uygulamanın kendi kuyruk motorunu içe aktarır;
+      # mobil tsconfig'i expo/tsconfig.base'i genişlettiği için mobil bağımlılıklar da gerekir.
+      - name: Mobil bağımlılıklar (çevrimdışı eşitleme testi için)
+        working-directory: mobile
+        run: npm ci --ignore-scripts
       - name: Tür kontrolü
         working-directory: server
         run: npm run typecheck

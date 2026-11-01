@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { EXAMPLE_RULES, seedPlatform } from '../../src/seed/demo';
+import { assertDemoDatabase } from '../../src/db/guards';
+import { EXAMPLE_RULES, seedDemoCompany, seedPlatform } from '../../src/seed/demo';
 import { client, freshEnv, type Env } from '../support/env';
 
 /** A non-demo deployment: example content and demo resets must be refused. */
@@ -40,6 +41,13 @@ describe('production guards', () => {
     const base = EXAMPLE_RULES.find(r => r.code === 'EX-LPG-CHECK')!;
     const r = await client(env, platform.author.token).post('/admin/rule-versions', { ...base, code: 'REAL-LPG', isExample: false, provisionIds: [] });
     expect(r.status).toBe(422);
+  });
+
+  it('demo mode refuses to start on a database holding a real (non-demo) company', async () => {
+    await seedDemoCompany(env.db);
+    await expect(assertDemoDatabase(env.db)).resolves.toBeUndefined();
+    await env.db.system(tx => tx.query(`INSERT INTO companies (name, is_demo) VALUES ('Gerçek İşletme', false)`));
+    await expect(assertDemoDatabase(env.db)).rejects.toThrow(/gerçek \(demo olmayan\) işletme/);
   });
 });
 
