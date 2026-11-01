@@ -1,0 +1,42 @@
+# GoverHub yerel demo vekili (web uygulaması + API). Erişim: yalnızca bu bilgisayar, http://localhost:8080
+{
+	# Yönetim arayüzü yalnızca bu kapsayıcının içinde (localhost:2019); hiçbir yere yayınlanmaz.
+	admin localhost:2019
+	auto_https off
+	persist_config off
+}
+
+(guvenlik) {
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		-Server
+	}
+	request_body {
+		max_size 16MB
+	}
+}
+
+(uygulama) {
+	# API: /api öneki kaldırılır. API yalnızca iç ağda dinler.
+	handle_path /api/* {
+		reverse_proxy app:3000
+	}
+	# Mobil uygulamanın web derlemesi.
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# 1) Bu bilgisayardan erişim: http://localhost:8080
+#    compose.yaml bu portu yalnızca 127.0.0.1'e yayınlar; ağdaki başka cihazlar ulaşamaz.
+:8080 {
+	import guvenlik
+	route {
+		import uygulama
+	}
+}

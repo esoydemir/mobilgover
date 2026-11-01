@@ -101,3 +101,67 @@ jobs:
       - name: Derleme özeti
         working-directory: mobile
         run: du -sh dist && ls dist | head
+
+  local-demo:
+    name: Yerel demo (Docker) — derleme, giriş, kalıcılık, kapı
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: yerel-demo
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derle ve başlat (baslat.cmd ile aynı compose komutu)
+        run: docker compose up -d --build --remove-orphans --wait --wait-timeout 300
+      - name: Yalnızca 127.0.0.1:8080 yayınlanmış olmalı
+        run: |
+          docker compose ps --format '{{.Service}} {{.Publishers}}'
+          pubs=$(docker compose ps --format json | python3 -c 'import json,sys; t=sys.stdin.read().strip(); rows=json.loads(t) if t.startswith("[") else [json.loads(l) for l in t.splitlines() if l.strip()]; print(" ".join(sorted({p["URL"]+":"+str(p["PublishedPort"]) for r in rows for p in (r.get("Publishers") or []) if p.get("PublishedPort")})))')
+          echo "Yayınlanan: $pubs"
+          [ "$pubs" = "127.0.0.1:8080" ] || { echo "::error::Beklenmeyen yayınlanmış port: $pubs"; exit 1; }
+      - name: Demo girişi ve kayıt (localhost:8080 üzerinden)
+        run: |
+          set -eu
+          B=http://127.0.0.1:8080/api; J='content-type: application/json'
+          curl -fsS $B/env
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H "$J" -d '{"email":"kisi@gercek.com.tr"}' $B/auth/email/start)" = 422 ]
+          curl -fsS -H "$J" -d '{"email":"sahip@demo.goverhub.test"}' $B/auth/email/start >/dev/null
+          code=$(curl -fsS "$B/dev/outbox/latest?email=sahip@demo.goverhub.test" | grep -oE '[0-9]{6}' | head -1)
+          tok=$(curl -fsS -H "$J" -d "{\"email\":\"sahip@demo.goverhub.test\",\"code\":\"$code\"}" $B/auth/email/verify | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+          curl -fsS -H "authorization: Bearer $tok" $B/companies | tee /tmp/companies.json | head -c 300; echo
+          grep -q 'Kahve Durağı (DEMO)' /tmp/companies.json
+          curl -fsS -o /dev/null http://127.0.0.1:8080/
+      - name: Durdur/başlat sonrası kayıtlar korunur, demo verisi tekrar yüklenmez
+        run: |
+          set -eu
+          q() { docker compose exec -T db psql -U postgres -d goverhub_demo -tAc "SELECT (SELECT count(*) FROM companies)||'/'||(SELECT count(*) FROM tasks)||'/'||(SELECT count(*) FROM login_challenges)"; }
+          before=$(q); echo "önce: $before"
+          docker compose down
+          docker compose up -d --remove-orphans --wait --wait-timeout 180
+          after=$(q); echo "sonra: $after"
+          [ "$before" = "$after" ] || { echo "::error::Kayıtlar değişti"; exit 1; }
+          docker compose logs app | grep -q 'Demo verisi zaten yüklü'
+      - name: Tünel kapısı (tünel açılmadan, iç ağdan)
+        run: |
+          set -eu
+          docker compose --profile tunel up -d kapi
+          docker compose --profile tunel exec -T kapi /etc/goverhub/ayarla.sh --yeni
+          T=$(docker compose --profile tunel exec -T kapi cat /data/goverhub/erisim-anahtari)
+          docker run --rm --network goverhub-demo_tunel -e T="$T" --entrypoint node goverhub-demo-app:yerel -e '
+            const s = (u, o = {}) => fetch("http://kapi:8081" + u, { redirect: "manual", ...o }).then(r => r.status);
+            (async () => {
+              const r = { davetsiz: await s("/"), api: await s("/api/env"), yanlis: await s("/erisim/yanlis"), davet: await s("/erisim/" + process.env.T) };
+              const net = require("net");
+              const reach = (h, p) => new Promise(ok => { const c = net.connect({ host: h, port: p, timeout: 3000 }, () => { c.destroy(); ok(true); }); c.on("error", () => ok(false)); c.on("timeout", () => { c.destroy(); ok(false); }); });
+              r.app3000 = await reach("app", 3000); r.db5432 = await reach("db", 5432); r.proxy8080 = await reach("proxy", 8080);
+              console.log(JSON.stringify(r));
+              const ok = r.davetsiz === 403 && r.api === 403 && r.yanlis === 403 && r.davet === 302 && !r.app3000 && !r.db5432 && !r.proxy8080;
+              process.exit(ok ? 0 : 1);
+            })();'
+      - name: Sıfırlama (ayrı işlem) kayıtları siler
+        run: |
+          docker compose --profile tunel down -v --remove-orphans
+          [ -z "$(docker volume ls -q --filter name=goverhub-demo_)" ] || { docker volume ls; exit 1; }
+      - name: Hata durumunda kayıtlar
+        if: failure()
+        run: docker compose --profile tunel logs --tail 80

@@ -34,12 +34,23 @@ try {
         if (p && typeof p === 'object' && 'id' in p) await tx.query(`UPDATE users SET email = $2 WHERE id = $1`, [(p as { id: string }).id, email]);
       }
     });
-    // Today's and the next 30 days' tasks, so the demo has something to do on the phone.
-    const today = localDay(new Date(), 'Europe/Istanbul');
-    const in30 = localDay(new Date(Date.now() + 30 * 86_400_000), 'Europe/Istanbul');
-    const created = await db.tenant(demo.companyId, tx => generateTasks(tx, demo.companyId, demo.siteId, today, in30));
-    console.log(`Demo görevleri oluşturuldu: ${JSON.stringify(created)}`);
     console.log('Demo verisi yüklendi. Giriş adresleri (kod demo kutusundan alınır):');
     for (const [role, email] of Object.entries({ ...DEMO_EMAILS, provider: 'uzman@demo.goverhub.test' })) console.log(`  ${role.padEnd(15)} ${email}`);
   }
+  // On every start: top up today's and the next 30 days' tasks for demo businesses, so a demo
+  // started weeks later still has work for today. Only adds missing tasks; never changes or deletes.
+  const today = localDay(new Date(), 'Europe/Istanbul');
+  const in30 = localDay(new Date(Date.now() + 30 * 86_400_000), 'Europe/Istanbul');
+  const sites = await db.system(async tx => (await tx.query<{ company_id: string; id: string }>(
+    `SELECT s.company_id, s.id FROM sites s JOIN companies c ON c.id = s.company_id WHERE c.is_demo`)).rows);
+  let created = 0;
+  for (const s of sites) {
+    try {
+      const r = await db.tenant(s.company_id, tx => generateTasks(tx, s.company_id, s.id, today, in30));
+      created += Number((r as { created?: number }).created ?? 0);
+    } catch (e) {
+      console.log(`Görev üretimi atlandı (şube ${s.id}): ${(e as Error).message}`);
+    }
+  }
+  console.log(`Demo görevleri: ${created} yeni görev eklendi (${today} – ${in30}).`);
 } finally { await db.close(); }

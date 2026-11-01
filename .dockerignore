@@ -1,0 +1,12 @@
+**/node_modules
+**/.expo
+**/dist
+**/web-dist
+**/var
+**/.env
+.git
+teslim
+chats
+project
+e2e
+docs

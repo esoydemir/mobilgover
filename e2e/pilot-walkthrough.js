@@ -1,7 +1,11 @@
 const { chromium } = require('playwright');
 const OUT = process.argv[2];
-const WEB = 'http://localhost:8099';
-const API = 'http://localhost:3077';
+// WEB: the app's address. Emails can be overridden, e.g. for the local Docker demo where
+// only @demo.goverhub.test addresses may sign in (DEMO_LOGIN_DOMAIN).
+const WEB = process.env.WEB || 'http://localhost:8099';
+const OWNER = process.env.OWNER || OWNER;
+const MANAGER = process.env.MANAGER || MANAGER;
+const PROVIDER = process.env.PROVIDER || PROVIDER;
 let n = 0;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -46,7 +50,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
   try {
     // ── 1. Owner: sign in, create the business, answer profile, equipment, tasks ──
-    await login('ahmet@modakafe.test');
+    await login(OWNER);
     await shot('kurulum-isletme');
     await id('setup-name').fill('Moda Kafe'); await id('setup-site').fill('Moda');
     await id('setup-create').click(); await id('profile-save').waitFor({ timeout: 15000 }); await wait(1000);
@@ -95,12 +99,12 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
     // ── Team: add a site manager ──
     await goMore('more-team');
-    await id('team-email').fill('selin@modakafe.test'); await id('team-add').click(); await wait(2000);
+    await id('team-email').fill(MANAGER); await id('team-add').click(); await wait(2000);
     await shot('ekip');
     await logout();
 
     // ── 2. Provider: quote ──
-    await login('murat@demo.goverhub.test');
+    await login(PROVIDER);
     await p.goto(WEB + '/pro'); await wait(3000);
     await shot('uzman-profili');
     await id('quote-open').click(); await wait(500);
@@ -112,7 +116,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     await logout();
 
     // ── 3. Owner: accept quote ──
-    await login('ahmet@modakafe.test');
+    await login(OWNER);
     await goMore('more-services');
     await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
     await shot('teklif-karsilastirma');
@@ -122,7 +126,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     await logout();
 
     // ── 4. Provider: check in + report ──
-    await login('murat@demo.goverhub.test');
+    await login(PROVIDER);
     await p.goto(WEB + '/pro'); await wait(3000);
     await id('pro-code').fill(code); await id('pro-checkin').click(); await wait(2000);
     await id('pro-report').fill('Kapı contası değiştirildi, termostat 3 °C\'ye ayarlandı. 30 dk sonra iç sıcaklık 3,2 °C ölçüldü.');
@@ -131,14 +135,14 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     await logout();
 
     // ── 5. Owner: accept delivery ──
-    await login('ahmet@modakafe.test');
+    await login(OWNER);
     await goMore('more-services'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
     await id('job-note').fill('Rapor okundu, ölçüm tekrarlandı: 3,1 °C.'); await id('job-accept').click(); await wait(2500);
     await shot('teslim-kabul');
     await logout();
 
     // ── 6. Site manager: CAPA steps, cannot close own work ──
-    await login('selin@modakafe.test');
+    await login(MANAGER);
     // Invited, not yet a member: the invitation is accepted before any access.
     await id('invite-accept').waitFor({ timeout: 15000 }); await shot('davet-kabul'); await id('invite-accept').click(); await wait(3000);
     await goMore('more-ncrs'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
@@ -151,7 +155,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     await logout();
 
     // ── 7. Owner: independent closure + report ──
-    await login('ahmet@modakafe.test');
+    await login(OWNER);
     await p.goto(WEB + '/report'); await wait(3500);
     await shot('rapor-kritik-risk-acik');
     await goMore('more-ncrs'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);

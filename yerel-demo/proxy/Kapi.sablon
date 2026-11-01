@@ -1,0 +1,45 @@
+# GoverHub yerel demo — tünel kapısı. ayarla.sh bu şablondan /data/goverhub/Caddyfile üretir.
+# Tünel (cloudflared) yalnızca bu kapsayıcıya ulaşabilir. Çerezi olmayan her istek burada 403 alır;
+# geçen istekler iç ağdan uygulamaya (proxy:8080) iletilir. Veritabanına ve API'ye doğrudan yol yoktur.
+{
+	admin localhost:2019
+	auto_https off
+	persist_config off
+}
+
+:8081 {
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		Strict-Transport-Security "max-age=86400"
+		-Server
+	}
+	request_body {
+		max_size 16MB
+	}
+	route {
+		@robots path /robots.txt
+		handle @robots {
+			respond "User-agent: *
+Disallow: /
+" 200
+		}
+		@davet path /erisim/__ANAHTAR__
+		handle @davet {
+			header Set-Cookie "gh_yerel_erisim=__CEREZ__; Path=/; Max-Age=86400; HttpOnly; Secure; SameSite=Lax"
+			header Cache-Control "no-store"
+			redir * / 302
+		}
+		@erisimYok not header_regexp Cookie (^|;\s*)gh_yerel_erisim=__CEREZ__(;|$)
+		handle @erisimYok {
+			header Content-Type "text/html; charset=utf-8"
+			header Cache-Control "no-store"
+			respond "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>GoverHub demo</title><body style='font-family:system-ui;padding:24px;max-width:480px;margin:auto;background:#000;color:#f2f2f2'><h1 style='font-size:20px;color:#c6f432'>GoverHub yerel demo</h1><p>Bu adres yalnızca davet bağlantısıyla açılır. Size verilen bağlantıyı kullanın.</p></body>" 403
+		}
+		handle {
+			reverse_proxy proxy:8080
+		}
+	}
+}

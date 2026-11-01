@@ -1,0 +1,9 @@
+# Windows betikleri CRLF olarak saklanır ve dönüştürülmez (ZIP indirmede de bozulmasın).
+*.cmd -text
+*.ps1 -text
+# Kapsayıcı içinde çalışan dosyalar her zaman LF (Windows'ta git ile çekilse de).
+*.sh text eol=lf
+yerel-demo/proxy/* text eol=lf
+yerel-demo/db/* text eol=lf
+yerel-demo/Dockerfile text eol=lf
+yerel-demo/compose.yaml text eol=lf

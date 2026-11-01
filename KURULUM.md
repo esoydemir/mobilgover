@@ -1,5 +1,7 @@
 # GoverHub — kurulum
 
+> **Windows'ta yalnızca denemek için en kolay yol:** `yerel-demo/README.md` (Docker Desktop + çift tıklama).
+>
 > Geliştirme ve demo kurulumu aşağıda. **Kontrollü pilot kurulumu için: `deploy/README.md`** ve ihtiyaç tablosu `docs/KURULUM_IHTIYACLARI.md`.
 
 ## 0. Teslim edilen paketten geri yükleme

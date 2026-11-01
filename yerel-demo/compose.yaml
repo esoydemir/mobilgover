@@ -1,0 +1,113 @@
+# GoverHub yerel demo (Windows + Docker Desktop). Yalnızca demo verisi; üretim için değildir.
+# Başlatma/durdurma için bu klasördeki .cmd dosyalarını kullanın (README.md).
+#
+# Dışarıya açık olan tek şey: 127.0.0.1:8080 (yalnızca bu bilgisayar).
+# PostgreSQL, API ve Caddy yönetim arayüzü hiçbir porta yayınlanmaz.
+# Telefon testi için tünel açılırsa, tünel yalnızca erişim kapısına ulaşır (tunel-ac.cmd).
+# Kayıtlar adlandırılmış birimlerde durur; durdurma ve yeniden başlatma onları silmez.
+# Silmenin tek yolu: sifirla.cmd
+
+name: goverhub-demo
+
+services:
+  db:
+    build: { context: .., dockerfile: yerel-demo/Dockerfile, target: db }
+    image: goverhub-demo-db:yerel
+    restart: unless-stopped
+    environment:
+      # Yerel demoya özel; veritabanı hiçbir porta yayınlanmaz.
+      POSTGRES_PASSWORD: yerel-demo-postgres
+    volumes:
+      - veritabani:/var/lib/postgresql/data
+    networks: [veri]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "goverhub_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build: { context: .., dockerfile: yerel-demo/Dockerfile, target: app }
+    image: goverhub-demo-app:yerel
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://goverhub_app:yerel-demo-app@db:5432/goverhub_demo
+      DATABASE_OWNER_URL: postgres://goverhub_owner:yerel-demo-owner@db:5432/goverhub_demo
+      EVIDENCE_DIR: /var/lib/goverhub/kanit
+      PORT: "3000"
+      # Kapsayıcı içinde tüm arabirimler; iç ağ dışında hiçbir yere yayınlanmaz.
+      HOST: 0.0.0.0
+      TRUST_PROXY: 172.30.51.10
+      DEMO_MODE: "true"
+      DEMO_LOGIN_DOMAIN: demo.goverhub.test
+      MAIL_TRANSPORT: dev_outbox
+      MAIL_PRODUCTION_READY: "false"
+      MFA_REQUIRED_FOR_PLATFORM: "false"
+      TZ: Europe/Istanbul
+    volumes:
+      - kanit:/var/lib/goverhub/kanit
+      - ayar:/var/lib/goverhub/ayar
+    networks: [veri, web]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  proxy:
+    build: { context: .., dockerfile: yerel-demo/Dockerfile, target: proxy }
+    image: goverhub-demo-proxy:yerel
+    restart: unless-stopped
+    depends_on:
+      app: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      ROL: vekil
+    networks:
+      web: { ipv4_address: 172.30.51.10 }
+
+  # ── Aşağıdaki ikisi yalnızca tunel-ac.cmd ile başlar (telefon testi) ──
+
+  # Erişim kapısı: davet bağlantısıyla yazılan çerezi olmayan her isteği 403 ile durdurur.
+  kapi:
+    build: { context: .., dockerfile: yerel-demo/Dockerfile, target: proxy }
+    image: goverhub-demo-proxy:yerel
+    profiles: [tunel]
+    restart: "no"
+    depends_on:
+      proxy: { condition: service_started }
+    environment:
+      ROL: kapi
+    volumes:
+      - kapi:/data
+    networks: [web, tunel]
+
+  # Geçici, ücretsiz, hesapsız Cloudflare tüneli. Yalnızca "tunel" ağındadır: ulaşabildiği tek yer
+  # kapının 8081 portudur (uygulama, API ve veritabanı bu ağda değildir).
+  # Bilgisayar ve Docker açıkken çalışır; her açılışta adres değişir.
+  tunnel:
+    image: cloudflare/cloudflared:2024.12.2
+    profiles: [tunel]
+    restart: "no"
+    command: ["tunnel", "--no-autoupdate", "--protocol", "http2", "--url", "http://kapi:8081"]
+    depends_on: [kapi]
+    networks: [tunel]
+
+networks:
+  # Veritabanı ağı internete kapalı.
+  veri: { internal: true }
+  web:
+    ipam:
+      config: [{ subnet: 172.30.51.0/24 }]
+  # Tünel ile kapı arasındaki ağ.
+  tunel: {}
+
+volumes:
+  veritabani:
+  kanit:
+  ayar:
+  kapi:
