@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [goverhub-mobile]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: Sunucu — tür kontrolü ve testler (gerçek PostgreSQL 16)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Throwaway database inside this CI job only; not a secret.
+      PGPASSWORD: postgres
+      TEST_DATABASE_URL: postgres://goverhub_app:ci-only@localhost:5432/goverhub_test
+      TEST_DATABASE_OWNER_URL: postgres://goverhub_owner:ci-only@localhost:5432/goverhub_test
+      TEST_RESTORE_DATABASE_URL: postgres://goverhub_app:ci-only@localhost:5432/goverhub_restore_test
+      TEST_RESTORE_DATABASE_OWNER_URL: postgres://goverhub_owner:ci-only@localhost:5432/goverhub_restore_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            mobile/package-lock.json
+      - name: PostgreSQL rolleri ve test veritabanları
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE goverhub_owner LOGIN PASSWORD 'ci-only'" \
+            -c "CREATE ROLE goverhub_app LOGIN PASSWORD 'ci-only'" \
+            -c "CREATE DATABASE goverhub_test OWNER goverhub_owner" \
+            -c "CREATE DATABASE goverhub_restore_test OWNER goverhub_owner"
+          psql -h localhost -U postgres -tAc "SHOW server_version"
+          pg_dump --version
+          pg_restore --version
+      - name: Bağımlılıklar
+        working-directory: server
+        run: npm ci
+      - name: Tür kontrolü
+        working-directory: server
+        run: npm run typecheck
+      - name: Testler (birim + gerçek PostgreSQL ve HTTP entegrasyonu)
+        working-directory: server
+        run: npx vitest run --reporter=default --reporter=junit --outputFile.junit=test-results.xml
+      - name: Test sonuçları
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-test-results
+          path: server/test-results.xml
+          if-no-files-found: ignore
+
+  mobile:
+    name: Mobil — tür kontrolü ve web derlemesi
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Bağımlılıklar
+        working-directory: mobile
+        run: npm ci
+      - name: Tür kontrolü
+        working-directory: mobile
+        run: npx tsc --noEmit
+      - name: Web derlemesi
+        working-directory: mobile
+        env:
+          EXPO_NO_TELEMETRY: '1'
+          EXPO_PUBLIC_API_URL: https://example.invalid/api
+        run: npx expo export --platform web
+      - name: Derleme özeti
+        working-directory: mobile
+        run: du -sh dist && ls dist | head
