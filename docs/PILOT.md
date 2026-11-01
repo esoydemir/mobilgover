@@ -45,7 +45,7 @@ Kayıt: `e2e/pilot-walkthrough.js` ve `e2e/offline-sync.js`. Ortam: demo modu, g
 | Uçtan uca arayüz gösterimi | `e2e/*` | 2 akış × 3 profil | Gerçek web arayüzü + API + PostgreSQL; masaüstü 390 px, Pixel 7 ve iPhone 14 öykünmesi; yatay taşma kontrolü; `secure-context.js` https/http farkı | Otomatik doğrulama paketi değil; **gerçek telefon değil** (bkz. `TELEFON_TESTI.md`) |
 | Mobil birim testi | — | 0 | — | Ekran bileşenleri için ayrı birim testi yok |
 
-Son çalıştırma: 146/146 sunucu testi geçti (31 birim + 115 entegrasyon). Sunucu ve mobil tür kontrolü temiz. Mutasyon kontrolü yapıldı: pazar yeri süre korumaları, çevrimdışı motorun dört koruması, yedeklemenin üç koruması (snapshot, nesne adı doğrulaması, yarım dosyanın yeniden kullanılmaması) ve SMTP'nin üç koruması (zorunlu TLS, adres gizleme, 503) geçici olarak kaldırıldığında ilgili testler kırıldı, geri alınınca geçti.
+Son çalıştırma **GitHub Actions'ta** (CI, commit `169167f`, https://github.com/esoydemir/mobilgover/actions/runs/41302566948): 152/152 sunucu testi geçti (31 birim + 121 entegrasyon, gerçek PostgreSQL 16.15). Sunucu ve mobil tür kontrolü ile web derlemesi de geçti. CI her gönderimde `.github/workflows/ci.yml` ile çalışır. Mutasyon kontrolü yapıldı: pazar yeri süre korumaları, çevrimdışı motorun dört koruması, yedeklemenin üç koruması (snapshot, nesne adı doğrulaması, yarım dosyanın yeniden kullanılmaması) ve SMTP'nin üç koruması (zorunlu TLS, adres gizleme, 503) geçici olarak kaldırıldığında ilgili testler kırıldı, geri alınınca geçti.
 
 ## 4. Zorunlu senaryoların güncel durumu
 
