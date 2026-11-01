@@ -1,7 +1,6 @@
 import { loadConfig } from '../config';
 import { Db } from '../db/pool';
-import { localDay } from '../domain/schedule';
-import { generateTasks } from '../services/tasks';
+import { topUpAllSites } from '../services/horizon';
 import { seedDemoCompany, seedDemoProvider, seedPlatform } from './demo';
 
 /**
@@ -37,20 +36,29 @@ try {
     console.log('Demo verisi yüklendi. Giriş adresleri (kod demo kutusundan alınır):');
     for (const [role, email] of Object.entries({ ...DEMO_EMAILS, provider: 'uzman@demo.goverhub.test' })) console.log(`  ${role.padEnd(15)} ${email}`);
   }
-  // On every start: top up today's and the next 30 days' tasks for demo businesses, so a demo
-  // started weeks later still has work for today. Only adds missing tasks; never changes or deletes.
-  const today = localDay(new Date(), 'Europe/Istanbul');
-  const in30 = localDay(new Date(Date.now() + 30 * 86_400_000), 'Europe/Istanbul');
-  const sites = await db.system(async tx => (await tx.query<{ company_id: string; id: string }>(
-    `SELECT s.company_id, s.id FROM sites s JOIN companies c ON c.id = s.company_id WHERE c.is_demo`)).rows);
-  let created = 0;
-  for (const s of sites) {
-    try {
-      const r = await db.tenant(s.company_id, tx => generateTasks(tx, s.company_id, s.id, today, in30));
-      created += Number((r as { created?: number }).created ?? 0);
-    } catch (e) {
-      console.log(`Görev üretimi atlandı (şube ${s.id}): ${(e as Error).message}`);
-    }
-  }
-  console.log(`Demo görevleri: ${created} yeni görev eklendi (${today} – ${in30}).`);
+  // On every start: top up the next 30 days of tasks (adds missing ones; never changes or deletes).
+  const r = await topUpAllSites(db, 30);
+  console.log(`Demo görevleri: ${r.created} yeni görev eklendi (${r.sites} şube, önümüzdeki 30 gün).`);
+  for (const f of r.failed) console.log(`Görev üretimi atlandı (şube ${f.siteId}): ${f.error}`);
+
+  // Demo: make the staff member responsible for the daily glove check once, so the staff role has
+  // work to see. Only when nobody has been made responsible for anything at that site yet.
+  const assigned = await db.system(async tx => {
+    const row = (await tx.query(
+      `SELECT c.id AS company_id, s.id AS site_id, u.id AS staff_id, o.id AS owner_id
+         FROM companies c JOIN sites s ON s.company_id = c.id
+         JOIN users u ON u.email = 'personel@demo.goverhub.test'
+         JOIN memberships m ON m.user_id = u.id AND m.company_id = c.id AND m.status = 'active'
+         JOIN users o ON o.email = 'sahip@demo.goverhub.test'
+        WHERE c.is_demo AND c.name = 'Kahve Durağı (DEMO)'
+          AND NOT EXISTS (SELECT 1 FROM task_assignment_defaults d WHERE d.site_id = s.id)
+        LIMIT 1`)).rows[0];
+    if (!row) return 0;
+    await tx.query(`INSERT INTO task_assignment_defaults (company_id, site_id, template_code, equipment_id, user_id, set_by) VALUES ($1,$2,'glove_daily',NULL,$3,$4)`,
+      [row.company_id, row.site_id, row.staff_id, row.owner_id]);
+    return (await tx.query(`UPDATE tasks SET assignee_id = $3, assigned_by = $4, assigned_at = now()
+                             WHERE company_id = $1 AND site_id = $2 AND template_code = 'glove_daily' AND status = 'open' AND assignee_id IS NULL`,
+      [row.company_id, row.site_id, row.staff_id, row.owner_id])).rowCount ?? 0;
+  });
+  if (assigned) console.log(`Demo: eldiven kontrolü personele (personel@) atandı; ${assigned} açık görev.`);
 } finally { await db.close(); }

@@ -138,8 +138,8 @@ export default function HomeRoute() {
         <Text style={type(10.5, 600, { ls: 0.12, color: C.t3 })}>BUGÜNÜN GÖREVLERİ</Text>
         <Tap onPress={() => goRoot('/tasks')} hitSlop={8}><Text style={type(11, 600, { ls: 0.08, color: C.t2 })}>TÜMÜ →</Text></Tap>
       </View>
-      {tasks.data && derived.todays.length === 0 ? <Empty title="Bugün için görev yok" body="Görevler, uygulanan yükümlülüklerden oluşturulur. Profil yanıtlarını ve ekipmanları kontrol et." /> : null}
-      {derived.todays.map(t => <TaskLine key={t.id} t={t} />)}
+      {tasks.data && derived.todays.length === 0 ? <Empty title="Bugün için görev yok" body={isStaff ? 'Sana atanmış görev yok. Yöneticin bir kontrolü sana atadığında burada görünür.' : 'Görevler, uygulanan yükümlülüklerden oluşturulur. Profil yanıtlarını ve ekipmanları kontrol et.'} /> : null}
+      {derived.todays.map(t => <TaskLine key={t.id} t={t} showAssignee={!isStaff} />)}
 
       {derived.upcoming.length > 0 && (
         <Card style={{ marginTop: 12 }}>
@@ -178,7 +178,7 @@ function Ring({ done, total }: { done: number; total: number }) {
   );
 }
 
-export function TaskLine({ t }: { t: Task }) {
+export function TaskLine({ t, showAssignee = false }: { t: Task; showAssignee?: boolean }) {
   const done = t.status === 'done';
   return (
     <Tap testID={`task-${t.id}`} onPress={() => router.push(`/task/${t.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: 1, borderColor: C.bd, borderRadius: 24, backgroundColor: C.card, paddingVertical: 16, paddingHorizontal: 17 }}>
@@ -189,7 +189,8 @@ export function TaskLine({ t }: { t: Task }) {
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={type(14.5, 600, { ls: -0.01 })}>{t.title}</Text>
         <Text style={[type(12, 400, { color: C.t3 }), { marginTop: 3 }]}>
-          {[t.equipment_name, fmtTime(t.due_at), done ? (t.outcome === 'nonconforming' ? 'yapıldı · uygunsuz' : 'yapıldı · uygun') : t.status === 'missed' ? 'kaçırıldı' : null].filter(Boolean).join(' · ')}
+          {[t.equipment_name, fmtTime(t.due_at), done ? (t.outcome === 'nonconforming' ? 'yapıldı · uygunsuz' : 'yapıldı · uygun') : t.status === 'missed' ? 'kaçırıldı' : null,
+            showAssignee && !done ? (t.assignee_name ?? 'atanmadı') : null].filter(Boolean).join(' · ')}
         </Text>
       </View>
       <SevPill sev={t.severity === 'critical' ? 'crit' : t.severity === 'major' ? 'imp' : 'low'} />

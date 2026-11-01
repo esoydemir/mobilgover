@@ -1,7 +1,7 @@
 import type { Tx } from '../db/pool';
 import { decide } from '../domain/applicability';
 import type { Facts } from '../domain/conditions';
-import { forbidden, invalid, notFound } from '../domain/errors';
+import { AppError, forbidden, invalid, notFound } from '../domain/errors';
 import { canonical } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
@@ -33,7 +33,7 @@ export type RecomputeResult = { changed: { ruleCode: string; from: string | null
  * nothing (safe to run repeatedly); changed decisions append a new row and
  * leave the old one, and the tasks done under it, untouched.
  */
-export async function recomputeSite(tx: Tx, companyId: string, siteId: string, actorId: string | null, now = new Date()): Promise<RecomputeResult> {
+export async function recomputeSite(tx: Tx, companyId: string, siteId: string, actorId: string | null, now = new Date(), forceRuleId: string | null = null): Promise<RecomputeResult> {
   const onDate = today(now);
   const facts = await currentFacts(tx, companyId, siteId);
   const rules = await tx.query(
@@ -44,11 +44,13 @@ export async function recomputeSite(tx: Tx, companyId: string, siteId: string, a
   for (const rv of rules.rows) {
     const prev = current.get(rv.rule_id);
     // A manual decision stands until the rule itself changes; it is never silently overwritten.
-    if (prev && prev.decided_by !== 'engine' && prev.rule_version_id === rv.id) continue;
+    // (forceRuleId: an authorised person withdrew their manual decision, so the engine decides again.)
+    const forced = forceRuleId === rv.rule_id;
+    if (!forced && prev && prev.decided_by !== 'engine' && prev.rule_version_id === rv.id) continue;
     const d = decide({ ruleVersionId: rv.id, condition: rv.condition, effectiveFrom: rv.effective_from, effectiveTo: rv.effective_to, ambiguityNote: rv.ambiguity_note }, facts, onDate);
     if (!d) continue;
     const factsSnap = snapshot(facts, rv.required_facts);
-    if (prev && prev.rule_version_id === rv.id && prev.decision === d.decision
+    if (!forced && prev && prev.rule_version_id === rv.id && prev.decision === d.decision
         // jsonb reorders object keys, so compare canonical forms.
         && canonical(prev.missing_facts) === canonical(d.missingFacts)
         && canonical(prev.facts_snapshot) === canonical(factsSnap)) continue;
@@ -96,8 +98,13 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
   const history = (await tx.query(
     `SELECT id, decision, decided_by, reason, decided_at, rule_version_id FROM obligations
       WHERE company_id = $1 AND site_id = $2 AND rule_id = $3 ORDER BY decided_at`, [companyId, o.site_id, o.rule_id])).rows;
+  const latest = history[history.length - 1];
+  const manualName = o.decided_by !== 'engine'
+    ? (await tx.query<{ display_name: string }>(`SELECT display_name FROM users WHERE id::text = $1`, [o.decided_by])).rows[0]?.display_name ?? null : null;
   return {
-    obligation: { id: o.id, decision: o.decision, reason: o.reason, decidedBy: o.decided_by, decidedAt: o.decided_at, missingFacts: o.missing_facts },
+    obligation: { id: o.id, decision: o.decision, reason: o.reason, decidedBy: o.decided_by, decidedByName: manualName, decidedAt: o.decided_at, missingFacts: o.missing_facts,
+      isCurrent: latest?.id === o.id, currentId: latest?.id ?? o.id, manual: o.decided_by !== 'engine',
+      canOverride: can(p, 'obligation.override', { companyId, siteId: o.site_id }).ok },
     rule: {
       code: rv.code, version: rv.version, status: rv.status, kind: rv.kind, isExample: rv.is_example,
       title: rv.obligation_title, summary: rv.obligation_summary, effectiveFrom: rv.effective_from, effectiveTo: rv.effective_to,
@@ -125,4 +132,22 @@ export async function overrideNotApplicable(tx: Tx, p: Principal, companyId: str
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'obligation.overridden', entityType: 'obligation', entityId: ins.rows[0]!.id,
     payload: { previous: o.decision, decision: 'not_applicable', reason } });
   return ins.rows[0]!.id;
+}
+
+/**
+ * Withdraws a manual "does not apply" decision: the rule engine decides again from the
+ * current facts. Nothing is deleted; the manual decision stays in the history.
+ */
+export async function revertOverride(tx: Tx, p: Principal, companyId: string, obligationId: string) {
+  const o = (await tx.query(`SELECT * FROM obligations WHERE id = $1 AND company_id = $2`, [obligationId, companyId])).rows[0];
+  if (!o) throw notFound('Yükümlülük');
+  if (!can(p, 'obligation.override', { companyId, siteId: o.site_id }).ok) throw forbidden();
+  const current = (await currentObligations(tx, companyId, o.site_id)).find(x => x.rule_id === o.rule_id);
+  if (!current || current.id !== o.id) throw new AppError(409, 'NOT_CURRENT', 'Bu karar artık geçerli karar değil; güncel kararı aç.');
+  if (o.decided_by === 'engine') throw new AppError(409, 'NOT_MANUAL', 'Bu karar kural motorunundur; geri alınacak elle verilmiş bir karar yok.');
+  await recomputeSite(tx, companyId, o.site_id, p.userId, new Date(), o.rule_id);
+  const now = (await currentObligations(tx, companyId, o.site_id)).find(x => x.rule_id === o.rule_id)!;
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'obligation.override_withdrawn', entityType: 'obligation', entityId: now.id,
+    payload: { withdrawn: o.id, decision: now.decision } });
+  return { id: now.id as string, decision: now.decision as string, siteId: o.site_id as string };
 }

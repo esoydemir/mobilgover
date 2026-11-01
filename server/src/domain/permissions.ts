@@ -10,7 +10,7 @@ export type Action =
   | 'profile.read' | 'profile.write' | 'profile.verify'
   | 'obligation.read' | 'obligation.override'
   | 'equipment.read' | 'equipment.write'
-  | 'task.read' | 'task.execute' | 'task.generate'
+  | 'task.read' | 'task.execute' | 'task.generate' | 'task.assign'
   | 'ncr.read' | 'ncr.act' | 'ncr.verify_close'
   | 'indicators.read' | 'audit.export' | 'audit.verify'
   | 'members.manage' | 'service.request';
@@ -18,13 +18,13 @@ export type Action =
 /** What each company role may do. `site` = only within the member's site when the membership is site-scoped. */
 export const ROLE_MATRIX: Record<CompanyRole, Action[]> = {
   owner: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
+    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
     'members.manage', 'service.request'],
   hq_manager: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
+    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
     'members.manage', 'service.request'],
   site_manager: ['profile.read', 'obligation.read', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'service.request'],
+    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'service.request'],
   // Staff see and do their own assigned work, including emergency instructions; no scores, penalties or other people's data.
   staff: ['task.read', 'task.execute', 'ncr.read', 'ncr.act', 'equipment.read'],
 };

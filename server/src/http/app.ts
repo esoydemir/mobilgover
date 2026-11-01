@@ -4,12 +4,14 @@ import { redact } from '../ops/notify';
 import type { Config } from '../config';
 import type { Db, Tx } from '../db/pool';
 import { AppError, forbidden, invalid, notFound } from '../domain/errors';
+import { localDay } from '../domain/schedule';
+import { appendAudit } from '../services/audit';
 import { canonical, sha256 } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { uploadContent } from '../services/evidence';
 import { closeNonconformity, completeStep, getNonconformity } from '../services/nonconformities';
-import { currentObligations, explain, overrideNotApplicable, recomputeSite } from '../services/obligations';
+import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride } from '../services/obligations';
 import { confirmTotpSetup, listSessions, logout, revokeOtherSessions, revokeSession, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
 import { acceptInvitation, addMember, createCompany, listMyCompanies, listMyInvitations, setMemberStatus } from '../services/companies';
 import type { Mailer } from '../services/mail';
@@ -20,7 +22,7 @@ import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profil
 import { auditExport, indicators } from '../services/reporting';
 import { approve, areaReview, createDraft, draftSchema, listRuleVersions, previewImpact, publish, submitForReview } from '../services/rules';
 import { FACTS } from '../domain/facts';
-import { addEvidence, completeTask, generateTasks, listTasks, recordMeasurement, taskDetail } from '../services/tasks';
+import { addEvidence, assignableMembers, assignTask, completeTask, generateTasks, listTasks, recordMeasurement, taskDetail } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
 
 declare module 'fastify' {
@@ -278,6 +280,55 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     }, 201);
   });
 
+  // Edit a unit: rename, renew calibration, take out of use or back into use.
+  // Taking a unit out of use cancels its open checks from today on; past records stay as they were.
+  app.patch('/companies/:companyId/equipment/:id', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ name: z.string().trim().min(2).max(120).optional(), serial: z.string().max(120).nullable().optional(),
+      calibratedUntil: z.iso.date().nullable().optional(), active: z.boolean().optional(),
+      reason: z.string().trim().max(500).optional() }).parse(req.body);
+    return mutate(req, reply, companyId, async tx => {
+      const e = (await tx.query(`SELECT * FROM equipment WHERE id = $1 AND company_id = $2`, [id, companyId])).rows[0];
+      if (!e || !can(req.principal, 'equipment.read', { companyId, siteId: e.site_id }).ok) throw notFound('Ekipman');
+      if (!can(req.principal, 'equipment.write', { companyId, siteId: e.site_id }).ok) throw forbidden();
+      if (b.active === false && e.active && (b.reason ?? '').length < 5) throw new AppError(422, 'INVALID', 'Kullanımdan kaldırma için gerekçe yaz (en az 5 karakter).');
+      const siteTz = (await tx.query<{ timezone: string }>(`SELECT timezone FROM sites WHERE id = $1`, [e.site_id])).rows[0]!.timezone;
+      const next = { name: b.name ?? e.name, serial: b.serial === undefined ? e.serial : b.serial,
+        calibrated_until: b.calibratedUntil === undefined ? e.calibrated_until : b.calibratedUntil, active: b.active ?? e.active };
+      await tx.query(`UPDATE equipment SET name = $3, serial = $4, calibrated_until = $5, active = $6 WHERE id = $1 AND company_id = $2`,
+        [id, companyId, next.name, next.serial, next.calibrated_until, next.active]);
+      let cancelledTasks = 0;
+      if (e.active && !next.active) {
+        // "From today on" in the site's own time zone; earlier (overdue) checks stay visible as missed work.
+        cancelledTasks = (await tx.query(`UPDATE tasks SET status = 'cancelled', status_reason = $3
+          WHERE company_id = $1 AND equipment_id = $2 AND status = 'open'
+            AND due_at >= (date_trunc('day', now() AT TIME ZONE $4) AT TIME ZONE $4)`,
+          [companyId, id, `Ekipman kullanımdan kaldırıldı: ${b.reason}`, siteTz])).rowCount ?? 0;
+      }
+      let createdTasks = 0;
+      if (e.active !== next.active) {
+        await syncEquipmentTypes(tx, companyId, e.site_id);
+        await recomputeSite(tx, companyId, e.site_id, req.principal.userId);
+        if (next.active) {
+          // Back in use: its checks come back right away for the usual horizon.
+          const now = new Date();
+          await generateTasks(tx, companyId, e.site_id, localDay(now, siteTz), localDay(new Date(now.getTime() + 14 * 86_400_000), siteTz));
+          createdTasks = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM tasks WHERE company_id = $1 AND equipment_id = $2 AND status = 'open'
+              AND due_at >= (date_trunc('day', now() AT TIME ZONE $3) AT TIME ZONE $3)`, [companyId, id, siteTz])).rows[0]!.n;
+        }
+      }
+      const changes: Record<string, unknown> = {};
+      for (const k of ['name', 'serial', 'calibrated_until', 'active'] as const) {
+        const before = e[k] instanceof Date ? (e[k] as Date).toISOString().slice(0, 10) : e[k];
+        if (String(before ?? '') !== String(next[k] ?? '')) changes[k] = { from: before ?? null, to: next[k] ?? null };
+      }
+      await appendAudit(tx, { companyId, actorId: req.principal.userId, eventType: 'equipment.updated', entityType: 'equipment', entityId: id,
+        payload: { changes, reason: b.reason ?? null, cancelledTasks } });
+      return { id, ...next, cancelledTasks, createdTasks };
+    });
+  });
+
   app.get('/companies/:companyId/sites/:siteId/equipment', async req => {
     const companyId = company(req);
     const { siteId } = z.object({ siteId: uuid }).parse(req.params);
@@ -306,6 +357,21 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { reason } = z.object({ reason: z.string() }).parse(req.body);
     return mutate(req, reply, companyId, async tx => ({ id: await overrideNotApplicable(tx, req.principal, companyId, id, reason) }), 201);
   });
+  app.post('/companies/:companyId/obligations/:id/withdraw-override', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, async tx => {
+      const r = await revertOverride(tx, req.principal, companyId, id);
+      let createdTasks = 0;
+      if (r.decision === 'applies') {
+        // Applies again: its checks come back right away for the usual horizon.
+        const tz = (await tx.query<{ timezone: string }>(`SELECT timezone FROM sites WHERE id = $1`, [r.siteId])).rows[0]!.timezone;
+        const now = new Date();
+        createdTasks = (await generateTasks(tx, companyId, r.siteId, localDay(now, tz), localDay(new Date(now.getTime() + 14 * 86_400_000), tz))).created;
+      }
+      return { id: r.id, decision: r.decision, createdTasks };
+    });
+  });
 
   // ── Tasks ──
   app.post('/companies/:companyId/tasks/generate', async (req, reply) => {
@@ -325,6 +391,17 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const companyId = company(req);
     const { taskId } = z.object({ taskId: uuid }).parse(req.params);
     return db.tenant(companyId, tx => taskDetail(tx, req.principal, companyId, taskId));
+  });
+  app.post('/companies/:companyId/tasks/:taskId/assign', async (req, reply) => {
+    const companyId = company(req);
+    const { taskId } = z.object({ taskId: uuid }).parse(req.params);
+    const b = z.object({ userId: uuid.nullable(), applyToFuture: z.boolean().default(false) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => assignTask(tx, req.principal, companyId, taskId, b));
+  });
+  app.get('/companies/:companyId/sites/:siteId/assignees', async req => {
+    const companyId = company(req);
+    const { siteId } = z.object({ siteId: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => assignableMembers(tx, req.principal, companyId, siteId));
   });
   app.post('/companies/:companyId/tasks/:taskId/measurements', async (req, reply) => {
     const companyId = company(req);

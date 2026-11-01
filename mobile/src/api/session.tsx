@@ -24,7 +24,7 @@ type Session = {
   refresh: () => Promise<void>;
   selectCompany: (id: string) => void;
   createCompany: (name: string, siteName: string) => Promise<{ companyId: string; siteId: string }>;
-  call: <T = any>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, idempotencyKey?: string) => Promise<T>;
+  call: <T = any>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: string, body?: unknown, idempotencyKey?: string) => Promise<T>;
 };
 
 const Ctx = createContext<Session | null>(null);
@@ -66,7 +66,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const company = companies.find(c => c.id === stored.companyId) ?? companies[0] ?? null;
     const role = company?.roles[0]?.role ?? null;
     const siteId = company ? (company.roles.find(r => r.siteId)?.siteId ?? company.sites[0]?.id ?? null) : null;
-    const call = <T,>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, idempotencyKey?: string) =>
+    const call = <T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: string, body?: unknown, idempotencyKey?: string) =>
       api<T>(method, path, { token: stored.token, body, idempotencyKey });
 
     const finish = async (token: string) => {

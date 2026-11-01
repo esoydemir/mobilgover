@@ -2,6 +2,7 @@ import { loadConfig } from './config';
 import { assertDemoDatabase } from './db/guards';
 import { Db } from './db/pool';
 import { buildApp } from './http/app';
+import { startTaskHorizon } from './services/horizon';
 import { DevOutboxMailer, type Mailer } from './services/mail';
 import { SmtpMailer } from './services/smtp';
 import { LocalStore } from './storage/local';
@@ -15,3 +16,6 @@ if (config.mailTransport === 'smtp' && !config.mailProductionReady) log({ level:
 const app = buildApp({ db, store: new LocalStore(config.evidenceDir), mailer, config, log });
 await app.listen({ port: config.port, host: config.host });
 console.log(`GoverHub API http://localhost:${config.port} (demo mode: ${config.demoMode})`);
+// Keep each site's upcoming checks generated (adds missing tasks only; hourly).
+const horizonDays = Number(process.env.TASK_HORIZON_DAYS ?? 14);
+if (horizonDays > 0) startTaskHorizon(db, { days: Math.min(horizonDays, 62), everyMs: 60 * 60_000, log });

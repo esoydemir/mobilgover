@@ -33,9 +33,16 @@ export async function generateTasks(tx: Tx, companyId: string, siteId: string, f
         : [null];
       for (const equipmentId of targets) {
         for (const occ of occurrences(rec, cal, fromDay, toDay)) {
+          // The person responsible for this check (if set and still an eligible active member) gets the task.
           const r = await tx.query(
-            `INSERT INTO tasks (company_id, site_id, obligation_id, template_id, rule_id, template_code, equipment_id, period_key, due_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
+            `INSERT INTO tasks (company_id, site_id, obligation_id, template_id, rule_id, template_code, equipment_id, period_key, due_at, assignee_id, assigned_by, assigned_at)
+             SELECT $1,$2,$3,$4,$5,$6,$7::uuid,$8,$9, d.user_id, d.set_by, CASE WHEN d.user_id IS NULL THEN NULL ELSE now() END
+               FROM (SELECT 1) one
+               LEFT JOIN task_assignment_defaults d
+                 ON d.company_id = $1 AND d.site_id = $2 AND d.template_code = $6 AND d.equipment_id IS NOT DISTINCT FROM $7::uuid
+                AND EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = d.user_id AND m.company_id = $1 AND m.status = 'active'
+                              AND (m.site_id IS NULL OR m.site_id = $2))
+             ON CONFLICT DO NOTHING`,
             [companyId, siteId, o.id, t.id, o.rule_id, t.code, equipmentId, occ.periodKey, occ.dueAt.toISOString()]);
           if (r.rowCount) created++; else existing++;
         }
@@ -64,8 +71,9 @@ export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { si
   const assignedOnly = onlyAssignedTasks(p, companyId);
   const r = await tx.query(
     `SELECT t.id, t.site_id, t.status, t.outcome, t.due_at, t.period_key, t.review_flag, t.assignee_id, t.equipment_id,
-            tt.title, tt.severity, e.name AS equipment_name
+            tt.title, tt.severity, e.name AS equipment_name, au.display_name AS assignee_name
        FROM tasks t JOIN task_templates tt ON tt.id = t.template_id LEFT JOIN equipment e ON e.id = t.equipment_id
+       LEFT JOIN users au ON au.id = t.assignee_id
       WHERE t.company_id = $1 AND ($2::uuid IS NULL OR t.site_id = $2)
         AND ($3::timestamptz IS NULL OR t.due_at >= $3) AND ($4::timestamptz IS NULL OR t.due_at < $4)
         AND ($5::text IS NULL OR t.status = $5) AND (NOT $6 OR t.assignee_id = $7)
@@ -97,8 +105,72 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     emergencyInstruction: t.emergency_approved_by ? t.emergency_instruction : null,
     progress: assessEvidence(reqs, toCollected(c)),
     measurements: c.measurements, evidence: c.evidence, nonconformity: ncr,
-    completedBy: t.completed_by, completedAt: t.completed_at,
+    completedBy: t.completed_by, completedAt: t.completed_at, statusReason: t.status_reason,
+    assignee: t.assignee_id ? { id: t.assignee_id, name: await userName(tx, t.assignee_id) } : null,
+    // Who is responsible for this recurring check from now on (null = nobody set).
+    seriesResponsible: await seriesResponsible(tx, companyId, t.site_id, t.template_code, t.equipment_id),
+    canAssign: can(p, 'task.assign', { companyId, siteId: t.site_id }).ok,
   };
+}
+
+async function userName(tx: Tx, userId: string) {
+  return (await tx.query<{ display_name: string }>(`SELECT display_name FROM users WHERE id = $1`, [userId])).rows[0]?.display_name ?? null;
+}
+
+async function seriesResponsible(tx: Tx, companyId: string, siteId: string, templateCode: string, equipmentId: string | null) {
+  const d = (await tx.query(
+    `SELECT d.user_id, u.display_name FROM task_assignment_defaults d JOIN users u ON u.id = d.user_id
+      WHERE d.company_id = $1 AND d.site_id = $2 AND d.template_code = $3 AND d.equipment_id IS NOT DISTINCT FROM $4::uuid`,
+    [companyId, siteId, templateCode, equipmentId])).rows[0];
+  return d ? { id: d.user_id as string, name: d.display_name as string } : null;
+}
+
+/** Active members who may be given work at this site: company-wide roles, or anyone whose membership is this site. */
+export async function assignableMembers(tx: Tx, p: Principal, companyId: string, siteId: string) {
+  if (!can(p, 'task.assign', { companyId, siteId }).ok) throw forbidden();
+  return (await tx.query(
+    `SELECT DISTINCT ON (u.id) u.id, u.display_name, m.role
+       FROM memberships m JOIN users u ON u.id = m.user_id
+      WHERE m.company_id = $1 AND m.status = 'active' AND (m.site_id IS NULL OR m.site_id = $2)
+      ORDER BY u.id, m.role`, [companyId, siteId])).rows
+    .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || String(a.display_name).localeCompare(String(b.display_name), 'tr'));
+}
+const ROLE_ORDER = ['staff', 'site_manager', 'hq_manager', 'owner'];
+
+/**
+ * Assigns an open task (or clears the assignment). With `applyToFuture`, the person
+ * becomes responsible for this recurring check: later open tasks of the same check
+ * are reassigned and newly generated ones are assigned automatically.
+ */
+export async function assignTask(tx: Tx, p: Principal, companyId: string, taskId: string, b: { userId: string | null; applyToFuture: boolean }) {
+  const t = await loadTask(tx, p, companyId, taskId, 'task.read');
+  if (!can(p, 'task.assign', { companyId, siteId: t.site_id }).ok) throw forbidden('Görev atama yetkin yok.');
+  assertOpen(t);
+  if (b.userId) {
+    const ok = (await tx.query(
+      `SELECT 1 FROM memberships WHERE user_id = $1 AND company_id = $2 AND status = 'active' AND (site_id IS NULL OR site_id = $3)`,
+      [b.userId, companyId, t.site_id])).rowCount;
+    if (!ok) throw invalid('Bu kişi bu şubede görev alamaz (etkin üye değil ya da başka şubede).');
+  }
+  await tx.query(`UPDATE tasks SET assignee_id = $3, assigned_by = $4, assigned_at = now() WHERE id = $1 AND company_id = $2`,
+    [taskId, companyId, b.userId, p.userId]);
+  let alsoAssigned = 0;
+  if (b.applyToFuture) {
+    await tx.query(`DELETE FROM task_assignment_defaults WHERE company_id = $1 AND site_id = $2 AND template_code = $3 AND equipment_id IS NOT DISTINCT FROM $4::uuid`,
+      [companyId, t.site_id, t.template_code, t.equipment_id]);
+    if (b.userId) {
+      await tx.query(`INSERT INTO task_assignment_defaults (company_id, site_id, template_code, equipment_id, user_id, set_by) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [companyId, t.site_id, t.template_code, t.equipment_id, b.userId, p.userId]);
+    }
+    alsoAssigned = (await tx.query(
+      `UPDATE tasks SET assignee_id = $5, assigned_by = $6, assigned_at = now()
+        WHERE company_id = $1 AND site_id = $2 AND template_code = $3 AND equipment_id IS NOT DISTINCT FROM $4::uuid
+          AND status = 'open' AND due_at >= now() AND id <> $7 AND assignee_id IS DISTINCT FROM $5`,
+      [companyId, t.site_id, t.template_code, t.equipment_id, b.userId, p.userId, taskId])).rowCount ?? 0;
+  }
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'task.assigned', entityType: 'task', entityId: taskId,
+    payload: { assigneeId: b.userId, applyToFuture: b.applyToFuture, alsoAssigned } });
+  return { assigneeId: b.userId, alsoAssigned, seriesResponsible: b.applyToFuture ? (b.userId ? { id: b.userId, name: await userName(tx, b.userId) } : null) : undefined };
 }
 
 function toCollected(c: { measurements: any[]; evidence: any[] }) {

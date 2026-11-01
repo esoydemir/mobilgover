@@ -16,6 +16,7 @@ export type Company = {
 export type TaskRow = {
   id: string; site_id: string; status: 'open' | 'done' | 'missed' | 'cancelled'; outcome: 'conforming' | 'nonconforming' | null;
   due_at: string; period_key: string; review_flag: string | null; title: string; severity: 'minor' | 'major' | 'critical'; equipment_name: string | null;
+  assignee_id: string | null; assignee_name: string | null;
 };
 
 export type Requirement =
@@ -38,7 +39,13 @@ export type TaskDetail = {
   measurements: { id: string; value: number; unit: string; within_limit: boolean; measured_at: string; recorded_at: string; calibration_status: string }[];
   evidence: { id: string; kind: string; status: string; body: any; created_at: string; rejection_reason: string | null }[];
   nonconformity: { id: string; status: string; risk_level: string; depth: string } | null;
+  statusReason: string | null;
+  assignee: { id: string; name: string | null } | null;
+  seriesResponsible: { id: string; name: string } | null;
+  canAssign: boolean;
 };
+
+export type Assignee = { id: string; display_name: string; role: 'owner' | 'hq_manager' | 'site_manager' | 'staff' };
 
 export type Obligation = {
   id: string; siteId: string; rule: string; version: number; title: string; kind: string; isExample: boolean;

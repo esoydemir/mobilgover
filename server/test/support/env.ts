@@ -51,7 +51,7 @@ export type Env = Awaited<ReturnType<typeof freshEnv>>;
 
 /** Tiny HTTP helper around fastify.inject. */
 export function client(env: Env, token: string) {
-  const call = async (method: 'GET' | 'POST' | 'PUT', url: string, body?: unknown, headers: Record<string, string> = {}) => {
+  const call = async (method: 'GET' | 'POST' | 'PUT' | 'PATCH', url: string, body?: unknown, headers: Record<string, string> = {}) => {
     const isBuf = Buffer.isBuffer(body);
     const res = await env.app.inject({
       method, url, payload: isBuf ? body : body === undefined ? undefined : JSON.stringify(body),
@@ -63,6 +63,7 @@ export function client(env: Env, token: string) {
     get: (url: string) => call('GET', url),
     post: (url: string, body?: unknown, headers?: Record<string, string>) => call('POST', url, body ?? {}, headers),
     put: (url: string, body: Buffer, mime: string) => call('PUT', url, body, { 'content-type': mime }),
+    patch: (url: string, body: unknown) => call('PATCH', url, body),
   };
 }
 

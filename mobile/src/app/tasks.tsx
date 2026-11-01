@@ -14,7 +14,7 @@ type Filter = 'today' | 'late' | 'upcoming' | 'done';
 const FILTERS: [Filter, string][] = [['today', 'Bugün'], ['late', 'Gecikmiş'], ['upcoming', 'Yaklaşan'], ['done', 'Tamamlanan']];
 
 export default function TasksRoute() {
-  const { company, siteId } = useSession();
+  const { company, siteId, role } = useSession();
   const [filter, setFilter] = useState<Filter>('today');
   const today = startOfDay();
   const q = useApi<TaskRow[]>(company && siteId ? `/companies/${company.id}/tasks?siteId=${siteId}&from=${encodeURIComponent(addDays(today, -14).toISOString())}&to=${encodeURIComponent(addDays(today, 15).toISOString())}` : null);
@@ -36,8 +36,8 @@ export default function TasksRoute() {
       {q.stale ? <StaleNote /> : null}
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
-      {q.data && list.length === 0 ? <Empty title="Bu listede görev yok" /> : null}
-      {list.map(t => <TaskLine key={t.id} t={t} />)}
+      {q.data && list.length === 0 ? <Empty title="Bu listede görev yok" body={role === 'staff' ? 'Yalnızca sana atanan görevler görünür.' : undefined} /> : null}
+      {list.map(t => <TaskLine key={t.id} t={t} showAssignee={role !== 'staff'} />)}
       <Text style={[type(12, 400, { lh: 1.5, color: C.t3 }), { paddingTop: 8, paddingHorizontal: 4 }]}>
         "Yapıldı" ile "uygun" ayrı gösterilir: limit dışı sonuç da kayda geçer ve uygunsuzluk olarak izlenir.
       </Text>

@@ -54,7 +54,7 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
 |---|---|
 | `sahip@demo.goverhub.test` | İşletme sahibi: "Kahve Durağı (DEMO)" |
 | `mudur@demo.goverhub.test` | Şube yöneticisi |
-| `personel@demo.goverhub.test` | Personel |
+| `personel@demo.goverhub.test` | Personel (Elif): yalnızca kendisine atanan görevleri görür; demoda eldiven kontrolünün sorumlusu |
 | `uzman@demo.goverhub.test` | Hizmet sağlayıcı (soğutma teknisyeni, onaylı) |
 | `danisman@demo.goverhub.test` | Danışman (süreli erişim) |
 | `yazar@`, `onay@`, `yonetici@`, `pazar@`, `alan-uzmani@` | Platform rolleri (kural yazma ve onay, pazar yeri inceleme) |
@@ -92,7 +92,20 @@ Telefon bilgisayardaki `localhost` adresine ulaşamaz. Fotoğraf eklemek için d
 
 Telefonda denenecekler: `docs/TEST_ORTAMI.md` §4. Oradaki adres yerine tünel bağlantısını kullan.
 
-## 6. Nasıl çalışıyor
+## 6. Yeni sürüme güncelleme (kayıtlar silinmez)
+
+1. `durdur.cmd` dosyasına çift tıkla.
+2. GitHub'dan yeni ZIP'i indir (§2) ve **yeni bir klasöre** çıkar (ör. `C:\GoverHub-yeni`). Eski klasörü silmen gerekmez.
+3. Yeni klasördeki `yerel-demo\baslat.cmd` dosyasına çift tıkla.
+
+Kayıtlar klasörde değil, Docker'ın `goverhub-demo` adlı birimlerinde durur. Yeni sürüm aynı birimleri kullanır:
+- Açılışta veritabanı değişiklikleri yalnızca **eklenerek** uygulanır (`server/migrations`).
+- Demo verisi yeniden yüklenmez.
+- Eksik görevler tamamlanır.
+
+Güncellemeden sonra kayıtların yerinde olduğunu `durum.cmd` ve uygulamadaki listelerden görebilirsin. Hiçbir güncelleme `SIFIRLA-tum-demo-verisi.cmd` dosyasını çalıştırmaz.
+
+## 7. Nasıl çalışıyor
 
 ```
 Tarayıcı ──▶ 127.0.0.1:8080 ──▶ proxy (web + /api) ──▶ app (API) ──▶ db (PostgreSQL 16)
@@ -113,7 +126,7 @@ Telefon ──▶ trycloudflare ──▶ tunnel ──▶ kapi (davet çerezi) 
 
 `compose.yaml` içindeki veritabanı parolaları bu yerel demoya özeldir. Veritabanı hiçbir porta açılmaz.
 
-## 7. Sorun giderme
+## 8. Sorun giderme
 
 | Durum | Çözüm |
 |---|---|

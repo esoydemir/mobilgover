@@ -10,10 +10,10 @@ import { ApiError, NetworkError } from './errors';
 export { ApiError, NetworkError };
 
 export type Options = { token?: string | null; body?: unknown; idempotencyKey?: string; bytes?: { data: Uint8Array; mime: string } };
-export type Api = <T = any>(method: 'GET' | 'POST' | 'PUT', path: string, o?: Options) => Promise<T>;
+export type Api = <T = any>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: string, o?: Options) => Promise<T>;
 
 /** A client for one server. Tests use it against a server started on a random port. */
-export const makeApi = (baseUrl: string): Api => async <T = any>(method: 'GET' | 'POST' | 'PUT', path: string, o: Options = {}): Promise<T> => {
+export const makeApi = (baseUrl: string): Api => async <T = any>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: string, o: Options = {}): Promise<T> => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20_000);
   const headers: Record<string, string> = {};

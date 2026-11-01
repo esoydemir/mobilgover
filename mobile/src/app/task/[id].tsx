@@ -11,6 +11,7 @@ import { CameraIcon, WarnIcon } from '../../components/Icons';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, StaleNote } from '../../components/states';
 import { Card, Chevron, Eyebrow, GhostButton, PrimaryButton, Rise, SevPill, Tap } from '../../components/ui';
+import { AssignCard } from '../../features/AssignCard';
 import { fmtDateTime } from '../../features/dates';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -87,7 +88,9 @@ export default function TaskDetailRoute() {
           {t.nonconformity ? <PrimaryButton testID="open-ncr" label="Uygunsuzluğu aç" height={44} size={13.5} style={{ marginTop: 12 }} onPress={() => router.push(`/ncr/${t.nonconformity!.id}`)} /> : null}
         </Card>
       )}
-      {t.status === 'cancelled' || t.status === 'missed' ? <ErrorBox message={t.status === 'cancelled' ? 'Bu görev iptal edildi (yükümlülük artık uygulanmıyor).' : 'Bu görevin süresi geçti.'} /> : null}
+      {t.status === 'cancelled' || t.status === 'missed' ? <ErrorBox message={t.status === 'cancelled' ? `Bu görev iptal edildi${t.statusReason ? `: ${t.statusReason}` : '.'}` : 'Bu görevin süresi geçti.'} /> : null}
+
+      {role !== 'staff' && siteId ? <AssignCard key={`${t.assignee?.id}-${t.seriesResponsible?.id}`} t={t} siteId={siteId} onChanged={q.reload} /> : null}
 
       {t.emergencyInstruction && (open || t.outcome === 'nonconforming') ? (
         <View style={{ borderWidth: 1, borderColor: tint.crit(0.3), backgroundColor: tint.crit(0.06), borderRadius: 18, padding: 14, gap: 6 }}>
