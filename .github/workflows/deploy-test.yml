@@ -1,0 +1,158 @@
+name: Test ortamına yayınla (yalnızca demo verisi)
+
+# Elle başlatılır: Actions → "Test ortamına yayınla" → Run workflow.
+# Yalnızca CI'ı GitHub'da başarıyla geçmiş bir commit yayınlanır.
+# Gizli bilgiler GitHub'da durur (Settings → Secrets and variables → Actions):
+#   Değişkenler (Variables): TEST_HOST, TEST_SSH_USER, TEST_DOMAIN
+#   Gizli değerler (Secrets): TEST_SSH_PRIVATE_KEY, TEST_ACCESS_TOKEN, TEST_SSH_KNOWN_HOSTS (önerilir)
+# Bu iş akışı pilot/üretim ortamına yayın YAPMAZ; sunucuda DEMO_MODE=true kurulur.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Derle, yükle, doğrula
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: test-ortami
+      url: https://${{ vars.TEST_DOMAIN }}
+    env:
+      TEST_HOST: ${{ vars.TEST_HOST }}
+      TEST_SSH_USER: ${{ vars.TEST_SSH_USER }}
+      TEST_DOMAIN: ${{ vars.TEST_DOMAIN }}
+    steps:
+      - name: Ön kontrol (ayarlar ve gizli değerler tanımlı mı)
+        env:
+          HAS_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY != '' }}
+          HAS_TOKEN: ${{ secrets.TEST_ACCESS_TOKEN != '' }}
+          HAS_KNOWN: ${{ secrets.TEST_SSH_KNOWN_HOSTS != '' }}
+        run: |
+          missing=()
+          [ -n "$TEST_HOST" ] || missing+=("Variable TEST_HOST")
+          [ -n "$TEST_SSH_USER" ] || missing+=("Variable TEST_SSH_USER")
+          [ -n "$TEST_DOMAIN" ] || missing+=("Variable TEST_DOMAIN")
+          [ "$HAS_KEY" = "true" ] || missing+=("Secret TEST_SSH_PRIVATE_KEY")
+          [ "$HAS_TOKEN" = "true" ] || missing+=("Secret TEST_ACCESS_TOKEN")
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf '::error::Eksik ayar: %s\n' "${missing[@]}"
+            echo "Ayarlar: Settings → Secrets and variables → Actions (docs/TEST_ORTAMI.md)."
+            exit 1
+          fi
+          [ "$HAS_KNOWN" = "true" ] || echo "::warning::TEST_SSH_KNOWN_HOSTS tanımlı değil; sunucu anahtarı ilk bağlantıda okunup aşağıda parmak iziyle yazdırılacak. Sağlayıcı panelindeki parmak iziyle karşılaştırın."
+          case "$TEST_DOMAIN" in *.*) ;; *) echo "::error::TEST_DOMAIN tam alan adı olmalı (ör. test.ornek.com.tr)"; exit 1 ;; esac
+
+      - uses: actions/checkout@v4
+
+      - name: Bu commit CI'ı GitHub'da geçti mi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          c=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq 'length')
+          if [ "$c" != "1" ]; then
+            echo "::error::$GITHUB_SHA için başarılı bir CI çalıştırması yok. Önce CI yeşil olmalı."
+            exit 1
+          fi
+          echo "CI başarılı: $GITHUB_SHA"
+
+      - name: DNS kaydı sunucuyu gösteriyor mu
+        run: |
+          ips=$(getent ahostsv4 "$TEST_DOMAIN" | awk '{print $1}' | sort -u | tr '\n' ' ')
+          echo "$TEST_DOMAIN → ${ips:-(çözülemedi)}"
+          if [ -z "$ips" ]; then echo "::error::$TEST_DOMAIN çözülemiyor; A kaydını sunucunun IP adresine yönlendirin."; exit 1; fi
+          if [[ "$TEST_HOST" =~ ^[0-9.]+$ ]] && [[ " $ips " != *" $TEST_HOST "* ]]; then
+            echo "::error::$TEST_DOMAIN, TEST_HOST ($TEST_HOST) adresini göstermiyor. HTTPS sertifikası alınamaz."; exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Web derlemesi (API aynı adreste, /api)
+        working-directory: mobile
+        env:
+          EXPO_NO_TELEMETRY: '1'
+          EXPO_PUBLIC_API_URL: https://${{ vars.TEST_DOMAIN }}/api
+        run: |
+          npm ci
+          npx expo export --platform web --output-dir ../web-dist
+
+      - name: Paketler
+        run: |
+          mkdir -p out
+          git archive --format=tar.gz -o out/goverhub-src.tar.gz "$GITHUB_SHA" server deploy/test
+          tar -czf out/goverhub-web.tar.gz -C web-dist .
+          cp deploy/test/install.sh out/install.sh
+          ls -la out
+          (cd out && sha256sum *)
+
+      - name: SSH hazırlığı
+        env:
+          KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          KNOWN: ${{ secrets.TEST_SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_test; chmod 600 ~/.ssh/id_test
+          if [ -n "$KNOWN" ]; then
+            printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -T 15 -t ed25519 "$TEST_HOST" > ~/.ssh/known_hosts 2>/dev/null
+            echo "Sunucu anahtarı (ilk bağlantı, doğrulanmadı):"; ssh-keygen -lf ~/.ssh/known_hosts
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          printf 'Host test\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_test\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  ServerAliveInterval 30\n' "$TEST_HOST" "$TEST_SSH_USER" > ~/.ssh/config
+          ssh test 'echo "Bağlandı: $(hostname), $(. /etc/os-release; echo $PRETTY_NAME)"'
+
+      - name: Yükle ve kur
+        env:
+          TOKEN: ${{ secrets.TEST_ACCESS_TOKEN }}
+        run: |
+          dir="/tmp/goverhub-test-deploy-$GITHUB_RUN_ID"
+          ssh test "mkdir -m 700 -p $dir"
+          scp -q out/* "test:$dir/"
+          sudo_cmd=""; [ "$TEST_SSH_USER" = "root" ] || sudo_cmd="sudo -n"
+          printf '%s\n' "$TOKEN" | ssh test "p=\$(echo \$SSH_CONNECTION | awk '{print \$4}'); $sudo_cmd bash $dir/install.sh --domain '$TEST_DOMAIN' --release $dir/goverhub-src.tar.gz --web $dir/goverhub-web.tar.gz --sha $GITHUB_SHA --ssh-port \$p; rc=\$?; rm -rf $dir; exit \$rc"
+
+      - name: Dışarıdan doğrulama (HTTPS, erişim kapısı, API, kapalı port)
+        env:
+          TOKEN: ${{ secrets.TEST_ACCESS_TOKEN }}
+        run: |
+          set -u
+          base="https://$TEST_DOMAIN"; jar=$(mktemp); fails=0
+          check() { if [ "$2" = "$3" ]; then echo "✓ $1 ($3)"; else echo "::error::✗ $1: beklenen $2, gelen $3"; fails=$((fails+1)); fi; }
+          for i in $(seq 1 20); do curl -fsS -o /dev/null --max-time 10 "$base/robots.txt" && break; sleep 6; done
+          check "HTTP → HTTPS yönlendirmesi" 308 "$(curl -s -o /dev/null -w '%{http_code}' "http://$TEST_DOMAIN/")"
+          check "Davetsiz ana sayfa kapalı" 403 "$(curl -s -o /dev/null -w '%{http_code}' "$base/")"
+          check "Davetsiz API kapalı" 403 "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/env")"
+          check "Davetsiz demo posta kutusu kapalı" 403 "$(curl -s -o /dev/null -w '%{http_code}' "$base/api/dev/outbox/latest?email=sahip@demo.goverhub.test")"
+          check "Yanlış davet bağlantısı" 403 "$(curl -s -o /dev/null -w '%{http_code}' "$base/erisim/yanlis-yanlis-yanlis-yanlis-yanlis-00")"
+          check "Davet bağlantısı" 302 "$(curl -s -c "$jar" -o /dev/null -w '%{http_code}' "$base/erisim/$TOKEN")"
+          check "Davetli ana sayfa" 200 "$(curl -s -b "$jar" -o /dev/null -w '%{http_code}' "$base/")"
+          mode=$(curl -s -b "$jar" "$base/api/env" | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])' 2>/dev/null || echo "?")
+          check "API modu" demo "$mode"
+          check "Arama motoru engeli" 1 "$(curl -sI "$base/" | grep -ci '^x-robots-tag: noindex')"
+          if timeout 5 bash -c "</dev/tcp/$TEST_HOST/3000" 2>/dev/null; then echo "::error::✗ 3000 portu dışarıdan açık"; fails=$((fails+1)); else echo "✓ API portu (3000) dışarıdan kapalı"; fi
+          rm -f "$jar"
+          [ "$fails" -eq 0 ] || exit 1
+          {
+            echo "### Test ortamı yayında (yalnızca demo verisi)"
+            echo "- Adres: $base"
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Erişim: davet bağlantısı \`$base/erisim/<TEST_ACCESS_TOKEN>\` (anahtar burada yazılmaz)"
+            echo "- Bu ortam üretime hazır değildir; kurallar örnektir, mevzuat onayı yoktur."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Temizlik
+        if: always()
+        run: rm -f ~/.ssh/id_test

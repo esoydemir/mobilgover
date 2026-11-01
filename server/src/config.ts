@@ -26,6 +26,8 @@ export type Config = {
    * provider was confirmed. Never assumed; reported in /env.
    */
   mailProductionReady: boolean;
+  /** Test environment: only addresses in this domain can sign in or be invited (demo mode only). */
+  demoLoginDomain?: string;
   /** Web origins allowed to call the API (the web build of the app). */
   corsOrigins: string[];
   /** Reverse proxy addresses whose X-Forwarded-For is trusted. Explicit IP addresses or CIDR ranges only. */
@@ -45,18 +47,26 @@ export function loadConfig(): Config {
     maxUploadBytes: 15 * 1024 * 1024,
     mfaEncryptionKey: process.env.MFA_ENCRYPTION_KEY || null,
     mfaRequiredForPlatform: process.env.MFA_REQUIRED_FOR_PLATFORM !== 'false',
-    mailTransport: mailTransport(),
-    smtp: mailTransport() === 'smtp' ? smtpConfig() : null,
+    mailTransport: mailTransportFor(process.env.MAIL_TRANSPORT, demoMode),
+    smtp: mailTransportFor(process.env.MAIL_TRANSPORT, demoMode) === 'smtp' ? smtpConfig() : null,
     mailProductionReady: process.env.MAIL_PRODUCTION_READY === 'true',
+    demoLoginDomain: demoLoginDomain(process.env.DEMO_LOGIN_DOMAIN, demoMode),
     corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean),
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
     host: listenHost(process.env.HOST, demoMode),
   };
 }
 
-function mailTransport(): 'dev_outbox' | 'smtp' {
-  const t = process.env.MAIL_TRANSPORT ?? 'dev_outbox';
+/**
+ * Demo sign-in (codes read from the dev outbox) exists only in a demo deployment,
+ * and a demo deployment never sends real mail. A pilot without a real mail
+ * provider does not start, so the demo sign-in cannot leak into it.
+ */
+export function mailTransportFor(raw: string | undefined, demoMode: boolean): 'dev_outbox' | 'smtp' {
+  const t = raw ?? (demoMode ? 'dev_outbox' : 'smtp');
   if (t !== 'dev_outbox' && t !== 'smtp') throw new Error(`MAIL_TRANSPORT=${t} is not supported (dev_outbox | smtp).`);
+  if (!demoMode && t === 'dev_outbox') throw new Error('Pilot ortamında (DEMO_MODE=false) giriş kodları gerçek e-postayla gönderilir: MAIL_TRANSPORT=smtp gerekli. Demo girişi yalnızca ayrı demo/test ortamında çalışır.');
+  if (demoMode && t === 'smtp') throw new Error('Demo ortamı (DEMO_MODE=true) gerçek e-posta göndermez: MAIL_TRANSPORT=dev_outbox olmalı.');
   return t;
 }
 
@@ -67,6 +77,14 @@ function smtpConfig(): SmtpConfig {
     host: required('MAIL_SMTP_HOST'), port: Number(process.env.MAIL_SMTP_PORT ?? (security === 'tls' ? 465 : 587)), security,
     user: process.env.MAIL_SMTP_USER || undefined, pass: process.env.MAIL_SMTP_PASS || undefined, from: required('MAIL_FROM'),
   };
+}
+
+export function demoLoginDomain(raw: string | undefined, demoMode: boolean): string | undefined {
+  const d = (raw ?? '').trim().toLowerCase();
+  if (!d) return undefined;
+  if (!demoMode) throw new Error('DEMO_LOGIN_DOMAIN yalnızca DEMO_MODE=true ile kullanılır.');
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d)) throw new Error(`DEMO_LOGIN_DOMAIN geçersiz: ${raw}`);
+  return d;
 }
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}(\/(3[0-2]|[12]?\d))?$/;

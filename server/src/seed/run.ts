@@ -1,5 +1,7 @@
 import { loadConfig } from '../config';
 import { Db } from '../db/pool';
+import { localDay } from '../domain/schedule';
+import { generateTasks } from '../services/tasks';
 import { seedDemoCompany, seedDemoProvider, seedPlatform } from './demo';
 
 /**
@@ -32,6 +34,11 @@ try {
         if (p && typeof p === 'object' && 'id' in p) await tx.query(`UPDATE users SET email = $2 WHERE id = $1`, [(p as { id: string }).id, email]);
       }
     });
+    // Today's and the next 30 days' tasks, so the demo has something to do on the phone.
+    const today = localDay(new Date(), 'Europe/Istanbul');
+    const in30 = localDay(new Date(Date.now() + 30 * 86_400_000), 'Europe/Istanbul');
+    const created = await db.tenant(demo.companyId, tx => generateTasks(tx, demo.companyId, demo.siteId, today, in30));
+    console.log(`Demo görevleri oluşturuldu: ${JSON.stringify(created)}`);
     console.log('Demo verisi yüklendi. Giriş adresleri (kod demo kutusundan alınır):');
     for (const [role, email] of Object.entries({ ...DEMO_EMAILS, provider: 'uzman@demo.goverhub.test' })) console.log(`  ${role.padEnd(15)} ${email}`);
   }

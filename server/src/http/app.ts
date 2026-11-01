@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { redact } from '../ops/notify';
 import type { Config } from '../config';
 import type { Db, Tx } from '../db/pool';
-import { AppError, forbidden, notFound } from '../domain/errors';
+import { AppError, forbidden, invalid, notFound } from '../domain/errors';
 import { canonical, sha256 } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
@@ -36,7 +36,10 @@ const companyParams = z.object({ companyId: uuid });
  */
 export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[]; mailProductionReady?: boolean;
   /** Addresses of the reverse proxy whose X-Forwarded-For is trusted (e.g. 127.0.0.1). Without it, every client behind the proxy shares one rate limit. */
-  trustProxy?: string[] };
+  trustProxy?: string[];
+  /** Separate test environment only (DEMO_MODE=true): sign-in and invitations are limited to this
+   *  address domain (e.g. demo.goverhub.test), so no real person's address is entered there. */
+  demoLoginDomain?: string };
 /** Structured log sink. Lines carry route templates and status codes only — never bodies, query strings, headers or tokens. */
 export type LogSink = (line: Record<string, unknown>) => void;
 
@@ -150,6 +153,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   // Lets the app show clearly whether it is talking to demo or pilot data.
   app.get('/env', async () => ({
     mode: config.demoMode ? 'demo' : 'pilot',
+    ...(config.demoMode && config.demoLoginDomain ? { demoLoginDomain: config.demoLoginDomain } : {}),
     exampleRulesAllowed: config.allowExampleRules,
     mailTransport: mailer.kind,
     // True only after a person confirmed a real delivery through the chosen provider.
@@ -157,8 +161,15 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   }));
 
   // ── Sign-in ──
+  const requireDemoAddress = (email: string) => {
+    const d = config.demoMode ? config.demoLoginDomain : undefined;
+    if (d && !email.trim().toLowerCase().endsWith(`@${d}`)) {
+      throw invalid(`Bu test ortamında yalnızca @${d} uzantılı demo adresleri kullanılır. Gerçek bir e-posta adresi girmeyin.`);
+    }
+  };
   app.post('/auth/email/start', async req => {
     const { email } = z.object({ email: z.string().max(254) }).parse(req.body);
+    requireDemoAddress(email);
     return startEmailLogin(db, mailer, email);
   });
   app.post('/auth/email/verify', async req => {
@@ -219,6 +230,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/members', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ email: z.email(), role: z.enum(['hq_manager', 'site_manager', 'staff']), siteId: uuid.nullable().default(null) }).parse(req.body);
+    requireDemoAddress(b.email);
     return mutate(req, reply, companyId, tx => addMember(tx, req.principal, companyId, b), 201);
   });
 

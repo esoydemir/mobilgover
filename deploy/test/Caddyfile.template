@@ -1,0 +1,65 @@
+# GoverHub TEST ortamı — yalnızca demo verisi. Gerçek işletme verisi girilmez.
+# Bu dosya install.sh tarafından doldurulur (__ALAN_ADI__, __ERISIM_YOLU__, __CEREZ__).
+# Elle düzenleme; bir sonraki kurulumda yeniden yazılır.
+#
+# Erişim koruması: davet bağlantısı (https://<alan-adı>/erisim/<anahtar>) açılınca
+# tarayıcıya 30 günlük, HttpOnly + Secure bir çerez yazılır. Çerezi olmayan her istek
+# (web uygulaması ve API) 403 alır. Temel kimlik doğrulama (Basic auth) kullanılmaz:
+# API zaten "Authorization: Bearer" başlığını kullanıyor ve ikisi çakışır.
+#
+# Erişim günlüğü bilerek kapalı: davet anahtarı adres satırında olduğu için günlüğe yazılmasın.
+__ALAN_ADI__ {
+	encode zstd gzip
+
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		Permissions-Policy "geolocation=(), microphone=()"
+		-Server
+	}
+
+	request_body {
+		max_size 16MB
+	}
+
+	route {
+		# Arama motorları: hiçbir şeyi dizinleme.
+		@robots path /robots.txt
+		handle @robots {
+			respond "User-agent: *
+Disallow: /
+" 200
+		}
+
+		# Davet bağlantısı: çerezi yaz, uygulamaya yönlendir.
+		@davet path __ERISIM_YOLU__
+		handle @davet {
+			header Set-Cookie "gh_test_access=__CEREZ__; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax"
+			header Cache-Control "no-store"
+			redir * / 302
+		}
+
+		# Çerezi olmayanlar için kapı.
+		@erisimYok not header_regexp Cookie (^|;\s*)gh_test_access=__CEREZ__(;|$)
+		handle @erisimYok {
+			header Content-Type "text/html; charset=utf-8"
+			header Cache-Control "no-store"
+			respond "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>GoverHub test</title><body style='font-family:system-ui;padding:24px;max-width:480px;margin:auto;background:#000;color:#f2f2f2'><h1 style='font-size:20px;color:#c6f432'>GoverHub test ortamı</h1><p>Bu adres yalnızca davetli test kullanıcılarına açıktır. Size verilen erişim bağlantısını açın.</p></body>" 403
+		}
+
+		# API: /api öneki kaldırılır; API yalnızca bu sunucunun yerel adresinde dinler.
+		handle_path /api/* {
+			reverse_proxy 127.0.0.1:3000
+		}
+
+		# Mobil uygulamanın web derlemesi (tek sayfa uygulaması).
+		handle {
+			root * /srv/goverhub-test/web
+			try_files {path} /index.html
+			file_server
+		}
+	}
+}

@@ -2,7 +2,11 @@
 
 Hiçbir maddede parola, gizli anahtar ya da erişim bilgisi istenmiyor. Bunlar doğrudan sunucudaki ortam dosyasına ya da parola kasasına girilir; bana gönderilmez.
 
-## İlk adım (yalnızca bu)
+## Şimdi: telefon için test ortamı
+
+Pilottan önce ayrı bir HTTPS test ortamı kurulur. Bu ortamda yalnızca demo verisi bulunur ve e-posta gönderilmez. Gerekenler kısa bir listedir ve hiçbiri parola değildir: `TEST_ORTAMI.md` §2.
+
+## Pilot için ilk adım
 
 **Barındırma sağlayıcısında iki Ubuntu 24.04 sunucu aç:**
 - Sunucu 1 (uygulama): 2 vCPU, 4 GB RAM, 40 GB SSD.

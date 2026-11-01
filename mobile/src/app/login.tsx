@@ -49,7 +49,13 @@ export default function LoginRoute() {
 
         {step === 'email' && (
           <>
-            <Field label="E-posta" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="ornek@isletme.com.tr" testID="login-email" />
+            <Field label="E-posta" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address"
+              placeholder={env?.demoLoginDomain ? `sahip@${env.demoLoginDomain}` : 'ornek@isletme.com.tr'} testID="login-email" />
+            {env?.mode === 'demo' && env.demoLoginDomain && (
+              <Text style={type(12, 400, { lh: 1.5, color: C.warn })}>
+                Test ortamı: yalnızca @{env.demoLoginDomain} demo adresleri. Gerçek e-posta adresi girmeyin.
+              </Text>
+            )}
             <PrimaryButton label={busy ? 'Gönderiliyor…' : 'Kod gönder'} disabled={busy || !email.includes('@')}
               onPress={() => run(async () => { await startLogin(email); setStep('code'); })} />
           </>

@@ -95,6 +95,17 @@ describe('reverse proxy, direct access and rate limits', () => {
     expect(listenHost(undefined, false)).toBe('127.0.0.1');
     expect(() => listenHost('0.0.0.0', false)).toThrow('yalnızca yerel');
     expect(listenHost('0.0.0.0', true)).toBe('0.0.0.0'); // demo/dev only
+    const { mailTransportFor } = await import('../../src/config');
+    expect(() => mailTransportFor('dev_outbox', false)).toThrow('MAIL_TRANSPORT=smtp');
+    expect(() => mailTransportFor(undefined, false)).not.toThrow();
+    expect(mailTransportFor(undefined, false)).toBe('smtp');
+    expect(mailTransportFor(undefined, true)).toBe('dev_outbox');
+    expect(() => mailTransportFor('smtp', true)).toThrow('gerçek e-posta göndermez');
+    const { demoLoginDomain } = await import('../../src/config');
+    expect(() => demoLoginDomain('demo.goverhub.test', false)).toThrow('yalnızca DEMO_MODE=true');
+    expect(demoLoginDomain(' Demo.GoverHub.Test ', true)).toBe('demo.goverhub.test');
+    expect(demoLoginDomain(undefined, false)).toBeUndefined();
+    expect(() => demoLoginDomain('*', true)).toThrow('geçersiz');
   });
 
   it('listening on loopback, the API cannot be reached from another interface', async () => {

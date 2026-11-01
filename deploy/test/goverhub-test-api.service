@@ -1,0 +1,24 @@
+[Unit]
+Description=GoverHub API (TEST ortamı — yalnızca demo verisi)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=goverhub
+Group=goverhub
+WorkingDirectory=/srv/goverhub-test/app/current/server
+EnvironmentFile=/etc/goverhub-test/test.env
+ExecStart=/usr/local/bin/node node_modules/tsx/dist/cli.mjs src/main.ts
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/goverhub-test/evidence /srv/goverhub-test/var
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

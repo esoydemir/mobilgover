@@ -20,7 +20,7 @@ export function testUrls() {
   return { app, owner };
 }
 
-export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: boolean; mfaRequiredForPlatform?: boolean } = {}) {
+export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: boolean; mfaRequiredForPlatform?: boolean; demoLoginDomain?: string } = {}) {
   const urls = testUrls();
   const owner = new pg.Client({ connectionString: urls.owner });
   await owner.connect();
@@ -35,6 +35,7 @@ export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: b
     // Test-only key; real deployments read MFA_ENCRYPTION_KEY from the environment.
     mfaEncryptionKey: Buffer.alloc(32, 7).toString('base64'),
     mfaRequiredForPlatform: opts.mfaRequiredForPlatform ?? false,
+    demoLoginDomain: opts.demoLoginDomain,
   };
   const app = buildApp({ db, store, mailer: new DevOutboxMailer(db), config });
   /** Direct connection as the owner, for assertions the API deliberately cannot make. */

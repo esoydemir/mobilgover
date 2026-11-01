@@ -53,7 +53,7 @@ npm run dev
 
 Ayrıntılar ve tüm ortam değişkenleri: `server/README.md`. Web derlemesini kullanacaksan `CORS_ORIGINS` değişkenine o adresi yaz.
 
-**E-posta:** `MAIL_TRANSPORT=dev_outbox` demo içindir; kodlar gönderilmez, giriş ekranı kodu bu kutudan alır (pilot ortamında bu uç kapalı). Pilot için `MAIL_TRANSPORT=smtp` ve sağlayıcının SMTP bilgileri girilir. İlk gerçek gönderim doğrulanana kadar `MAIL_PRODUCTION_READY=false` kalır.
+**E-posta:** `MAIL_TRANSPORT=dev_outbox` yalnızca demo içindir; kodlar gönderilmez, giriş ekranı kodu bu kutudan alır. Uygulama bu eşleşmeyi zorlar: pilot (`DEMO_MODE=false`) `dev_outbox` ile, demo ise `smtp` ile başlamaz; demo modu gerçek (demo olmayan) işletme bulunan bir veritabanında da başlamaz. Pilot için `MAIL_TRANSPORT=smtp` ve sağlayıcının SMTP bilgileri girilir. İlk gerçek gönderim doğrulanana kadar `MAIL_PRODUCTION_READY=false` kalır.
 
 ## 3. Mobil (`mobile/`)
 
