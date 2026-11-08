@@ -1,4 +1,4 @@
-# Kapsam durumu — modül bazında (inceleme: 01.11.2026 · 1. teslim işlendi)
+# Kapsam durumu — modül bazında (inceleme: 01.11.2026 · 1. ve 2. teslim işlendi)
 
 **Kaynaklar:**
 - Tasarım prototipi ve sohbeti: `project/`, `chats/chat1.md`
@@ -29,7 +29,7 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | İşletme + ilk şube oluşturma | ✅ | Kurulum adım 1 |
 | Profil soruları (bilgi kaynağı, "bilmiyorum" = bilgi eksik, geçmiş) | ✅ | Kurulum adım 2, Daha → İşletme profili |
 | Ekipman ekleme (soğutucu, dondurucu, termometre + kalibrasyon tarihi) | ✅ | |
-| Ekipman düzenleme, kalibrasyon yenileme, kullanımdan kaldırma | ✅ (1. teslim) | Daha → Ekipmanlar → Düzenle. Kaldırmada gerekçe zorunlu; bugünden sonraki açık kontroller iptal edilir. Yeniden kullanıma alınınca kontroller hemen geri gelir |
+| Ekipman düzenleme, kalibrasyon yenileme, kullanımdan kaldırma | ✅ (1.–2. teslim) | Kaldırmadan önce önizleme: saati gelmemiş kontroller iptal, saati geçmiş olanlar gecikmiş olarak kalır, bugünkü kontrolün durumu yazılır. Yeniden etkinleştirmede iptal edilenler geri açılır; aynı gün için ikinci görev oluşmaz |
 | İkinci şube açma, şube seçme (çok şubeli / genel merkez) | ✗ | API yalnızca ilk şubeyi açıyor; uygulama her zaman ilk şubeyi kullanıyor |
 | Açılış günleri, kapalı günler | ◐ | Veri modeli ve görev takvimi destekliyor; düzenleme ekranı ve API yok |
 | OCR ile belgeden bilgi okuma | ⏳ | OCR hizmeti yok; prototipte vardı, kaldırıldı |
@@ -53,7 +53,7 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 |---|---|---|
 | Yükümlülük listesi + "Neden bana uygulanıyor?" | ✅ | Daha → Yükümlülükler |
 | Bilgi eksik → soru; uzman incelemesi gerekir durumu | ✅ | |
-| Elle "uygulanmaz" kararı (gerekçeli, rol sınırlı) ve geri alma | ✅ (1. teslim) | Yükümlülük ekranı → "Uygulanmaz de" (sahip ve merkez yöneticisi); "Kararı geri al" ile kural motoru yeniden karar verir; geçmiş korunur |
+| Elle "uygulanmaz" kararı (gerekçeli, rol sınırlı) ve geri alma | ✅ (1.–2. teslim) | İyi uygulama önerisinde hemen uygulanır. **Zorunlu yükümlülükte incelemeye gider**: başka bir sahip/merkez yöneticisi ya da inceleme yetkili uzman onaylar veya reddeder; o zamana kadar kontroller sürer. Saati geçmiş kontroller "kaçırıldı" olarak kalır, silinmez |
 | Kural sürümü onayı, alan uzmanı onayı, yayın | ✅ | Daha → Yönetim (platform rolleri) |
 | Yeni kural / yeni sürüm yazma ekranı | ✗ | Yalnızca API ile. Ekrandan yazılamıyor |
 | Yayın öncesi etki simülasyonu | ◐ | API var; ekranda gösterilmiyor |
@@ -79,12 +79,16 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Özellik | Durum | Not |
 |---|---|---|
 | Limit dışı sonuçtan otomatik uygunsuzluk; risk ve tekrar hesabı | ✅ | |
-| CAPA adımları (kontrol altına alma → düzeltme → kök neden → düzeltici faaliyet → etkinlik kontrolü), sıra zorunlu | ✅ | |
-| Yüksek riskte bağımsız kapanış | ✅ | |
-| Uygunsuzluktan hizmet talebi | ✅ | |
-| Kök neden **sınıfı** (bilgi, ekipman/kaynak, süreç, beyan-kanıt) ve sınıfa göre öneri | ✗ | Kök neden yalnızca serbest metin |
-| Sorumlu atama ve son tarih | ◐ | Sorumlu alanı var; ekrandan atanamıyor |
-| Elle uygunsuzluk açma (görev dışında fark edilen sorun) | ✗ | |
+| Elle uygunsuzluk açma (her rol, kendi şubesinde); konu, önem, ekipman, ilk müdahale | ✅ (2. teslim) | Uygunsuzluklar → "Sorun bildir" |
+| Sorumlu ve termin; sonradan termin değişikliğinde gerekçe; değişiklik geçmişi; gecikme işareti | ✅ (2. teslim) | |
+| Neden değerlendirmesi: bilgi / ekipman / kaynak / süreç, çoklu seçim; ilk değerlendirme ile doğrulanmış kök neden ayrı | ✅ (2. teslim) | Doğrulanmış kök nedeni yalnız yönetici kaydeder |
+| Nedene göre destek önerisi (açıklama, hizmet talebi formu, ekipman, ekip, takip aksiyonu) | ✅ (2. teslim) | Öneri yalnızca yol gösterir; talep, sipariş ya da kapanış kendiliğinden olmaz. Eğitim modülü yok ("henüz yok" olarak gösterilir) |
+| Tekrarlanabilir aksiyonlar (düzeltme, düzeltici faaliyet, takip) sorumlu ve terminle | ✅ (2. teslim) | |
+| Etkinlik kontrolü → doğrulama; etkili değilse kayıt açık kalır ve yeni tur başlar; gerekçeli yeniden açma | ✅ (2. teslim) | |
+| Yüksek riskte bağımsız doğrulama (bu turun düzeltmesini yapan doğrulayamaz) | ✅ | |
+| Hizmet teslim kabulü uygunsuzluğu kapatmaz | ✅ | Testle sabitlendi |
+| Pasifleştirilen sorumlunun açık işleri → yöneticinin yeniden atama listesi | ✅ (2. teslim) | Uygunsuzluk, aksiyon ve görevler |
+| "Yapıldığı beyan edilen işlem → kanıt" neden türü | ✗ | Bu teslimin kapsamında istenmedi |
 
 ## 6. Belgeler, geçerlilik süreleri, hatırlatmalar
 
@@ -142,7 +146,7 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 
 | Özellik | Durum | Not |
 |---|---|---|
-| Uygulama içi bildirim merkezi | ✗ | |
+| Uygulama içi bildirim merkezi | ◐ (2. teslim) | Uygunsuzluk akışı için var: atama, aksiyon ataması, yaklaşan termin, gecikme, doğrulama isteği, başarısız doğrulama, yeniden açma, yeniden atama, "uygulanmaz" incelemesi. Yinelenmez; rol ve şube sınırlı. Görev gecikmesi, teklif ve teslim bildirimleri henüz yok |
 | Anlık bildirim (push) ve e-posta bildirimi | ⏳ | Mağaza derlemesi ve SMTP |
 | Görev filtreleri | ✅ | |
 | Uygunsuzluk filtreleri | ✅ | Açık / kapalı |
@@ -179,9 +183,9 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 4. Ekipman düzenleme: kalibrasyon yenileme, kullanımdan kaldırma, yeniden kullanıma alma.
 
 **P2 — Günlük kullanımı tamamlayan:**
-5. Uygunsuzlukta kök neden sınıfı ve sınıfa göre öneri. Kullanıcı onayı olmadan hiçbir şey sipariş edilmez ya da kapatılmaz.
-6. Uygunsuzluk sorumlusu ve son tarihi; elle uygunsuzluk açma.
-7. Uygulama içi bildirim merkezi: gecikmiş görev, yeni teklif, teslim, atama, kural değişikliği.
+5. ✅ Uygunsuzluk uçtan uca akışı ve nedene göre destek önerisi (2. teslim).
+6. ✅ Uygunsuzluk sorumlusu, termini, elle uygunsuzluk açma (2. teslim).
+7. ◐ Bildirim merkezi: uygunsuzluk akışı tamam (2. teslim); görev gecikmesi, teklif, teslim ve kural değişikliği bildirimleri kaldı.
 8. Belge kasası: belge kaydı, geçerlilik tarihi, süre dolumu uyarısı.
 9. Hizmet değerlendirmesi ve uzman profilinde doğrulanmış hizmet geçmişi.
 

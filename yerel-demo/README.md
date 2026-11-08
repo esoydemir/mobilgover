@@ -69,7 +69,27 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
    3. `sahip@` hesabıyla girip teklifi kabul et. Bu adımda bir iş giriş kodu oluşur.
    4. `uzman@` hesabıyla bu kodu girip rapor yaz.
    5. `sahip@` hesabıyla teslimi kabul et.
-5. **Kapanış:** Uygunsuzluğun düzeltici adımlarını gir. Kapanışı, düzeltmeyi yapan kişiden farklı biri yapmalı (görevler ayrılığı).
+5. **Kapanış:** Uygunsuzluk ekranındaki akışı sırayla izle:
+   1. İlk müdahale
+   2. Sorumlu ve termin
+   3. Neden değerlendirmesi
+   4. Aksiyonlar
+   5. Doğrulanmış kök neden
+   6. Etkinlik kontrolü
+   7. Doğrulama
+
+   Doğrulamayı, bu turun düzeltmesini yapan kişiden farklı biri yapmalı (görevler ayrılığı).
+
+**Elle uygunsuzluk ve destek önerisi:**
+1. `personel@` ile **Daha fazla → Uygunsuzluklar → Sorun bildir** adımlarını izleyip bir kayıt aç.
+2. Neden olarak birden fazla seçenek işaretle; **Önerilen destek** kartı açılır. Öneriler hiçbir şeyi kendiliğinden sipariş etmez.
+3. `sahip@` ile ana sayfadaki zile bas. Bildirimden kayda git ve sorumlu ile termini belirle.
+4. Doğrulamada **"Etkili değil · açık kalsın"** seçilirse kayıt açık kalır ve yeni tur başlar.
+5. Kapanan kayıt gerekçe yazılarak yeniden açılabilir.
+
+**Zorunlu yükümlülükte "uygulanmaz":**
+1. `sahip@` ile Soğuk muhafaza yükümlülüğünde **Uygulanmaz de** seçeneğini kullan. Karar hemen uygulanmaz, incelemeye gider.
+2. `danisman@` ile zildeki bildirimden açıp onayla ya da reddet.
 
 Kendi işletmeni de kurabilirsin: yeni bir demo adresiyle gir, örneğin `ben@demo.goverhub.test`. Kurulum ekranı açılır; burada açılan işletmeler de demo olarak işaretlenir.
 

@@ -221,7 +221,8 @@ export function SupportCard({ n, onFollowUp, onAssign }: { n: NcrDetail; onFollo
           <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{s.body}</Text>
           {s.available && label[s.kind] && (s.kind !== 'service_request' || n.permissions.serviceRequest) && (s.kind !== 'assign' || n.permissions.manage) ? (
             <GhostButton testID={`support-go-${s.kind}`} label={label[s.kind]!} height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => go(s.kind, s.serviceCategory)} />
-          ) : !s.available ? <Pill label="HENÜZ YOK" fg={C.t3} bg={tint.white(0.06)} /> : null}
+          ) : !s.available ? <Pill label={s.kind === 'training' ? 'HENÜZ YOK' : 'BU KAYITTA YOK'} fg={C.t3} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
+            : <Text style={type(11.5, 500, { color: C.t3 })}>{s.kind === 'service_request' ? 'Talebi işletme sahibi ya da yönetici açar; onlara bildirebilirsin.' : 'Bu adımı yönetici yapar.'}</Text>}
         </View>
       ))}
       {n.services.length ? (
