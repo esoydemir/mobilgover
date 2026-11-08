@@ -116,6 +116,10 @@ export default function NcrRoute() {
         <GhostButton testID="ncr-service-request" label="Bu sorun için uzman hizmeti iste"
           onPress={() => router.push(`/service/new?ncrId=${n.id}&title=${encodeURIComponent(n.title)}`)} />
       ) : null}
+      {n.permissions.manage && n.permissions.inviteVerifier ? (
+        <GhostButton testID="ncr-share-case" label="Vakayı mesleki ağda paylaş (önizlemeli, anonim)"
+          onPress={() => router.push(`/network/share-case?ncrId=${n.id}`)} />
+      ) : null}
       <HistoryCard n={n} />
     </Screen>
   );

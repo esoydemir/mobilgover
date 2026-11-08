@@ -29,6 +29,7 @@ export type Requirement =
   | { kind: 'device_record'; quantity: string };
 
 export type TaskDetail = {
+  relatedTraining?: { id: string; title: string; summary: string; is_example: boolean; minutes: number | null }[];
   id: string; status: TaskRow['status']; outcome: TaskRow['outcome']; dueAt: string; reviewFlag: string | null;
   title: string; instructions: string; severity: TaskRow['severity'];
   equipment: { id: string; name: string; type: string } | null;

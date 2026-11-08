@@ -15,8 +15,8 @@ import { C, tint, type } from '../../theme';
 type Version = { id: string; version: number; status: string; title: string; summary: string; body: string; video_url: string | null; minutes: number | null; pass_score: number;
   quiz: { q: string; options: string[]; answer?: number }[]; created_by_name: string | null; submitted_by_name: string | null; submitted_at: string | null;
   published_by_name: string | null; published_at: string | null; review_notes: string | null };
-type Course = { id: string; isExample: boolean; exampleNote: string | null; versions: Version[]; links: { kind: string; ref: string }[];
-  permissions: { author: boolean; publish: boolean; assign: boolean; newVersion: boolean } };
+type Course = { id: string; isExample: boolean; exampleNote: string | null; inhouseNote: string | null; versions: Version[]; links: { kind: string; ref: string }[];
+  permissions: { author: boolean; publish: boolean; publishBlockedReason: string | null; assign: boolean; newVersion: boolean } };
 
 /** One course: its versions and their states; writing and publishing are separate steps. */
 export default function CourseRoute() {
@@ -46,6 +46,7 @@ export default function CourseRoute() {
       </View>
       <Text style={type(23, 600, { family: 'outfit', ls: -0.03, lh: 1.15 })}>{shown.title}</Text>
       {c.exampleNote ? <Text style={type(12, 500, { color: C.warn, lh: 1.45 })}>{c.exampleNote}</Text> : null}
+      {c.inhouseNote ? <Text testID="tr-inhouse" style={type(12, 500, { color: c.inhouseNote.includes('bağımsız') ? C.warn : C.t2, lh: 1.45 })}>{c.inhouseNote} · mesleki ağda ya da platform kütüphanesinde yayımlanmaz.</Text> : null}
       {shown.summary ? <Text style={type(13, 400, { color: C.t2, lh: 1.5 })}>{shown.summary}</Text> : null}
       {c.links.length ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İlişkili: {c.links.map(l => `${LINK_KIND[l.kind]}: ${linkLabel(l)}`).join(' · ')}</Text> : null}
       {c.permissions.assign ? <PrimaryButton testID="tr-assign" label="Kişiye ata" onPress={() => router.push(`/training/assign?courseId=${c.id}`)} /> : null}
@@ -63,7 +64,8 @@ export default function CourseRoute() {
             </View>
           ) : null}
           {open.status === 'in_review' ? (
-            c.permissions.publish ? (
+            c.permissions.publishBlockedReason ? <Text testID="tr-publish-blocked" style={type(12, 500, { color: C.warn, lh: 1.45 })}>{c.permissions.publishBlockedReason}</Text>
+            : c.permissions.publish ? (
               <>
                 <Text style={type(11.5, 400, { color: C.t3 })}>Gönderen: {open.submitted_by_name ?? open.created_by_name}{open.submitted_at ? ` · ${fmtDateTime(open.submitted_at)}` : ''}</Text>
                 <Text style={type(12.5, 400, { lh: 1.5 })}>{open.body}</Text>

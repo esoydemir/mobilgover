@@ -22,6 +22,8 @@ export type CourseInput = { title: string; summary: string; body: string; videoU
 
 export const PARTICIPATION_NOTE = 'GoverHub katılım kaydıdır; resmî sertifika ya da yetkili kurum belgesi değildir.';
 export const EXAMPLE_NOTE = 'ÖRNEK İÇERİK — mevzuat metni ya da onaylı uzman görüşü değildir.';
+/** Business content stays inside the business: never published to the network or a platform library. */
+export const inhouseNote = (independent: boolean | null) => independent === false ? 'İşletme içi içerik · bağımsız inceleme yapılmadı' : 'İşletme içi içerik';
 
 /** The person holds this right somewhere in the business (any site they cover). */
 function holds(p: Principal, action: Action, companyId: string, siteId?: string | null) {
@@ -52,7 +54,7 @@ async function setLinks(tx: Tx, companyId: string, courseId: string, links: Cour
 }
 
 const COURSE_SQL = `SELECT c.id, c.company_id, c.is_example, c.created_at,
-   (SELECT row_to_json(v) FROM (SELECT id, version, status, title, summary, minutes, published_at, jsonb_array_length(quiz) AS questions FROM training_versions
+   (SELECT row_to_json(v) FROM (SELECT id, version, status, title, summary, minutes, published_at, independent_review, jsonb_array_length(quiz) AS questions FROM training_versions
       WHERE course_id = c.id AND status = 'published') v) AS published,
    (SELECT row_to_json(v) FROM (SELECT id, version, status, title FROM training_versions WHERE course_id = c.id ORDER BY version DESC LIMIT 1) v) AS latest,
    COALESCE((SELECT json_agg(json_build_object('kind', l.kind, 'ref', l.ref)) FROM training_links l WHERE l.course_id = c.id), '[]') AS links
@@ -62,7 +64,8 @@ export async function listCourses(tx: Tx, p: Principal, companyId: string) {
   const author = holds(p, 'training.author', companyId) || holds(p, 'training.publish', companyId);
   const rows = (await tx.query(`${COURSE_SQL} WHERE c.company_id = $1 OR c.company_id IS NULL ORDER BY c.is_example, c.created_at DESC`, [companyId])).rows;
   // Learners and verifiers see published content only; authors also see their drafts and reviews.
-  return rows.filter(r => r.published || (author && r.company_id)).map(r => ({ ...r, exampleNote: r.is_example ? EXAMPLE_NOTE : null }));
+  return rows.filter(r => r.published || (author && r.company_id)).map(r => ({ ...r, exampleNote: r.is_example ? EXAMPLE_NOTE : null,
+    inhouseNote: r.is_example ? null : inhouseNote(r.published?.independent_review ?? null) }));
 }
 
 export async function relatedCourses(tx: Tx, companyId: string, refs: { hazard?: string | null; templateCode?: string | null; ruleCode?: string | null }) {
@@ -93,9 +96,17 @@ export async function getCourse(tx: Tx, p: Principal, companyId: string, courseI
   if (!versions.length) throw notFound('Eğitim');
   const links = (await tx.query(`SELECT kind, ref FROM training_links WHERE course_id = $1 ORDER BY kind, ref`, [courseId])).rows;
   const open = versions.find(v => v.status === 'draft' || v.status === 'in_review');
+  // The author of a version in review publishes it only if nobody else in the business can (same rule as changeStatus).
+  let publishBlockedReason: string | null = null;
+  if (publisher && open?.status === 'in_review' && (open.submitted_by ?? open.created_by) === p.userId) {
+    const others = (await tx.query(`SELECT 1 FROM memberships WHERE company_id = $1 AND status = 'active' AND site_id IS NULL AND role IN ('owner','hq_manager') AND user_id <> $2`,
+      [companyId, p.userId])).rowCount;
+    if (others) publishBlockedReason = 'Bu sürümü sen incelemeye gönderdin; işletmede yayımlama yetkisi olan başka biri var, o yayımlamalı. Bildirim gönderildi.';
+  }
   return {
     id: c.id, isExample: c.is_example, exampleNote: c.is_example ? EXAMPLE_NOTE : null, versions, links,
-    permissions: { author, publish: publisher, assign: holds(p, 'training.assign', companyId) && versions.some(v => v.status === 'published'),
+    inhouseNote: c.is_example ? null : inhouseNote(versions.find(v => v.status === 'published')?.independent_review ?? null),
+    permissions: { author, publish: publisher, publishBlockedReason, assign: holds(p, 'training.assign', companyId) && versions.some(v => v.status === 'published'),
       newVersion: author && !open },
   };
 }
@@ -154,8 +165,9 @@ export async function changeStatus(tx: Tx, p: Principal, companyId: string, vers
         if (others) throw new AppError(422, 'PUBLISHER_IS_AUTHOR', 'İçeriği yazan ya da incelemeye gönderen kişi yayımlayamaz; başka bir yetkili yayımlamalı.');
       }
       await tx.query(`UPDATE training_versions SET status = 'archived', archived_at = clock_timestamp() WHERE course_id = $1 AND status = 'published'`, [v.course_id]);
-      await tx.query(`UPDATE training_versions SET status = 'published', published_by = $2, published_at = clock_timestamp(), review_notes = $3 WHERE id = $1`,
-        [versionId, p.userId, notes?.trim() || null]);
+      // Recorded and shown: was it approved by someone other than its author?
+      await tx.query(`UPDATE training_versions SET status = 'published', published_by = $2, published_at = clock_timestamp(), review_notes = $3, independent_review = $4 WHERE id = $1`,
+        [versionId, p.userId, notes?.trim() || null, author !== p.userId]);
     }
   }
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: `training.${op}`, entityType: 'training_course', entityId: v.course_id, payload: { versionId, version: v.version, notes } });
@@ -216,7 +228,7 @@ export async function assign(tx: Tx, p: Principal, companyId: string, b: { cours
   return { id: a.id };
 }
 
-const ASSIGN_SQL = `SELECT a.*, v.title, v.summary, v.minutes, v.version, jsonb_array_length(v.quiz) AS questions, v.pass_score, c.is_example,
+const ASSIGN_SQL = `SELECT a.*, v.title, v.summary, v.minutes, v.version, jsonb_array_length(v.quiz) AS questions, v.pass_score, c.is_example, v.independent_review,
    u.display_name AS user_name, ab.display_name AS assigned_by_name, fu.display_name AS field_verified_by_name, n.title AS ncr_title
  FROM training_assignments a JOIN training_versions v ON v.id = a.version_id JOIN training_courses c ON c.id = a.course_id
  JOIN users u ON u.id = a.user_id JOIN users ab ON ab.id = a.assigned_by LEFT JOIN users fu ON fu.id = a.field_verified_by
@@ -255,6 +267,8 @@ export async function getAssignment(tx: Tx, p: Principal, companyId: string, id:
   return {
     id: a.id, title: a.title, version: a.version, summary: v.summary, body: v.body, videoUrl: v.video_url, minutes: a.minutes,
     isExample: a.is_example, exampleNote: a.is_example ? EXAMPLE_NOTE : null, participationNote: PARTICIPATION_NOTE,
+    inhouseNote: a.is_example ? null : inhouseNote(a.independent_review), previousAssignmentId: a.previous_assignment_id,
+    laterAssignmentId: (await tx.query(`SELECT id FROM training_assignments WHERE previous_assignment_id = $1`, [id])).rows[0]?.id ?? null,
     quiz: (v.quiz as QuizQ[]).map(q => ({ q: q.q, options: q.options })), passScore: a.pass_score,
     userId: a.user_id, userName: a.user_name, assignedByName: a.assigned_by_name, assignedAt: a.assigned_at, dueAt: a.due_at, reason: a.reason,
     ncrId: a.ncr_id, ncrTitle: a.ncr_title, actionId: a.action_id,
@@ -271,6 +285,9 @@ export async function getAssignment(tx: Tx, p: Principal, companyId: string, id:
         && can(p, 'training.verify', { companyId, siteId: a.site_id }).ok,
       fieldVerifyBlockedReason: manager && learner ? 'Kendi eğitiminin sahadaki etkinliğini doğrulayamazsın.' : null,
       cancel: manager && !a.cancelled_at && !a.field_verified_at,
+      changeDue: manager && !a.cancelled_at && !a.completed_at,
+      // After "not effective in the field": retrain (new assignment, this one kept) or add an action on the case.
+      retrain: manager && a.field_result === 'not_effective' && !(await tx.query(`SELECT 1 FROM training_assignments WHERE previous_assignment_id = $1`, [id])).rowCount,
     },
   };
 }
@@ -351,4 +368,40 @@ export async function cancelAssignment(tx: Tx, p: Principal, companyId: string, 
   if (reason.trim().length < 5) throw invalid('İptal gerekçesi yaz.');
   await tx.query(`UPDATE training_assignments SET cancelled_at = clock_timestamp(), cancel_reason = $2 WHERE id = $1`, [id, reason.trim()]);
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'training.cancelled', entityType: 'training_assignment', entityId: id, payload: { reason: reason.trim() } });
+}
+
+/** Change the due date (managers); the learner is told; announced again by the deadline scan. */
+export async function changeDue(tx: Tx, p: Principal, companyId: string, id: string, b: { dueAt: string | null; reason: string }) {
+  const { a, manager } = await loadAssignment(tx, p, companyId, id, true);
+  if (!manager) throw forbidden();
+  if (a.cancelled_at || a.completed_at) throw conflict('NOT_OPEN', 'Tamamlanmış ya da iptal edilmiş atamanın termini değişmez.');
+  if (b.reason.trim().length < 5) throw invalid('Termin değişikliğinin gerekçesini yaz.');
+  await tx.query(`UPDATE training_assignments SET due_at = $2 WHERE id = $1`, [id, b.dueAt]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'training.due_changed', entityType: 'training_assignment', entityId: id,
+    payload: { from: a.due_at, to: b.dueAt, reason: b.reason.trim() } });
+  await notify(tx, { companyId, siteId: a.site_id, userIds: [a.user_id], except: p.userId, kind: 'training_due_changed', entityType: 'training_assignment', entityId: id,
+    dedupeKey: `training_due_changed:${id}:${b.dueAt ?? 'none'}`, title: 'Eğitim termini değişti', body: `${a.title} · ${b.reason.trim()}` });
+}
+
+/**
+ * Retraining after the field check found the training not effective. The earlier assignment, with
+ * its read / completed / passed / field result, stays exactly as recorded; a new one points back to it.
+ */
+export async function retrain(tx: Tx, p: Principal, companyId: string, id: string, b: { dueAt: string | null; reason: string }) {
+  const { a, manager } = await loadAssignment(tx, p, companyId, id, true);
+  if (!manager) throw forbidden();
+  if (a.field_result !== 'not_effective') throw conflict('NOT_INEFFECTIVE', 'Yeniden eğitim, sahada "etkili değil" bulunan atamadan başlatılır.');
+  if ((await tx.query(`SELECT 1 FROM training_assignments WHERE previous_assignment_id = $1`, [id])).rowCount) throw conflict('ALREADY_RETRAINED', 'Bu atama için yeniden eğitim zaten başlatıldı.');
+  if (b.reason.trim().length < 5) throw invalid('Yeniden eğitimin nedenini yaz.');
+  const v = (await tx.query(`SELECT id, title FROM training_versions WHERE course_id = $1 AND status = 'published'`, [a.course_id])).rows[0];
+  if (!v) throw conflict('NOT_PUBLISHED', 'Bu eğitimin yayımlanmış sürümü yok.');
+  const n = (await tx.query<{ id: string }>(`INSERT INTO training_assignments (company_id, site_id, course_id, version_id, user_id, assigned_by, due_at, reason, ncr_id, action_id, previous_assignment_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+    [companyId, a.site_id, a.course_id, v.id, a.user_id, p.userId, b.dueAt, b.reason.trim(), a.ncr_id, a.action_id, id])).rows[0]!;
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'training.retrained', entityType: 'training_assignment', entityId: n.id, payload: { previous: id, reason: b.reason.trim() } });
+  if (a.ncr_id) await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.training_assigned', entityType: 'nonconformity', entityId: a.ncr_id,
+    payload: { assignmentId: n.id, title: v.title, userId: a.user_id, retraining: true } });
+  await notify(tx, { companyId, siteId: a.site_id, userIds: [a.user_id], except: p.userId, kind: 'training_assigned', entityType: 'training_assignment', entityId: n.id,
+    dedupeKey: `training_assigned:${n.id}`, title: 'Yeniden eğitim atandı', body: `${v.title} · ${b.reason.trim()}` });
+  return { id: n.id };
 }

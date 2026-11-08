@@ -498,7 +498,7 @@ export function HistoryCard({ n }: { n: NcrDetail }) {
 }
 
 const TSTATE = (st: TrainingRow['state']) => st.cancelled ? ['İPTAL', C.t3] : st.fieldVerified === 'effective' ? ['SAHADA ETKİLİ', C.lime]
-  : st.fieldVerified === 'not_effective' ? ['SAHADA YETERSİZ', C.crit] : st.completed ? ['TAMAMLANDI · SAHA DOĞRULAMASI BEKLİYOR', C.warn]
+  : st.fieldVerified === 'not_effective' ? ['SAHADA ETKİLİ DEĞİL', C.crit] : st.completed ? ['TAMAMLANDI · SAHA DOĞRULAMASI BEKLİYOR', C.warn]
   : st.passed ? ['SINAVI GEÇTİ', C.info] : st.read ? ['OKUNDU', C.info] : st.overdue ? ['GECİKMİŞ', C.crit] : ['ATANDI', C.t2];
 export type TrainingRow = { id: string; title: string; userName: string; dueAt: string | null; reason: string; isExample: boolean; bestScore: number | null; questions: number;
   state: { read: boolean; completed: boolean; passed: boolean | null; fieldVerified: 'effective' | 'not_effective' | null; cancelled: boolean; overdue: boolean } };

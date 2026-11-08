@@ -5,6 +5,7 @@ import { can, onlyAssignedTasks, type Principal } from '../domain/permissions';
 import { localDay, occurrences, type Recurrence } from '../domain/schedule';
 import { ALLOWED_MIME } from '../storage/local';
 import { appendAudit } from './audit';
+import { relatedCourses } from './training';
 import { createFromTask } from './nonconformities';
 import { currentObligations } from './obligations';
 
@@ -58,7 +59,8 @@ export async function generateTasks(tx: Tx, companyId: string, siteId: string, f
 async function loadTask(tx: Tx, p: Principal, companyId: string, taskId: string, action: 'task.read' | 'task.execute') {
   const t = (await tx.query(
     `SELECT t.*, tt.title, tt.instructions, tt.evidence, tt.limits, tt.severity, tt.hazard_type, tt.emergency_instruction, tt.emergency_approved_by,
-            e.type AS equipment_type, e.name AS equipment_name, rv.is_example, rv.kind AS rule_kind, rv.version AS rule_version
+            e.type AS equipment_type, e.name AS equipment_name, rv.is_example, rv.kind AS rule_kind, rv.version AS rule_version,
+            (SELECT code FROM rules WHERE id = rv.rule_id) AS rule_code
        FROM tasks t JOIN task_templates tt ON tt.id = t.template_id JOIN rule_versions rv ON rv.id = tt.rule_version_id
        LEFT JOIN equipment e ON e.id = t.equipment_id
       WHERE t.id = $1 AND t.company_id = $2`, [taskId, companyId])).rows[0];
@@ -110,6 +112,8 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     // Who is responsible for this recurring check from now on (null = nobody set).
     seriesResponsible: await seriesResponsible(tx, companyId, t.site_id, t.template_code, t.equipment_id),
     canAssign: can(p, 'task.assign', { companyId, siteId: t.site_id }).ok,
+    // Training that fits this check (by check, obligation or topic); reading it is optional.
+    relatedTraining: await relatedCourses(tx, companyId, { hazard: t.hazard_type, templateCode: t.template_code, ruleCode: t.rule_code }),
   };
 }
 

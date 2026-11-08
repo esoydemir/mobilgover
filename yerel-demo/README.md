@@ -57,6 +57,7 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
 | `personel@demo.goverhub.test` | Personel (Elif): yalnızca kendisine atanan görevleri görür; demoda eldiven kontrolünün sorumlusu |
 | `uzman@demo.goverhub.test` | Hizmet sağlayıcı (soğutma teknisyeni, onaylı) |
 | `danisman@demo.goverhub.test` | Danışman (süreli erişim) |
+| `moderator@demo.goverhub.test` | Mesleki ağ moderatörü (şikâyet kuyruğu) |
 | `yazar@`, `onay@`, `yonetici@`, `pazar@`, `alan-uzmani@` | Platform rolleri (kural yazma ve onay, pazar yeri inceleme) |
 
 **Denenebilecek akış:**
@@ -107,6 +108,21 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
 4. `personel@` ile zildeki "Sana bir eğitim atandı" bildirimini aç → **Okudum / izledim** → soruları cevapla → **Eğitimi tamamladım**. Sonra kayıttaki aksiyona fotoğraf ekleyip **"Yapıldı" bildir**.
 5. `mudur@` ile "Eğitim tamamlandı" bildiriminden aç → aksiyonu uygulama kanıtı seç → gözlemini yaz → **Kaydet**. Uygunsuzluk açık kalır; kendi doğrulamasıyla kapanır.
 6. İçerik: **Daha → Eğitimler → İçerikler → Yeni eğitim içeriği** (`mudur@` yazar ve incelemeye gönderir; `sahip@` yayımlar).
+
+**Eğitim takipleri (5B):**
+1. Tek yöneticili işletmede kendi yazıp yayımladığın içerikte "İşletme içi içerik · bağımsız inceleme yapılmadı" etiketi görünür; içerik ağa gitmez.
+2. Bir sıcaklık kontrolünü aç: altta **İLGİLİ EĞİTİMLER**.
+3. Atama ekranında **Termini değiştir** gerekçe ister; kişiye bildirilir. Yaklaşan (24 saat) ve geciken termin bildirimi saatlik taramayla bir kez gelir.
+4. Tamamlanmış atamada sahada **Etkili değil** seç → **Yeniden eğitim ata** (önceki kayıt aynen kalır, yeni atama öncekine bağlanır) ya da **Kayda ek aksiyon ekle**.
+
+**Mesleki ağ (5B):**
+1. `sahip@` ile **Daha → Mesleki ağ → Profil oluştur**: ad, unvan, tanıtım, il/ilçe, uzmanlık ve kategori seç → **Profili oluştur**. Sonra fotoğraf ekle ve deneyim ekle. E-posta/telefon kutuları işaretlenmedikçe gizli kalır.
+2. **Uzman ara**: uzmanlık "soğutma" + kategori "Soğutma teknik servisi" → Murat Yıldız. Ekranda sıralama ölçütleri ve "neden üstte" yazar. Metne "Zeynep" yaz: onaysız profil de çıkar; **Yalnız hizmet onayı olanlar** onu gizler.
+3. Murat'ın profilinde **Takip et**. Bölümler ayrı: kişisel beyan / kontrol edilmiş belgeler / hizmet onayı / doğrulanmış hizmet geçmişi.
+4. **Paylaş**: taslak kaydet → düzenle → yayımla. Bir gönderiye yorum yaz. Başkasının gönderisinde **Şikâyet et**.
+5. Murat'ın profilinde **Hizmet talebi başlat**: yalnız onaylı kategorisi listelenir; talep yalnız ona gider. Formu açmak kayıt oluşturmaz.
+6. Bir uygunsuzlukta **Vakayı mesleki ağda paylaş**: özet yaz → **Önizle ve kontrol et** (ad, telefon, fiyat yazarsan uyarır) → izin kutusu → taslak → yayımla.
+7. `moderator@` ile **Daha → Ağ moderasyonu**: karar seç, gerekçe yaz → **Kararı kaydet**.
 
 **Kayda özel dış doğrulayıcı (5. teslim):** kayıttaki **Dış doğrulayıcı davet et** düğmesi "Yalnız seçili kayıtlar" kapsamıyla açılır; doğrulayıcı yalnız o kaydı ve kanıtlarını görür.
 

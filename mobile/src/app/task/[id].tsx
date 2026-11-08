@@ -103,6 +103,18 @@ export default function TaskDetailRoute() {
         <RequirementCard key={i} r={r} t={t} instruments={(instruments.data ?? []).filter(x => x.type === 'thermometer')} role={role} onAdd={add} base={base} />
       ))}
 
+      {t.relatedTraining?.length ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+          <Eyebrow>İLGİLİ EĞİTİMLER</Eyebrow>
+          {t.relatedTraining.map(c => (
+            <Text key={c.id} testID={`task-training-${c.id}`} onPress={() => router.push(`/training/${c.id}`)} style={type(12.5, 500, { color: C.info, lh: 1.45 })}>
+              {c.title}{c.minutes ? ` · ${c.minutes} dk` : ''}{c.is_example ? ' · ÖRNEK İÇERİK' : ' · işletme içi'}
+            </Text>
+          ))}
+          <Text style={type(11, 400, { color: C.t3 })}>Okumak isteğe bağlıdır; yöneticin ayrıca atayabilir.</Text>
+        </Card>
+      ) : null}
+
       {(t.measurements.length > 0 || t.evidence.length > 0) && (
         <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>SUNUCUDAKİ KAYITLAR</Eyebrow>

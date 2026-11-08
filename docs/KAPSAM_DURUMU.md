@@ -1,4 +1,4 @@
-# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1.–5A teslim işlendi)
+# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1.–5B teslim işlendi)
 
 **Kaynaklar:**
 - Tasarım prototipi ve sohbeti: `project/`, `chats/chat1.md`
@@ -110,9 +110,12 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 |---|---|---|
 | Sürümlü eğitim içeriği: taslak → incelemede → yayımlandı → arşivlendi | ✅ (5. teslim) | Daha → Eğitimler → İçerikler. Yayımlanan sürüm değişmez; değişiklik yeni sürümle yapılır, önceki sürüm arşive geçer (silinmez) |
 | İçerik yazma ve yayımlama ayrı yetkiler | ✅ (5. teslim) | Şube yöneticisi yazar ve incelemeye gönderir; yayımlamayı sahip/merkez yöneticisi yapar. Başka yayımlayıcı varsa yazan kişi kendi içeriğini yayımlayamaz (tek yöneticide yapabilir) |
-| Eğitimi görev, yükümlülük ve uygunsuzlukla ilişkilendirme | ✅ (5. teslim) | Konu (tehlike türü), kontrol (görev şablonu) ve yükümlülük (kural) bağlantısı; uygunsuzluk ve yükümlülük ekranında ilgili eğitimler; atama uygunsuzluğa bağlanabilir. Görev ekranında henüz gösterilmiyor |
+| Eğitimi görev, yükümlülük ve uygunsuzlukla ilişkilendirme | ✅ (5. teslim) | Konu (tehlike türü), kontrol (görev şablonu) ve yükümlülük (kural) bağlantısı; uygunsuzluk ve yükümlülük ekranında ilgili eğitimler; atama uygunsuzluğa bağlanabilir. Görev (kontrol) ekranında "İLGİLİ EĞİTİMLER" kartı (5B) |
 | Kişiye eğitim atama; okuma/izleme; kısa değerlendirme | ✅ (5. teslim) | Okundu, tamamlandı, sınavı geçti ve sahada etkinliği doğrulandı ayrı kayıtlar. Cevap anahtarı öğrenene gönderilmez; yanlış sorular gösterilir |
 | Sahada etkinlik doğrulaması | ✅ (5. teslim) | Eğitimi alan dışında bir yönetici; isteğe bağlı olarak öğrenenin bağlı kayıtta yaptığı aksiyonu uygulama kanıtı seçer. Eğitim tamamlanması ve etkinlik doğrulaması uygunsuzluğu kapatmaz |
+| Tek yöneticinin kendi yayımladığı içerik | ✅ (5B) | "İşletme içi içerik · bağımsız inceleme yapılmadı" etiketi (liste, içerik ve atama ekranı). İşletme içinde kalır; mesleki ağa ya da platform kütüphanesine otomatik yayımlanmaz. Başka yayımlayıcı varken yazar "Yayımla" düğmesi yerine nedenini görür |
+| Atama termini ve hatırlatma | ✅ (5B) | Yaklaşan (24 saat) ve geciken termin bildirimi her termin için bir kez; gecikmede atayan da bilgilenir. Termin değişikliği gerekçe ister ve kişiye bildirilir |
+| Sahada "etkili değil" → yeniden eğitim / ek aksiyon | ✅ (5B) | Önceki atamanın okuma, sınav ve tamamlama kayıtları değişmez; yeniden eğitim yeni atama olarak açılır ve öncekine bağlanır (bir kez). Bağlı kayda ek aksiyon eklenebilir |
 | Örnek içerik etiketi; katılım kaydı ≠ sertifika | ✅ (5. teslim) | 2 ÖRNEK eğitim (soğutucu kapısı, eldiven) açıkça etiketli; ekranlarda "GoverHub katılım kaydıdır; resmî sertifika değildir" |
 | Video oynatma, dosya ekli içerik | ◐ | Video yalnız bağlantı olarak gösterilir; içerik metindir |
 | Onaylı uzman içeriği / platform içerik ekibi | ✗ | Kapsam kararı bekliyor; örnek içerikler platform kaynaklı, mevzuat ya da onaylı görüş değildir |
@@ -125,21 +128,25 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Kimlik ve mesleki belge doğrulama başvurusu, inceleme kararı | ✅ | İnceleme: Yönetim → pazar yeri |
 | Kategori bazlı hizmet yetkisi (süreli; belge süresi geçince düşer) | ✅ | |
 | Profil ekranında doğrulama durumlarının ayrı gösterimi | ✅ | |
-| Deneyim ve uzmanlık geçmişi (yapılandırılmış) | ✗ | Yalnızca serbest başlık ve açıklama |
+| Deneyim ve uzmanlık geçmişi (yapılandırılmış) | ✅ (5B) | Mesleki ağ profilinde: uzmanlık alanları ve deneyim (görev, kurum, yıllar) — kişisel beyan olarak |
 | Belge dosyası yükleme | ✗ | Yalnızca belge numarası ve kurum |
 
-## 9. Mesleki ağ
+## 9. Mesleki ağ (ilk sürüm, 5B)
 
 | Özellik | Durum | Not |
 |---|---|---|
-| Herkese açık uzman profili görüntüleme | ✅ | |
-| Uzman arama (ad, şehir, kategori) | ◐ | Yalnızca hizmet talebi açarken, kategoriye göre onaylı uzman sayısı |
-| Bağlantı / takip | ✗ | |
-| Paylaşım / gönderi | ✗ | |
-| Doğrulanmış hizmet geçmişi (teslim kabul edilmiş işler) | ✅ (3. teslim) | Yalnız raporu teslim edilip işletmece kabul edilmiş, değerlendirilmiş ve işletmenin profilde gösterilmesine izin verdiği işler; kategori, şehir, ay ve puanlar görünür, işletme adı görünmez |
-| Gizlilik: işletmenin uygunsuzluk ve belgeleri ağa açılmaz | ✅ | Sunucu paylaşımı yalnızca talep kapsamında ve süreli |
-
-Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
+| Ağ profili: fotoğraf, unvan, tanıtım, bölge, uzmanlık, deneyim, hizmet kategorileri | ✅ (5B) | Daha → Mesleki ağ. Fotoğraf JPEG/PNG ≤ 2 MB, yalnız giriş yapmış ağ kullanıcılarına |
+| Kişisel beyan / kontrol edilmiş belge / hizmet onayı / doğrulanmış hizmet geçmişi ayrı | ✅ (5B) | Dört ayrı bölüm. Ağ üyeliği hizmet verme onayı değildir (profilde yazılı) |
+| İletişim ve belge gizliliği | ✅ (5B) | E-posta ve telefon kişi açmadıkça gizli; belge dosyaları ağda hiç gösterilmez (yalnız neyin nasıl kontrol edildiği) |
+| Uzman arama: metin, uzmanlık, kategori, bölge, "yalnız onaylılar" | ✅ (5B) | Onaysız profil bulunur ama onay gerektiren kategoride teklif veremez (sunucu). Sıralama ölçütleri ekranda açıklanır; takipçi sayısı yalnız eşitlikte; her sonuçta "neden üstte" |
+| Takip, engelleme | ✅ (5B) | Engelleme iki yönlü gizler (akış, profil, arama, fotoğraf) ve takipleri kaldırır |
+| Paylaşım ve yorum: taslak, düzenleme, silme | ✅ (5B) | Yalnız giriş yapmış, profili olan kullanıcılara. Her gönderide "Kullanıcı paylaşımı · doğrulanmış mevzuat ya da platform onaylı içerik değildir" |
+| Vaka paylaşımı | ✅ (5B) | Uygunsuzluk ekranından; sahip/merkez yöneticisinin açık izni, alan seçimi, önizleme ve kişisel/ticari bilgi kontrolü (ad, şube, kişi, telefon, e-posta, TC, IBAN, adres, fiyat, seri no). Önce taslak; düzenlemede kontrol yeniden çalışır. İşletme kayıtları otomatik paylaşılmaz |
+| Şikâyet ve moderasyon | ✅ (5B) | Gönderi, yorum, profil; moderasyon kuyruğu (ağ moderatörü rolü); gizle / askıya al / reddet kararı gerekçe ister ve denetim kaydına yazılır |
+| Profilden hizmet talebine geçiş | ✅ (5B) | Yalnız uzmanın onaylı kategorileri; talep yalnız o uzmana gider; formu açmak kayıt, sipariş ya da ücret oluşturmaz; kategori onayı sunucuda yeniden kontrol edilir |
+| Doğrulanmış hizmet geçmişi (teslim kabul edilmiş işler) | ✅ (3. teslim) | İşletme adı görünmez |
+| Özel mesajlaşma, reklam, gelişmiş öneri algoritması | ✗ | Bu teslimde bilerek eklenmedi |
+| Moderatör atama ekranı, itiraz akışı, otomatik içerik taraması | ✗ | Moderatör rolü şimdilik veritabanından verilir; demo: moderator@demo.goverhub.test |
 
 ## 10. Hizmet talebi, teklif, yürütme, değerlendirme
 
@@ -201,9 +208,9 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 9. ✅ Hizmet değerlendirmesi ve uzman profilinde doğrulanmış hizmet geçmişi (3. teslim).
 
 **P3 — Genişleme:**
-10. Uzman arama.
-11. Yapılandırılmış deneyim.
-12. Bağlantı/takip ve paylaşım (kapsam kararı gerekiyor).
+10. ✅ Uzman arama (5B).
+11. ✅ Yapılandırılmış deneyim (5B, ağ profilinde).
+12. ✅ Takip ve paylaşım, ilk sürüm (5B); mesajlaşma ve öneri yok.
 13. Çok şubeli işletme.
 14. Kural yazma ekranı.
 15. Saklama ekranı.
@@ -213,9 +220,6 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 
 ## Senin kararını bekleyenler (şimdilik engellemiyor)
 
-- **Mesleki ağın kapsamı:**
-  - Gönderiler kimin tarafından okunabilir: herkes mi, yalnızca giriş yapanlar mı?
-  - İşletme hesapları uzmanları takip edebilir mi?
-  - İçerik denetimini kim yapar?
+- **Mesleki ağ (5B'de varsayılanlar uygulandı):** gönderiler yalnız giriş yapmış ve profili olan kullanıcılara; işletme hesapları da takip edebilir; denetim platformun ağ moderatörü rolünde. Moderatörün kim olacağı ve şikâyet itiraz süreci senin kararın.
 - **Eğitim içeriği:** Kim üretecek ve onaylayacak? Katılım belgesi verilecek mi?
 - **Ödeme ve gerçek bildirim kanalları:** SMS, push, e-posta.

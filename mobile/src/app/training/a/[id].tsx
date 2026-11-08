@@ -8,17 +8,18 @@ import { Screen } from '../../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../../components/states';
 import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, StepMark, Tap } from '../../../components/ui';
 import { fmtDateTime } from '../../../features/dates';
+import { DuePicker } from '../../../features/ncr/parts';
 import { useUi } from '../../../state/app';
 import { C, tint, type } from '../../../theme';
 
 type A = {
   id: string; title: string; version: number; summary: string; body: string; videoUrl: string | null; minutes: number | null; isExample: boolean; exampleNote: string | null;
-  participationNote: string; quiz: { q: string; options: string[] }[]; passScore: number; userName: string; assignedByName: string; assignedAt: string; dueAt: string | null;
+  participationNote: string; inhouseNote: string | null; previousAssignmentId: string | null; laterAssignmentId: string | null; quiz: { q: string; options: string[] }[]; passScore: number; userName: string; assignedByName: string; assignedAt: string; dueAt: string | null;
   reason: string; ncrId: string | null; ncrTitle: string | null; readAt: string | null; completedAt: string | null; passedAt: string | null; bestScore: number | null;
   attempts: { score: number; passed: boolean; created_at: string }[]; fieldVerifiedAt: string | null; fieldVerifiedByName: string | null; fieldNotes: string | null;
   fieldResult: 'effective' | 'not_effective' | null; fieldActionId: string | null; cancelledAt: string | null; cancelReason: string | null;
   fieldActions: { id: string; description: string; verification_status: string }[];
-  permissions: { read: boolean; complete: boolean; attempt: boolean; fieldVerify: boolean; fieldVerifyBlockedReason: string | null; cancel: boolean };
+  permissions: { read: boolean; complete: boolean; attempt: boolean; fieldVerify: boolean; fieldVerifyBlockedReason: string | null; cancel: boolean; changeDue: boolean; retrain: boolean };
 };
 
 /** One assignment. Four separate facts: read, completed, passed, effective in the field. */
@@ -45,7 +46,7 @@ export default function AssignmentRoute() {
     ['Okundu / izlendi', !!a.readAt, a.readAt ? fmtDateTime(a.readAt) : null],
     ['Tamamlandı', !!a.completedAt, a.completedAt ? fmtDateTime(a.completedAt) : null],
     ...(a.quiz.length ? [['Değerlendirmeyi geçti', !!a.passedAt, a.passedAt ? `%${a.bestScore} · ${fmtDateTime(a.passedAt)}` : a.attempts.length ? `en iyi %${a.bestScore}, geçme %${a.passScore}` : null] as [string, boolean, string | null]] : []),
-    ['Sahada etkinliği doğrulandı', a.fieldResult === 'effective', a.fieldVerifiedAt ? `${a.fieldResult === 'effective' ? 'Etkili' : 'Yetersiz'} · ${a.fieldVerifiedByName} · ${fmtDateTime(a.fieldVerifiedAt)}` : null],
+    ['Sahada etkinliği doğrulandı', a.fieldResult === 'effective', a.fieldVerifiedAt ? `${a.fieldResult === 'effective' ? 'Etkili' : 'Etkili değil'} · ${a.fieldVerifiedByName} · ${fmtDateTime(a.fieldVerifiedAt)}` : null],
   ];
   const firstOpen = steps.findIndex(s => !s[1]);
   return (
@@ -72,6 +73,9 @@ export default function AssignmentRoute() {
         <Text style={[type(11, 400, { color: C.t3, lh: 1.45 }), { marginTop: 10 }]}>{a.participationNote} Eğitimin tamamlanması bağlı uygunsuzluğu kapatmaz.</Text>
       </Card>
       {a.exampleNote ? <Text style={type(12, 500, { color: C.warn, lh: 1.45 })}>{a.exampleNote}</Text> : null}
+      {a.inhouseNote ? <Text style={type(12, 500, { color: a.inhouseNote.includes('bağımsız') ? C.warn : C.t2, lh: 1.45 })}>{a.inhouseNote}</Text> : null}
+      {a.previousAssignmentId ? <GhostButton testID="tr-previous" label="Önceki atama (sahada etkili değil)" height={34} size={11.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/training/a/${a.previousAssignmentId}`)} /> : null}
+      {a.laterAssignmentId ? <GhostButton testID="tr-later" label="Yeniden eğitim atamasını aç" height={34} size={11.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/training/a/${a.laterAssignmentId}`)} /> : null}
       <Card style={{ gap: 8 }}>
         <Eyebrow>İÇERİK</Eyebrow>
         {a.summary ? <Text style={type(12.5, 500, { color: C.t2 })}>{a.summary}</Text> : null}
@@ -120,15 +124,49 @@ export default function AssignmentRoute() {
           ) : a.ncrId ? <Text style={type(11.5, 400, { color: C.t3 })}>Bağlı kayıtta bu kişinin yaptığı bir aksiyon yok; gözlemini yaz.</Text> : null}
           <View style={{ flexDirection: 'row', gap: 7 }}>
             <FilterChip testID="tr-field-effective" label="Etkili" active={verdict === 'effective'} onPress={() => setVerdict('effective')} />
-            <FilterChip testID="tr-field-not" label="Yetersiz" active={verdict === 'not_effective'} onPress={() => setVerdict('not_effective')} />
+            <FilterChip testID="tr-field-not" label="Etkili değil" active={verdict === 'not_effective'} onPress={() => setVerdict('not_effective')} />
           </View>
           <Field label="Sahada ne gördün?" testID="tr-field-notes" value={notes} onChangeText={setNotes} multiline placeholder="ör. Üç açılışta kapıyı kapalı ve contayı kontrol edilmiş gördüm." />
           <PrimaryButton testID="tr-field-save" label={busy ? 'Kaydediliyor…' : 'Kaydet'} glow={false} height={44} size={13} disabled={busy || notes.trim().length < 10}
             onPress={() => run(() => call('POST', `${base}/field-verify`, { result: verdict, notes: notes.trim(), actionId }), 'Sahadaki etkinlik kaydedildi', 'Uygunsuzluk kendi doğrulamasıyla kapanır.')} />
         </Card>
       ) : null}
+      {a.permissions.retrain ? (
+        <Card style={{ gap: 9 }} border={tint.crit(0.3)}>
+          <Eyebrow color={C.crit}>SAHADA ETKİLİ DEĞİL · SONRAKİ ADIM</Eyebrow>
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Bu atamanın okuma, tamamlama ve sınav kayıtları olduğu gibi kalır. Yeniden eğitim yeni bir atama olarak açılır; bağlı kayda ek aksiyon da ekleyebilirsin.</Text>
+          <Field label="Neden" testID="tr-retrain-reason" value={notes} onChangeText={setNotes} multiline placeholder="ör. Sahada uygulanmadı; uygulamalı tekrar." />
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <PrimaryButton testID="tr-retrain" label={busy ? 'Atanıyor…' : 'Yeniden eğitim ata'} glow={false} height={42} size={12.5} disabled={busy || notes.trim().length < 5}
+              onPress={() => run(async () => { const r = await call<{ id: string }>('POST', `${base}/retrain`, { reason: notes.trim(), dueAt: new Date(Date.now() + 3 * 86400000).toISOString() }); setNotes(''); router.push(`/training/a/${r.id}`); }, 'Yeniden eğitim atandı', 'Önceki kayıt korunur.')} />
+            {a.ncrId ? <GhostButton testID="tr-extra-action" label="Kayda ek aksiyon ekle" height={42} size={12.5} onPress={() => router.push(`/ncr/${a.ncrId}`)} /> : null}
+          </View>
+        </Card>
+      ) : null}
+      {a.permissions.changeDue ? <DueChange base={base} current={a.dueAt} onDone={q.reload} /> : null}
       {error ? <ErrorBox message={error} /> : null}
       {a.permissions.cancel ? <Tap testID="tr-cancel" onPress={() => run(() => call('POST', `${base}/cancel`, { reason: 'Yönetici iptal etti' }), 'Atama iptal edildi')}><Text style={type(12, 500, { color: C.crit })}>Atamayı iptal et</Text></Tap> : null}
     </Screen>
+  );
+}
+
+/** Managers: change the due date with a reason; the learner is told. */
+function DueChange({ base, current, onDone }: { base: string; current: string | null; onDone: () => void }) {
+  const { call } = useSession();
+  const { showToast } = useUi();
+  const [open, setOpen] = useState(false);
+  const [due, setDue] = useState<string | null>(current);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  if (!open) return <GhostButton testID="tr-due-open" label={current ? `Termini değiştir (${fmtDateTime(current)})` : 'Termin ekle'} height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => setOpen(true)} />;
+  return (
+    <Card style={{ gap: 8 }}>
+      <Eyebrow>TERMİN</Eyebrow>
+      <DuePicker value={due} onChange={setDue} />
+      <Field label="Gerekçe" testID="tr-due-reason" value={reason} onChangeText={setReason} />
+      {error ? <ErrorBox message={error} /> : null}
+      <PrimaryButton testID="tr-due-save" label="Kaydet" glow={false} height={40} size={12} disabled={reason.trim().length < 5}
+        onPress={async () => { setError(null); try { await call('POST', `${base}/due`, { dueAt: due, reason: reason.trim() }); showToast('Termin kaydedildi', 'Kişiye bildirildi; yaklaşınca ve geçince hatırlatılır.'); setOpen(false); onDone(); } catch (e) { setError(errorText(e)); } }} />
+    </Card>
   );
 }

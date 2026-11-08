@@ -75,7 +75,7 @@ export function historyLine(h: NcrDetail['history'][number]): string {
     case 'nonconformity.action_reassign': return 'Aksiyon yeniden atandı';
     case 'nonconformity.verification_failed': return `Doğrulama başarısız: ${p.notes}`;
     case 'nonconformity.training_assigned': return `Eğitim atandı: ${p.title}`;
-    case 'nonconformity.training_field_verified': return `Eğitimin sahadaki etkinliği kaydedildi (${p.userName}): ${p.result === 'effective' ? 'etkili' : 'yetersiz'}`;
+    case 'nonconformity.training_field_verified': return `Eğitimin sahadaki etkinliği kaydedildi (${p.userName}): ${p.result === 'effective' ? 'etkili' : 'etkili değil'}`;
     case 'nonconformity.closed': return `Doğrulandı ve kapatıldı${p.mode === 'self' ? ' (öz doğrulama)' : p.via === 'grant' ? ' (dış doğrulayıcı)' : ''}`;
     case 'nonconformity.reopened': return `Yeniden açıldı: ${p.reason}`;
     default: return h.event_type;

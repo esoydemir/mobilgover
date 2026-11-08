@@ -11,7 +11,7 @@ import { trainingStateLabel, type TrainingRow } from '../features/ncr/parts';
 import { VERSION_STATUS } from '../features/training';
 import { C, type } from '../theme';
 
-type Course = { id: string; is_example: boolean; exampleNote: string | null; published: { title: string; summary: string; minutes: number | null; questions: number; version: number } | null;
+type Course = { id: string; is_example: boolean; exampleNote: string | null; inhouseNote: string | null; published: { title: string; summary: string; minutes: number | null; questions: number; version: number } | null;
   latest: { status: string; title: string; version: number } | null };
 
 /** Training: my assignments, the content library, and (for managers) who was assigned what. */
@@ -67,6 +67,7 @@ export default function TrainingsRoute() {
                   {c.latest && c.published && c.latest.status !== 'published' ? <Pill label={`SÜRÜM ${c.latest.version} ${VERSION_STATUS[c.latest.status]![0]}`} fg={C.warn} bg={C.chip} /> : null}
                   {c.is_example ? <ExampleBadge label="ÖRNEK İÇERİK" /> : null}
                 </View>
+                {c.inhouseNote ? <Text testID={`tr-inhouse-${c.id}`} style={type(10.5, 600, { ls: 0.04, color: c.inhouseNote.includes('bağımsız') ? C.warn : C.t3 })}>{c.inhouseNote.toLocaleUpperCase('tr')}</Text> : null}
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                   <Text style={[type(14, 600), { flex: 1 }]}>{c.published?.title ?? c.latest?.title}</Text>
                   <Chevron />

@@ -58,7 +58,8 @@ export default function RootLayout() {
 function Gate({ children }: { children: ReactNode }) {
   const { ready, token, companies, me } = useSession();
   const path = usePathname();
-  const providerOnly = !!me && companies.length === 0 && path.startsWith('/pro');
+  // Without a business: the provider area, the professional network and moderation stay reachable.
+  const providerOnly = !!me && companies.length === 0 && (path.startsWith('/pro') || path.startsWith('/network') || path.startsWith('/moderation'));
   useEffect(() => {
     if (!ready) return;
     if (!token && !OPEN_ROUTES.includes(path)) router.replace('/login');

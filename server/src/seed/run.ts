@@ -70,4 +70,21 @@ try {
       WHERE c.id = g.company_id AND c.is_demo AND c.name = 'Kahve Durağı (DEMO)' AND u.id = g.user_id AND u.email = 'danisman@demo.goverhub.test'
         AND NOT ('obligation_review' = ANY(g.scopes))`)).rowCount ?? 0);
   if (scoped) console.log('Demo: danışmana "uygulanmaz" isteklerini inceleme yetkisi eklendi.');
+
+  // Demo, delivery 5B: a network moderator account and network profiles for the demo specialist and
+  // consultant (declared information only). Added once; nothing existing is changed.
+  const net = await db.system(async tx => {
+    let added = 0;
+    await tx.query(`INSERT INTO users (display_name, email) VALUES ('Moderatör (demo)', 'moderator@demo.goverhub.test') ON CONFLICT (email) DO NOTHING`);
+    added += (await tx.query(`INSERT INTO platform_roles (user_id, role) SELECT id, 'network_moderator' FROM users WHERE email = 'moderator@demo.goverhub.test' ON CONFLICT DO NOTHING`)).rowCount ?? 0;
+    added += (await tx.query(`INSERT INTO network_profiles (user_id, display_name, title, bio, city, specialties, categories)
+       SELECT u.id, pp.display_name, 'Soğutma teknisyeni', 'Ticari soğutucu ve dondurucu bakımı. (Demo profil; beyan bilgisidir.)', pp.city, '{soğutma,kalibrasyon}',
+              COALESCE((SELECT array_agg(a.category_code) FROM service_authorizations a WHERE a.profile_id = pp.id), '{}')
+         FROM users u JOIN professional_profiles pp ON pp.user_id = u.id WHERE u.email = 'uzman@demo.goverhub.test' ON CONFLICT (user_id) DO NOTHING`)).rowCount ?? 0;
+    added += (await tx.query(`INSERT INTO network_profiles (user_id, display_name, title, bio, city, specialties)
+       SELECT u.id, u.display_name, 'Gıda güvenliği danışmanı', 'HACCP ve hijyen danışmanlığı. (Demo profil; beyan bilgisidir.)', 'İstanbul', '{gıda güvenliği,hijyen,HACCP}'
+         FROM users u WHERE u.email = 'danisman@demo.goverhub.test' ON CONFLICT (user_id) DO NOTHING`)).rowCount ?? 0;
+    return added;
+  });
+  if (net) console.log('Demo: mesleki ağ moderatörü (moderator@) ve örnek ağ profilleri eklendi.');
 } finally { await db.close(); }

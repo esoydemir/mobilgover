@@ -21,6 +21,7 @@ import * as mk from '../services/marketplace';
 import * as docs from '../services/documents';
 import * as verifiers from '../services/verifiers';
 import * as training from '../services/training';
+import * as net from '../services/network';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
@@ -723,7 +724,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/service-requests', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().trim().min(3).max(200), description: z.string().trim().min(5).max(4000),
-      ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false) }).parse(req.body);
+      ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false),
+      invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.createRequest(tx, req.principal, companyId, b), 201);
   });
   app.get('/companies/:companyId/service-requests', async req => {
@@ -754,6 +756,98 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ quality: star, timeliness: star, communication: star, comment: z.string().max(1000).nullable().default(null),
       showOnProfile: z.boolean().default(false) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.reviewJob(tx, req.principal, companyId, id, b), 201);
+  });
+
+  // ── Professional network (signed-in users with a network profile) ──
+  app.get('/network/me', async req => db.system(async tx => {
+    const pr = (await tx.query(`SELECT user_id FROM network_profiles WHERE user_id = $1`, [req.principal.userId])).rows[0];
+    return { hasProfile: !!pr, specialties: net.SPECIALTIES, ...(await net.moderatorFlag(req.principal)), note: net.NETWORK_NOTE };
+  }));
+  app.post('/network/profile', async req => {
+    const b = z.object({ displayName: z.string().max(120), title: z.string().max(120).default(''), bio: z.string().max(1500).default(''), city: z.string().max(60),
+      district: z.string().max(60).nullable().default(null), specialties: z.array(z.string().max(40)).max(12).default([]), categories: z.array(z.string().max(60)).max(10).default([]),
+      phone: z.string().max(30).nullable().default(null), showEmail: z.boolean().default(false), showPhone: z.boolean().default(false) }).parse(req.body);
+    return db.system(tx => net.saveProfile(tx, req.principal, b));
+  });
+  app.put('/network/profile/photo', async req => {
+    if (!Buffer.isBuffer(req.body)) throw new AppError(415, 'UNSUPPORTED_MEDIA', 'Fotoğraf JPEG ya da PNG olmalı.');
+    return net.setPhoto(db, store, req.principal, String(req.headers['content-type']).split(';')[0]!, req.body);
+  });
+  app.get('/network/profiles/:userId/photo', async (req, reply) => {
+    const { userId } = z.object({ userId: uuid }).parse(req.params);
+    const f = await net.getPhoto(db, store, req.principal, userId);
+    return reply.header('content-type', f.mime).header('cache-control', 'private, max-age=300').header('x-content-type-options', 'nosniff').send(f.bytes);
+  });
+  app.post('/network/experience', async (req, reply) => {
+    const b = z.object({ roleTitle: z.string().max(120), organization: z.string().max(120).default(''), startYear: z.number().int(), endYear: z.number().int().nullable().default(null),
+      description: z.string().max(1000).default('') }).parse(req.body);
+    return reply.code(201).send(await db.system(tx => net.addExperience(tx, req.principal, b)));
+  });
+  app.post('/network/experience/:id/delete', async req => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    await db.system(tx => net.removeExperience(tx, req.principal, id)); return { ok: true };
+  });
+  app.get('/network/profiles/:userId', async req => db.system(tx => net.viewProfile(tx, req.principal, z.object({ userId: uuid }).parse(req.params).userId)));
+  app.get('/network/search', async req => {
+    const q = z.object({ text: z.string().max(100).optional(), specialty: z.string().max(40).optional(), category: z.string().max(60).optional(), city: z.string().max(60).optional(),
+      approvedOnly: z.enum(['1', '0']).optional() }).parse(req.query);
+    return db.system(tx => net.search(tx, req.principal, { ...q, approvedOnly: q.approvedOnly === '1' }));
+  });
+  app.post('/network/profiles/:userId/:op', async req => {
+    const { userId, op } = z.object({ userId: uuid, op: z.enum(['follow', 'unfollow', 'block', 'unblock']) }).parse(req.params);
+    return db.system(async (tx): Promise<object> => op === 'follow' || op === 'unfollow' ? net.follow(tx, req.principal, userId, op === 'follow') : net.block(tx, req.principal, userId, op === 'block'));
+  });
+  app.get('/network/feed', async req => {
+    const q = z.object({ scope: z.enum(['all', 'following', 'mine']).default('all'), authorId: uuid.optional() }).parse(req.query);
+    return db.system(tx => net.feed(tx, req.principal, q));
+  });
+  app.post('/network/posts', async (req, reply) => {
+    const b = z.object({ body: z.string().max(5000), publish: z.boolean().default(false) }).parse(req.body);
+    return reply.code(201).send(await db.system(tx => net.createPost(tx, req.principal, b)));
+  });
+  app.get('/network/posts/:id', async req => db.system(tx => net.getPost(tx, req.principal, z.object({ id: uuid }).parse(req.params).id)));
+  app.post('/network/posts/:id', async req => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ body: z.string().max(5000).optional(), op: z.enum(['publish', 'delete']).optional() }).parse(req.body);
+    await db.system(tx => net.updatePost(tx, req.principal, id, b)); return { ok: true };
+  });
+  app.post('/network/posts/:id/comments', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ body: z.string().max(2000) }).parse(req.body);
+    return reply.code(201).send(await db.system(tx => net.comment(tx, req.principal, id, b.body)));
+  });
+  app.post('/network/comments/:id', async req => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ body: z.string().max(2000).optional(), op: z.literal('delete').optional() }).parse(req.body);
+    await db.system(tx => net.updateComment(tx, req.principal, id, b)); return { ok: true };
+  });
+  app.post('/network/reports', async (req, reply) => {
+    const b = z.object({ targetType: z.enum(['post', 'comment', 'profile']), targetId: uuid, reason: z.enum(['misleading', 'personal_data', 'commercial_data', 'harassment', 'spam', 'other']),
+      details: z.string().max(1000).default('') }).parse(req.body);
+    return reply.code(201).send(await db.system(tx => net.report(tx, req.principal, b)));
+  });
+  app.get('/network/moderation/reports', async req => {
+    const q = z.object({ status: z.enum(['open', 'closed']).default('open') }).parse(req.query);
+    return db.system(tx => net.moderationQueue(tx, req.principal, q.status));
+  });
+  app.post('/network/moderation/reports/:id', async req => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ decision: z.enum(['hide', 'dismiss', 'suspend_profile']), notes: z.string().max(2000) }).parse(req.body);
+    return db.system(tx => net.decide(tx, req.principal, id, b));
+  });
+  // Case share: preview (nothing stored) and, with an authorised person's permission, a draft post.
+  const caseBody = z.object({ fields: z.array(z.enum(net.CASE_FIELDS)).max(5), summary: z.string().max(3000) });
+  app.post('/companies/:companyId/nonconformities/:id/share-preview', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = caseBody.parse(req.body);
+    return db.tenant(companyId, tx => net.previewCase(tx, req.principal, companyId, id, b));
+  });
+  app.post('/companies/:companyId/nonconformities/:id/share', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = caseBody.extend({ permit: z.boolean() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => net.shareCase(tx, req.principal, companyId, id, b), 201);
   });
 
   // ── Training ──
@@ -815,8 +909,12 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   app.post('/companies/:companyId/training/assignments/:id/:step', async (req, reply) => {
     const companyId = company(req);
-    const { id, step } = z.object({ id: uuid, step: z.enum(['read', 'complete', 'attempt', 'field-verify', 'cancel']) }).parse(req.params);
+    const { id, step } = z.object({ id: uuid, step: z.enum(['read', 'complete', 'attempt', 'field-verify', 'cancel', 'due', 'retrain']) }).parse(req.params);
     return mutate(req, reply, companyId, async tx => {
+      if (step === 'due' || step === 'retrain') {
+        const b = z.object({ dueAt: z.iso.datetime({ offset: true }).nullable().default(null), reason: z.string().max(1000) }).parse(req.body);
+        return step === 'due' ? (await training.changeDue(tx, req.principal, companyId, id, b), { ok: true }) : training.retrain(tx, req.principal, companyId, id, b);
+      }
       if (step === 'read' || step === 'complete') return training.learnerStep(tx, req.principal, companyId, id, step);
       if (step === 'attempt') return training.attempt(tx, req.principal, companyId, id, z.object({ answers: z.array(z.number().int()).max(10) }).parse(req.body).answers);
       if (step === 'field-verify') return training.fieldVerify(tx, req.principal, companyId, id,

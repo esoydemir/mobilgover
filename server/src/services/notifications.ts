@@ -158,6 +158,18 @@ export async function scanDeadlines(db: Db, now = new Date()) {
         c += await notify(tx, { companyId, siteId: t.site_id, userIds: [t.assignee_id], kind: 'task_overdue', entityType: 'task', entityId: t.id,
           dedupeKey: `task_overdue:${t.id}`, title: 'Kontrolün gecikti', body: `${t.title} · son saat ${fmt(new Date(t.due_at))}` });
       }
+      // Training due soon (24 h) and overdue: the learner, and for overdue also whoever assigned it; once per due date.
+      const trainings = (await tx.query(`SELECT a.id, a.site_id, a.user_id, a.assigned_by, a.due_at, v.title FROM training_assignments a JOIN training_versions v ON v.id = a.version_id
+         WHERE a.company_id = $1 AND a.cancelled_at IS NULL AND a.completed_at IS NULL AND a.due_at IS NOT NULL AND a.due_at < $2::timestamptz + interval '24 hours'`,
+        [companyId, now.toISOString()])).rows;
+      for (const tr of trainings) {
+        const due = new Date(tr.due_at);
+        const overdue = due < now;
+        c += await notify(tx, { companyId, siteId: tr.site_id, userIds: overdue ? [tr.user_id, tr.assigned_by] : [tr.user_id],
+          kind: overdue ? 'training_overdue' : 'training_due_soon', entityType: 'training_assignment', entityId: tr.id,
+          dedupeKey: `${overdue ? 'training_overdue' : 'training_due_soon'}:${tr.id}:${due.toISOString()}`,
+          title: overdue ? 'Eğitim termini geçti' : 'Eğitim termini yaklaşıyor', body: `${tr.title} · termin ${fmt(due)}` });
+      }
       const day = now.toISOString().slice(0, 10);
       const perSite = new Map<string, number>();
       for (const t of tasks) perSite.set(t.site_id, (perSite.get(t.site_id) ?? 0) + 1);
