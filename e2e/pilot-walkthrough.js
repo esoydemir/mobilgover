@@ -3,9 +3,9 @@ const OUT = process.argv[2];
 // WEB: the app's address. Emails can be overridden, e.g. for the local Docker demo where
 // only @demo.goverhub.test addresses may sign in (DEMO_LOGIN_DOMAIN).
 const WEB = process.env.WEB || 'http://localhost:8099';
-const OWNER = process.env.OWNER || OWNER;
-const MANAGER = process.env.MANAGER || MANAGER;
-const PROVIDER = process.env.PROVIDER || PROVIDER;
+const OWNER = process.env.OWNER || 'ahmet@modakafe.test';
+const MANAGER = process.env.MANAGER || 'selin@modakafe.test';
+const PROVIDER = process.env.PROVIDER || 'murat@demo.goverhub.test';
 let n = 0;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -162,11 +162,23 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     await addAction(null, 'Kapı contası değiştirildi (uzman raporu).', 'Conta değişti, kapı tam kapanıyor.');
     await addAction('Düzeltici faaliyet', 'Conta kontrolü aylık bakım listesine eklenecek.', 'Bakım listesine eklendi.');
     await id('cause-verified-open').click(); await id('cause-notes').fill('Conta aşınmış; bakım planında conta kontrolü yoktu.'); await id('cause-save').click(); await wait(2500);
+    await logout();
+    // "Done" is a claim: someone who did not do the work (the owner) checks both results.
+    await login(OWNER);
+    await goMore('more-ncrs'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
+    for (const note of ['Conta faturası ve uzman raporu incelendi.', 'Aylık bakım listesinde conta maddesi var.']) {
+      await p.locator('[data-testid^="action-verify-open-"]').first().click(); await wait(400);
+      await p.locator('[data-testid^="action-notes-"]').first().fill(note); await p.locator('[data-testid^="action-verify-ok-"]').first().click(); await wait(2500);
+    }
+    await shot('aksiyonlar-dogrulandi');
+    await logout();
+    await login(MANAGER);
+    await goMore('more-ncrs'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
     await id('ncr-effectiveness-notes').fill('Üç gün boyunca ölçümler 2–4 °C aralığında.'); await id('ncr-effectiveness-save').click(); await wait(4000);
     await p.reload(); await wait(3500);
     await shot('capa-adimlari');
     // High risk: the person who did the fix cannot verify; the screen says so.
-    await part('başka bir yetkili doğrulamalı').waitFor({ timeout: 15000 });
+    await part('payın var').waitFor({ timeout: 15000 });
     await shot('kendi-isini-kapatamaz');
     await logout();
 

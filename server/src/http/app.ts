@@ -9,8 +9,8 @@ import { appendAudit } from '../services/audit';
 import { canonical, sha256 } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
-import { uploadContent } from '../services/evidence';
-import { MANUAL_HAZARDS, addAction, assessCause, createManual, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
+import { readContent, uploadContent } from '../services/evidence';
+import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
 import { listNotifications, markRead } from '../services/notifications';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
 import { confirmTotpSetup, listSessions, logout, revokeOtherSessions, revokeSession, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
@@ -18,6 +18,7 @@ import { acceptInvitation, addMember, createCompany, listMyCompanies, listMyInvi
 import type { Mailer } from '../services/mail';
 import { loadPrincipal } from '../services/principal';
 import * as mk from '../services/marketplace';
+import * as docs from '../services/documents';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
@@ -383,8 +384,9 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/obligations/:id/not-applicable', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const { reason } = z.object({ reason: z.string() }).parse(req.body);
-    return mutate(req, reply, companyId, tx => overrideNotApplicable(tx, req.principal, companyId, id, reason), 201);
+    const b = z.object({ reason: z.string(), basis: z.string().max(2000).optional(),
+      disputedFacts: z.array(z.object({ key: z.string(), proposed: z.unknown() })).max(10).optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => overrideNotApplicable(tx, req.principal, companyId, id, b.reason, { basis: b.basis, disputedFacts: b.disputedFacts }), 201);
   });
   app.post('/companies/:companyId/override-requests/:requestId/review', async (req, reply) => {
     const companyId = company(req);
@@ -468,6 +470,14 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     if (!Buffer.isBuffer(req.body)) throw new AppError(415, 'UNSUPPORTED_MEDIA', `Dosya gövdesi şu türlerden biri olmalı: ${ALLOWED_MIME.join(', ')}`);
     return uploadContent(db, store, req.principal, companyId, evidenceId, req.body);
   });
+  app.get('/companies/:companyId/evidence/:evidenceId/content', async (req, reply) => {
+    const companyId = company(req);
+    const { evidenceId } = z.object({ evidenceId: uuid }).parse(req.params);
+    const f = await readContent(db, store, req.principal, companyId, evidenceId);
+    reply.header('content-type', f.mime).header('cache-control', 'private, no-store').header('x-content-sha256', f.sha256)
+      .header('content-disposition', 'inline').header('x-content-type-options', 'nosniff');
+    return reply.send(f.bytes);
+  });
   app.post('/companies/:companyId/tasks/:taskId/complete', async (req, reply) => {
     const companyId = company(req);
     const { taskId } = z.object({ taskId: uuid }).parse(req.params);
@@ -521,15 +531,21 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ kind: z.enum(['correction', 'corrective_action', 'follow_up']), description: z.string().max(2000),
       ownerId: uuid.nullable().default(null), dueAt: z.iso.datetime({ offset: true }).nullable().default(null),
-      supportRef: z.record(z.string(), z.unknown()).nullable().default(null) }).parse(req.body);
+      supportRef: z.record(z.string(), z.unknown()).nullable().default(null), evidenceRequired: z.enum(['none', 'photo', 'document']).default('none') }).parse(req.body);
     return mutate(req, reply, companyId, tx => addAction(tx, req.principal, companyId, id, b), 201);
   });
   app.post('/companies/:companyId/nonconformities/:id/actions/:actionId', async (req, reply) => {
     const companyId = company(req);
     const { id, actionId } = z.object({ id: uuid, actionId: uuid }).parse(req.params);
-    const b = z.object({ op: z.enum(['done', 'cancel', 'reassign']), notes: z.string().max(4000).optional(), ownerId: uuid.optional(),
-      dueAt: z.iso.datetime({ offset: true }).nullable().optional() }).parse(req.body);
+    const b = z.object({ op: z.enum(['done', 'cancel', 'reassign', 'verify']), notes: z.string().max(4000).optional(), ownerId: uuid.optional(),
+      dueAt: z.iso.datetime({ offset: true }).nullable().optional(), result: z.enum(['accepted', 'rejected']).optional() }).parse(req.body);
     return mutate(req, reply, companyId, async tx => { await updateAction(tx, req.principal, companyId, id, actionId, b); return { ok: true }; });
+  });
+  app.post('/companies/:companyId/nonconformities/:id/actions/:actionId/evidence', async (req, reply) => {
+    const companyId = company(req);
+    const { id, actionId } = z.object({ id: uuid, actionId: uuid }).parse(req.params);
+    const b = z.object({ kind: z.enum(['photo', 'document']), mime: z.string(), sha256: z.string(), sizeBytes: z.number().int().positive().max(config.maxUploadBytes) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => addActionEvidence(tx, req.principal, companyId, id, actionId, b), 201);
   });
   app.post('/companies/:companyId/nonconformities/:id/verify', async (req, reply) => {
     const companyId = company(req);
@@ -698,6 +714,47 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ accept: z.boolean(), note: z.string().max(2000) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.acceptJob(tx, req.principal, companyId, id, b));
+  });
+  // Review of a delivered and accepted job (one per job; shown on the provider profile only if allowed).
+  app.post('/companies/:companyId/jobs/:id/review', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const star = z.number().int().min(1).max(5);
+    const b = z.object({ quality: star, timeliness: star, communication: star, comment: z.string().max(1000).nullable().default(null),
+      showOnProfile: z.boolean().default(false) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => mk.reviewJob(tx, req.principal, companyId, id, b), 201);
+  });
+
+  // ── Document vault ──
+  const isoDate = z.iso.date().nullable();
+  app.get('/companies/:companyId/documents', async req => {
+    const companyId = company(req);
+    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional() }).parse(req.query);
+    return db.tenant(companyId, tx => docs.listDocuments(tx, req.principal, companyId, q));
+  });
+  app.post('/companies/:companyId/documents', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ docType: z.enum(docs.DOC_TYPES), title: z.string().max(200), siteId: uuid.nullable().default(null), equipmentId: uuid.nullable().default(null),
+      issuer: z.string().max(200).nullable().default(null), documentNo: z.string().max(100).nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.createDocument(tx, req.principal, companyId, b), 201);
+  });
+  app.get('/companies/:companyId/documents/:id', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => docs.getDocument(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/documents/:id/versions', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ validFrom: isoDate.default(null), validUntil: isoDate.default(null), notes: z.string().max(2000).nullable().default(null),
+      file: z.object({ mime: z.string(), sha256: z.string(), sizeBytes: z.number().int().positive().max(config.maxUploadBytes) }) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.addVersion(tx, req.principal, companyId, id, b), 201);
+  });
+  app.post('/companies/:companyId/documents/:id/versions/:versionId/review', async (req, reply) => {
+    const companyId = company(req);
+    const { id, versionId } = z.object({ id: uuid, versionId: uuid }).parse(req.params);
+    const b = z.object({ decision: z.enum(['verified', 'rejected']), notes: z.string().max(2000), validFrom: isoDate.optional(), validUntil: isoDate.optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.reviewVersion(tx, req.principal, companyId, id, versionId, b));
   });
 
   // ── Retention matrix ──

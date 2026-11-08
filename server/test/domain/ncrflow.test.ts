@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flow, suggestions, verifierConflict, type FlowInput } from '../../src/domain/ncrflow';
+import { flow, roundPerformers, suggestions, verifierConflict, type FlowInput } from '../../src/domain/ncrflow';
 
 const base: FlowInput = { flowVersion: 2, depth: 'correction', status: 'open', iteration: 1, ownerId: 'u1', dueAt: '2030-01-01T00:00:00Z',
   independentVerification: false, steps: [], causes: [], actions: [] };
@@ -51,6 +51,27 @@ describe('nonconformity flow', () => {
     expect(verifierConflict(n, 'b')).toBe(true);
     expect(verifierConflict(n, 'a')).toBe(false);
     expect(verifierConflict({ ...n, independentVerification: false }, 'b')).toBe(false);
+  });
+
+  it('a declared "done" counts only once verified; a rejected claim is open work again', () => {
+    const ready = (verification: any, status: any = 'done') => flow({ ...base, steps: [{ step: 'containment', iteration: 1, doneBy: 'u1' }],
+      causes: [{ stage: 'initial', iteration: 1, categories: ['process'], migrated: false }],
+      actions: [{ kind: 'correction', iteration: 1, status, doneBy: status === 'done' ? 'u1' : null, verification }] });
+    expect(ready('declared').readyForEffectiveness).toBe(false);
+    expect(ready('declared').blockers.join(' ')).toContain('doğrulanmayı bekliyor');
+    expect(ready('rejected', 'open').readyForEffectiveness).toBe(false);
+    expect(ready('verified').readyForEffectiveness).toBe(true);
+    expect(ready('legacy').readyForEffectiveness).toBe(true);
+  });
+
+  it('round performers are owners, doers and evidence givers of this round\'s fixes', () => {
+    const n = { iteration: 1, independentVerification: true, actions: [
+      { kind: 'corrective_action' as const, iteration: 1, status: 'done' as const, doneBy: 'b', ownerId: 'a', evidenceBy: ['c'] },
+      { kind: 'follow_up' as const, iteration: 1, status: 'done' as const, doneBy: 'x', ownerId: 'x' }] };
+    expect([...roundPerformers(n)].sort()).toEqual(['a', 'b', 'c']);
+    for (const u of ['a', 'b', 'c']) expect(verifierConflict(n, u)).toBe(true);
+    expect(verifierConflict(n, 'd')).toBe(false);
+    expect(verifierConflict(n, 'x')).toBe(false); // a follow-up is not the fix
   });
 
   it('suggestions only point somewhere; training is shown as not available yet', () => {

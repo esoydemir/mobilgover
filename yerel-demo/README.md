@@ -78,7 +78,9 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
    6. Etkinlik kontrolü
    7. Doğrulama
 
-   Doğrulamayı, bu turun düzeltmesini yapan kişiden farklı biri yapmalı (görevler ayrılığı).
+   Her aksiyon için **"Yapıldı" bildir** bir beyandır: aksiyon kanıt istiyorsa önce fotoğraf/belge eklenir; beyanı sorumlu, beyan eden ve kanıt verenden başka bir yönetici **Sonucu doğrula** ile onaylar ya da reddeder. Doğrulanmamış beyan akışta sonuç sayılmaz.
+
+   Yüksek riskli kayıtta kapanışı, bu turdaki düzeltme ya da düzeltici faaliyette payı olan (sorumlu, yapan, kanıt veren) hiç kimse doğrulayamaz.
 
 **Elle uygunsuzluk ve destek önerisi:**
 1. `personel@` ile **Daha fazla → Uygunsuzluklar → Sorun bildir** adımlarını izleyip bir kayıt aç.
@@ -88,8 +90,17 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
 5. Kapanan kayıt gerekçe yazılarak yeniden açılabilir.
 
 **Zorunlu yükümlülükte "uygulanmaz":**
-1. `sahip@` ile Soğuk muhafaza yükümlülüğünde **Uygulanmaz de** seçeneğini kullan. Karar hemen uygulanmaz, incelemeye gider.
-2. `danisman@` ile zildeki bildirimden açıp onayla ya da reddet.
+1. `sahip@` ile Soğuk muhafaza yükümlülüğünde **Uygulanmaz de** seçeneğini kullan. Kuralın hangi koşulunun sizde farklı olduğunu seç (ör. "Soğuk depolama: Hayır") ve dayanağı yaz. Önerdiğin bilgilerle kural hâlâ uyuyorsa istek gönderilemez.
+2. `danisman@` ile zildeki bildirimden aç. Onay, bilgileri doğrulanmış olarak profile işler; kararı kural motoru verir. Bilgiler kurala hâlâ uyuyorsa onay reddedilir ve yükümlülük sürer.
+
+**Belge kasası (3. teslim):**
+1. `mudur@` ile **Daha fazla → Belge kasası → Belge ekle**: tür "Kalibrasyon sertifikası", **Ekipman** → buzdolabı. **Belgeyi oluştur**.
+2. **Yeni sürüm / dosya ekle**: bir PDF ya da fotoğraf seç, geçerlilik sonunu ör. 10 gün sonrası yaz (YYYY-AA-GG), **Yükle ve incelemeye gönder**. Durum: "İNCELEME BEKLİYOR · GEÇERLİ SAYILMAZ"; yükleyen inceleyemez.
+3. `sahip@` ile zildeki "Yeni belge sürümü incelemeni bekliyor" bildiriminden aç → **İncele** → not yaz → **Doğrula**. Durum "SÜRESİ YAKLAŞIYOR" olur; süre hatırlatması saatlik taramada (ve uygulama yeniden başlayınca) bildirim olarak gelir.
+
+**Hizmet değerlendirmesi (3. teslim):**
+1. Yukarıdaki uzman hizmeti akışında teklif gelince ve rapor teslim edilince `sahip@` zile bildirim düşer.
+2. Teslimi kabul ettikten sonra iş ekranında **Hizmeti değerlendir** formu açılır (kalite, zamanlama, iletişim; isteğe bağlı yorum). "Uzman profilinde gösterilmesine izin ver" işaretlenirse iş, işletme adı olmadan uzmanın profilinde **Doğrulanmış hizmet geçmişi** altında görünür. Teslim alınmamış iş değerlendirilemez; bir iş bir kez değerlendirilir.
 
 Kendi işletmeni de kurabilirsin: yeni bir demo adresiyle gir, örneğin `ben@demo.goverhub.test`. Kurulum ekranı açılır; burada açılan işletmeler de demo olarak işaretlenir.
 
@@ -124,6 +135,10 @@ Kayıtlar klasörde değil, Docker'ın `goverhub-demo` adlı birimlerinde durur.
 - Eksik görevler tamamlanır.
 
 Güncellemeden sonra kayıtların yerinde olduğunu `durum.cmd` ve uygulamadaki listelerden görebilirsin. Hiçbir güncelleme `SIFIRLA-tum-demo-verisi.cmd` dosyasını çalıştırmaz.
+
+3. teslim notu: güncellemeden önce yeni uygunsuzluk akışında "tamamlandı" denmiş aksiyonlar artık **"yapıldı" beyanı · doğrulama bekliyor** olarak görünür; bir yönetici doğrulayana kadar sonuç sayılmaz. Kayıt silinmez.
+
+**Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs` ve `e2e/yerel-demo-yeni.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
 
 ## 7. Nasıl çalışıyor
 

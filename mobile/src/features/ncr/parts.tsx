@@ -11,6 +11,7 @@ import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
 import { fmtDateTime } from '../dates';
 import { ROLE_LABEL } from '../labels';
+import { fileMeta, openEvidence, pickFile, uploadBytes } from '../files';
 import { ACTION_KIND, CAUSE_LABEL, STAGE_LABEL, historyLine, type Cause, type NcrDetail } from './types';
 
 /** Runs a server call with busy / error state and a success toast, then reloads. */
@@ -247,7 +248,8 @@ export function ActionsCard({ n, base, reload, me, formKind, setFormKind }: {
   const [desc, setDesc] = useState('');
   const [owner, setOwner] = useState<string | null>(null);
   const [due, setDue] = useState<string | null>(null);
-  const { busy, error, run, post } = useRun(() => { setFormKind(null); setDesc(''); setOwner(null); setDue(null); reload(); });
+  const [evReq, setEvReq] = useState<'none' | 'photo' | 'document'>('none');
+  const { busy, error, run, post } = useRun(() => { setFormKind(null); setDesc(''); setOwner(null); setDue(null); setEvReq('none'); reload(); });
   const canAdd = n.permissions.act && n.status === 'open';
   const kinds = n.depth === 'capa' ? ['correction', 'corrective_action', 'follow_up'] : ['correction', 'follow_up'];
   const rounds = [...new Set(n.actions.map(a => a.iteration))].sort((a, b) => b - a);
@@ -271,10 +273,16 @@ export function ActionsCard({ n, base, reload, me, formKind, setFormKind }: {
           <Field label="Ne yapılacak" testID="action-desc" value={desc} onChangeText={setDesc} multiline />
           {n.permissions.manage ? <><Text style={type(12, 600, { color: C.t2 })}>Sorumlu (boş bırakılırsa sen)</Text><PersonChips siteId={n.site_id} value={owner} onChange={setOwner} /></> : null}
           <DuePicker value={due} onChange={setDue} />
+          <Text style={type(12, 600, { color: C.t2 })}>"Yapıldı" denmeden önce istenecek kanıt</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+            {([['none', 'Kanıt istenmez'], ['photo', 'Fotoğraf'], ['document', 'Belge']] as const).map(([k, l]) =>
+              <FilterChip key={k} testID={`action-evidence-${k}`} label={l} px={12} active={evReq === k} onPress={() => setEvReq(k)} />)}
+          </View>
+          <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Her "yapıldı" beyanı, başka bir yetkili doğrulayana kadar sonuç sayılmaz.</Text>
           {error ? <ErrorBox message={error} /> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <PrimaryButton testID="action-save" label={busy ? 'Kaydediliyor…' : 'Aksiyonu ekle'} glow={false} height={44} size={13} style={{ flex: 1 }} disabled={busy || desc.trim().length < 5}
-              onPress={() => run(() => post(base + '/actions', { kind: formKind, description: desc.trim(), ownerId: owner, dueAt: due }), 'Aksiyon eklendi', owner && owner !== me ? 'Sorumluya bildirim gitti.' : undefined)} />
+              onPress={() => run(() => post(base + '/actions', { kind: formKind, description: desc.trim(), ownerId: owner, dueAt: due, evidenceRequired: evReq }), 'Aksiyon eklendi', owner && owner !== me ? 'Sorumluya bildirim gitti.' : undefined)} />
             <GhostButton label="Vazgeç" height={44} size={13} onPress={() => setFormKind(null)} />
           </View>
         </View>
@@ -284,46 +292,105 @@ export function ActionsCard({ n, base, reload, me, formKind, setFormKind }: {
   );
 }
 
+const EV_LABEL: Record<string, string> = { photo: 'fotoğraf', document: 'belge' };
+
+/** Where the claim stands: declared → verified (counts) or rejected (open again). */
+function claimState(a: NcrDetail['actions'][number]): { label: string; color: string } {
+  if (a.status === 'cancelled') return { label: 'İPTAL', color: C.t3 };
+  if (a.status === 'done') {
+    if (a.verification_status === 'verified') return { label: 'DOĞRULANDI', color: C.lime };
+    if (a.verification_status === 'legacy') return { label: 'TAMAMLANDI', color: C.lime };
+    return { label: 'YAPILDI BEYANI · DOĞRULAMA BEKLİYOR', color: C.warn };
+  }
+  if (a.verification_status === 'rejected') return { label: 'BEYAN REDDEDİLDİ · AÇIK', color: C.crit };
+  return { label: a.overdue ? 'GECİKMİŞ' : 'AÇIK', color: a.overdue ? C.crit : C.warn };
+}
+
 function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]; n: NcrDetail; base: string; reload: () => void; me: string | null }) {
-  const [mode, setMode] = useState<'done' | 'cancel' | 'reassign' | null>(null);
+  const [mode, setMode] = useState<'done' | 'cancel' | 'reassign' | 'verify' | null>(null);
   const [notes, setNotes] = useState('');
   const [owner, setOwner] = useState<string | null>(null);
-  const { busy, error, run, post } = useRun(() => { setMode(null); setNotes(''); reload(); });
+  const { token, company } = useSession();
+  const { busy, error, run, post, setError } = useRun(() => { setMode(null); setNotes(''); reload(); });
   const editable = a.status === 'open' && n.status === 'open';
-  const color = a.status === 'done' ? C.lime : a.status === 'cancelled' ? C.t3 : a.overdue ? C.crit : C.warn;
+  const st = claimState(a);
+  const stored = a.evidence.filter(e => e.status === 'stored');
+  const needsEvidence = a.evidence_required !== 'none' && !stored.some(e => e.kind === a.evidence_required);
+  const addEvidence = async () => {
+    setError(null);
+    try {
+      const kind = a.evidence_required === 'document' ? 'document' : 'photo';
+      const f = await pickFile(kind);
+      if (!f) return;
+      await run(async () => {
+        const r = await post(`${base}/actions/${a.id}/evidence`, { kind, ...fileMeta(f) }) as { id: string };
+        await uploadBytes(token, company!.id, r.id, f);
+      }, 'Kanıt eklendi', 'Dosyanın özeti sunucuda doğrulandı.');
+    } catch (e) { setError((e as Error).message); }
+  };
+  const open = async (id: string) => { setError(null); try { await openEvidence(token, company!.id, id); } catch (e) { setError((e as Error).message); } };
   return (
-    <View testID={`action-${a.id}`} style={{ borderWidth: 1, borderColor: a.overdue && a.status === 'open' ? tint.crit(0.3) : C.bd, borderRadius: 16, padding: 12, gap: 5 }}>
+    <View testID={`action-${a.id}`} style={{ borderWidth: 1, borderColor: a.overdue && a.status === 'open' ? tint.crit(0.3) : a.can_verify ? tint.warn(0.35) : C.bd, borderRadius: 16, padding: 12, gap: 5 }}>
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <Text style={[type(10, 700, { ls: 0.08, color: C.t3 }), { flex: 1 }]}>{ACTION_KIND[a.kind]!.toUpperCase()}</Text>
-        <Text style={type(10, 700, { ls: 0.08, color })}>{a.status === 'done' ? 'TAMAMLANDI' : a.status === 'cancelled' ? 'İPTAL' : a.overdue ? 'GECİKMİŞ' : 'AÇIK'}</Text>
+        <Text testID={`action-state-${a.id}`} style={type(10, 700, { ls: 0.08, color: st.color })}>{st.label}</Text>
       </View>
       <Text style={type(13.5, 600, { lh: 1.35 })}>{a.description}</Text>
       <Text style={type(11.5, 400, { color: a.owner_inactive ? C.crit : C.t3 })}>
         {a.owner_name ?? 'Sorumlu yok'}{a.owner_inactive ? ' (pasif)' : ''}{a.due_at ? ` · termin ${fmtDateTime(a.due_at)}` : ''}
+        {a.evidence_required !== 'none' ? ` · ${EV_LABEL[a.evidence_required]} kanıtı gerekli` : ''}
       </Text>
-      {a.result_notes ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{a.status === 'cancelled' ? 'İptal gerekçesi: ' : ''}{a.result_notes}{a.done_by_name ? ` · ${a.done_by_name}` : ''}</Text> : null}
-      {editable && mode === null ? (
-        <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap', marginTop: 4 }}>
-          {a.owner_id === me || n.permissions.manage ? <GhostButton testID={`action-done-open-${a.id}`} label="Tamamla" height={34} size={11.5} onPress={() => setMode('done')} /> : null}
-          {n.permissions.manage || a.created_by === me ? <GhostButton label="İptal et" height={34} size={11.5} color={C.crit} border={tint.crit(0.3)} onPress={() => setMode('cancel')} /> : null}
-          {n.permissions.manage ? <GhostButton label="Yeniden ata" height={34} size={11.5} onPress={() => setMode('reassign')} /> : null}
+      {a.result_notes ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{a.status === 'cancelled' ? 'İptal gerekçesi: ' : a.status === 'done' ? 'Beyan: ' : 'Önceki beyan: '}{a.result_notes}{a.done_by_name ? ` · ${a.done_by_name}` : ''}</Text> : null}
+      {a.verification_notes && a.verification_status !== 'declared' ? (
+        <Text style={type(12, 400, { color: a.verification_status === 'rejected' ? C.crit : C.t2, lh: 1.45 })}>
+          {a.verification_status === 'rejected' ? 'Reddedildi: ' : 'Doğrulama: '}{a.verification_notes}{a.verified_by_name ? ` · ${a.verified_by_name}` : ''}
+        </Text>
+      ) : null}
+      {a.evidence.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+          {a.evidence.map((e, i) => e.status === 'stored'
+            ? <Tap key={e.id} testID={`action-evidence-open-${e.id}`} onPress={() => open(e.id)}><Pill label={`${e.kind === 'photo' ? 'FOTOĞRAF' : 'BELGE'} ${i + 1} · AÇ`} fg={C.info} bg={tint.info(0.12)} /></Tap>
+            : <Pill key={e.id} label={e.status === 'pending_upload' ? 'YÜKLENİYOR' : 'REDDEDİLEN DOSYA'} fg={e.status === 'rejected' ? C.crit : C.t3} bg={C.chip} />)}
         </View>
       ) : null}
+      {a.verify_blocked_reason ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{a.verify_blocked_reason}</Text> : null}
+      {mode === null && (editable || a.can_verify) ? (
+        <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap', marginTop: 4 }}>
+          {editable && a.can_add_evidence && a.evidence_required !== 'none' ? <GhostButton testID={`action-evidence-add-${a.id}`} label={busy ? 'Yükleniyor…' : a.evidence_required === 'photo' ? 'Fotoğraf ekle' : 'Belge ekle'} height={34} size={11.5} disabled={busy} onPress={addEvidence} /> : null}
+          {editable && (a.owner_id === me || n.permissions.manage) ? <GhostButton testID={`action-done-open-${a.id}`} label='"Yapıldı" bildir' height={34} size={11.5} disabled={needsEvidence} onPress={() => setMode('done')} /> : null}
+          {editable && (n.permissions.manage || a.created_by === me) ? <GhostButton label="İptal et" height={34} size={11.5} color={C.crit} border={tint.crit(0.3)} onPress={() => setMode('cancel')} /> : null}
+          {editable && n.permissions.manage ? <GhostButton label="Yeniden ata" height={34} size={11.5} onPress={() => setMode('reassign')} /> : null}
+          {a.can_verify ? <GhostButton testID={`action-verify-open-${a.id}`} label="Sonucu doğrula" height={34} size={11.5} color={C.lime} border={tint.lime(0.35)} onPress={() => setMode('verify')} /> : null}
+        </View>
+      ) : null}
+      {editable && needsEvidence && mode === null ? <Text style={type(11, 400, { color: C.t3 })}>"Yapıldı" bildirmek için önce {EV_LABEL[a.evidence_required]} kanıtını ekle.</Text> : null}
       {mode ? (
         <View style={{ gap: 8, marginTop: 4 }}>
           {mode === 'reassign' ? <PersonChips siteId={n.site_id} value={owner} onChange={setOwner} /> : (
-            <Field label={mode === 'done' ? 'Ne yapıldı' : 'İptal gerekçesi'} testID={`action-notes-${a.id}`} value={notes} onChangeText={setNotes} multiline />
+            <Field label={mode === 'done' ? 'Ne yapıldı' : mode === 'verify' ? 'Neyi kontrol ettin' : 'İptal gerekçesi'} testID={`action-notes-${a.id}`} value={notes} onChangeText={setNotes} multiline />
           )}
+          {mode === 'done' ? <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Bu bir beyandır; başka bir yetkili doğrulayana kadar akışta sonuç sayılmaz.</Text> : null}
           {error ? <ErrorBox message={error} /> : null}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <PrimaryButton testID={`action-confirm-${a.id}`} label={busy ? 'Kaydediliyor…' : mode === 'done' ? 'Tamamlandı' : mode === 'cancel' ? 'İptal et' : 'Ata'} glow={false} height={40} size={12.5} style={{ flex: 1 }}
-              disabled={busy || (mode === 'reassign' ? !owner : notes.trim().length < 5)}
-              onPress={() => run(() => post(`${base}/actions/${a.id}`, mode === 'reassign' ? { op: 'reassign', ownerId: owner } : { op: mode, notes: notes.trim() }),
-                mode === 'done' ? 'Aksiyon tamamlandı' : mode === 'cancel' ? 'Aksiyon iptal edildi' : 'Aksiyon yeniden atandı')} />
-            <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
-          </View>
+          {mode === 'verify' ? (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <PrimaryButton testID={`action-verify-ok-${a.id}`} label={busy ? 'Kaydediliyor…' : 'Doğrulandı'} glow={false} height={40} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5}
+                onPress={() => run(() => post(`${base}/actions/${a.id}`, { op: 'verify', result: 'accepted', notes: notes.trim() }), 'Aksiyon sonucu doğrulandı')} />
+              <GhostButton testID={`action-verify-reject-${a.id}`} label="Reddet" height={40} size={12.5} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 10}
+                onPress={() => run(() => post(`${base}/actions/${a.id}`, { op: 'verify', result: 'rejected', notes: notes.trim() }), 'Beyan reddedildi', 'Aksiyon yeniden açık; sorumluya bildirim gitti.')} />
+              <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <PrimaryButton testID={`action-confirm-${a.id}`} label={busy ? 'Kaydediliyor…' : mode === 'done' ? '"Yapıldı" bildir' : mode === 'cancel' ? 'İptal et' : 'Ata'} glow={false} height={40} size={12.5} style={{ flex: 1 }}
+                disabled={busy || (mode === 'reassign' ? !owner : notes.trim().length < 5)}
+                onPress={() => run(() => post(`${base}/actions/${a.id}`, mode === 'reassign' ? { op: 'reassign', ownerId: owner } : { op: mode, notes: notes.trim() }),
+                  mode === 'done' ? '"Yapıldı" bildirildi' : mode === 'cancel' ? 'Aksiyon iptal edildi' : 'Aksiyon yeniden atandı', mode === 'done' ? 'Yetkili doğrulayınca sonuç sayılır.' : undefined)} />
+              <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
+            </View>
+          )}
         </View>
       ) : null}
+      {mode === null && error ? <ErrorBox message={error} /> : null}
     </View>
   );
 }

@@ -6,7 +6,8 @@ import { canonical } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { notify } from './notifications';
-import { currentFacts } from './profile';
+import { currentFacts, recordFact } from './profile';
+import { FACTS, isFactKey, matchesType, type FactKey } from '../domain/facts';
 
 const today = (now = new Date()) => now.toISOString().slice(0, 10);
 
@@ -106,11 +107,12 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
     `SELECT id, decision, decided_by, reason, decided_at, rule_version_id FROM obligations
       WHERE company_id = $1 AND site_id = $2 AND rule_id = $3 ORDER BY decided_at`, [companyId, o.site_id, o.rule_id])).rows;
   const latest = history[history.length - 1];
-  const reviews = (await tx.query(`SELECT r.id, r.status, r.reason, r.requested_at, r.reviewed_at, r.review_notes, ru.display_name AS requested_by_name, vu.display_name AS reviewed_by_name
+  const reviews = (await tx.query(`SELECT r.id, r.status, r.reason, r.basis, r.disputed_facts, r.engine_outcome, r.requested_at, r.reviewed_at, r.review_notes, ru.display_name AS requested_by_name, vu.display_name AS reviewed_by_name
      FROM obligation_override_requests r JOIN obligations ob ON ob.id = r.obligation_id JOIN users ru ON ru.id = r.requested_by LEFT JOIN users vu ON vu.id = r.reviewed_by
     WHERE r.company_id = $1 AND ob.site_id = $2 AND ob.rule_id = $3 ORDER BY r.requested_at`, [companyId, o.site_id, o.rule_id])).rows;
   const pending = (await tx.query(`SELECT r.*, u.display_name AS requested_by_name FROM obligation_override_requests r JOIN users u ON u.id = r.requested_by
      WHERE r.obligation_id = $1 AND r.status = 'pending'`, [o.id])).rows[0];
+  const siteFacts = await currentFacts(tx, companyId, o.site_id);
   const manualName = o.decided_by !== 'engine'
     ? (await tx.query<{ display_name: string }>(`SELECT display_name FROM users WHERE id::text = $1`, [o.decided_by])).rows[0]?.display_name ?? null : null;
   return {
@@ -118,7 +120,7 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
       isCurrent: latest?.id === o.id, currentId: latest?.id ?? o.id, manual: o.decided_by !== 'engine',
       canOverride: can(p, 'obligation.override', { companyId, siteId: o.site_id }).ok,
       mandatory: rv.kind !== 'good_practice' },
-    pendingReview: pending ? { id: pending.id, reason: pending.reason, requestedBy: pending.requested_by, requestedByName: pending.requested_by_name, requestedAt: pending.requested_at,
+    pendingReview: pending ? { id: pending.id, reason: pending.reason, basis: pending.basis, disputedFacts: pending.disputed_facts, requestedBy: pending.requested_by, requestedByName: pending.requested_by_name, requestedAt: pending.requested_at,
       canReview: can(p, 'obligation.review', { companyId, siteId: o.site_id }).ok && pending.requested_by !== p.userId } : null,
     reviews: reviews,
     rule: {
@@ -128,6 +130,11 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
       label: rv.is_example ? 'ÖRNEK KURAL — hukuki dayanağı doğrulanmadı' : rv.kind === 'good_practice' ? 'İyi uygulama önerisi — mevzuat hükmü değil' : 'Mevzuat yükümlülüğü',
     },
     provisions,
+    // The rule's conditions with today's values: what a "does not apply" request has to dispute.
+    conditionFacts: (rv.required_facts as string[]).filter(isFactKey).map(k => {
+      const f = siteFacts[k];
+      return { key: k, label: FACTS[k].label, type: FACTS[k].type, current: f?.value ?? null, source: f?.source ?? null, verification: f?.verification ?? null };
+    }),
     matchedFacts: o.facts_snapshot,
     trace: o.trace,
     history,
@@ -142,9 +149,13 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
  *   access). Until then the obligation and its checks stay as they are.
  * Records are never removed: overdue checks become "missed" and stay in reports.
  */
-export async function overrideNotApplicable(tx: Tx, p: Principal, companyId: string, obligationId: string, reason: string) {
+export type DisputedFact = { key: string; proposed: unknown };
+
+export async function overrideNotApplicable(tx: Tx, p: Principal, companyId: string, obligationId: string, reason: string,
+  claim: { disputedFacts?: DisputedFact[]; basis?: string } = {}) {
   if (reason.trim().length < 10) throw invalid('"Uygulanmıyor" kararı en az bir cümlelik gerekçe ister.');
-  const o = (await tx.query(`SELECT o.*, rv.kind AS rule_kind, rv.obligation_title FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id
+  const o = (await tx.query(`SELECT o.*, rv.kind AS rule_kind, rv.obligation_title, rv.condition, rv.required_facts, rv.effective_from, rv.effective_to, rv.ambiguity_note
+       FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id
      WHERE o.id = $1 AND o.company_id = $2`, [obligationId, companyId])).rows[0];
   if (!o) throw notFound('Yükümlülük');
   if (!can(p, 'obligation.override', { companyId, siteId: o.site_id }).ok) throw forbidden();
@@ -154,16 +165,51 @@ export async function overrideNotApplicable(tx: Tx, p: Principal, companyId: str
     if ((await tx.query(`SELECT 1 FROM obligation_override_requests WHERE obligation_id = $1 AND status = 'pending'`, [o.id])).rowCount) {
       throw conflict('REVIEW_PENDING', 'Bu yükümlülük için bekleyen bir inceleme isteği var.');
     }
-    const r = (await tx.query<{ id: string }>(`INSERT INTO obligation_override_requests (company_id, site_id, obligation_id, reason, requested_by) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [companyId, o.site_id, o.id, reason.trim(), p.userId])).rows[0]!;
+    // A mandatory obligation follows from the business facts. "Does not apply" therefore has to say
+    // which of the rule's conditions does not hold (the disputed facts, with the correct value) and
+    // on what basis; the rule engine, not the people, then decides with the corrected facts.
+    const basis = (claim.basis ?? '').trim();
+    const disputed = normalizeDisputed(o, claim.disputedFacts ?? []);
+    if (basis.length < 10) throw invalid('Dayanağı yaz: hangi belge, gözlem ya da kayıt bu bilgileri gösteriyor?');
+    const outcome = await engineWith(tx, companyId, o, disputed);
+    if (outcome.decision === 'applies') {
+      throw new AppError(422, 'RULE_STILL_APPLIES', 'Önerdiğin bilgilerle kuralın koşulları hâlâ karşılanıyor; yükümlülük devreden çıkamaz. Hangi koşulun sağlanmadığını seç.', { outcome: outcome.decision });
+    }
+    const r = (await tx.query<{ id: string }>(`INSERT INTO obligation_override_requests (company_id, site_id, obligation_id, reason, requested_by, disputed_facts, basis)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [companyId, o.site_id, o.id, reason.trim(), p.userId, JSON.stringify(disputed), basis])).rows[0]!;
     await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'obligation.override_requested', entityType: 'obligation', entityId: o.id,
-      payload: { requestId: r.id, reason: reason.trim(), current: o.decision } });
+      payload: { requestId: r.id, reason: reason.trim(), current: o.decision, disputedFacts: disputed, basis, expectedOutcome: outcome.decision } });
     await notify(tx, { companyId, siteId: o.site_id, userIds: await reviewers(tx, companyId), except: p.userId, kind: 'obligation_review_requested',
       entityType: 'obligation', entityId: o.id, dedupeKey: `obligation_review:${r.id}`, title: '"Uygulanmaz" isteği incelemeni bekliyor', body: `${o.obligation_title} · ${reason.trim()}` });
     return { status: 'pending_review' as const, requestId: r.id, id: o.id as string };
   }
   const id = await applyNotApplicable(tx, companyId, o, p.userId, reason.trim(), null);
   return { status: 'applied' as const, id };
+}
+
+/** Disputed facts must be conditions of this rule, each with a value of the right type. */
+function normalizeDisputed(o: any, xs: DisputedFact[]): { key: FactKey; proposed: unknown }[] {
+  if (!xs.length) throw invalid('Kuralın hangi koşulunun sizin için geçerli olmadığını seç (en az bir bilgi).');
+  const seen = new Set<string>();
+  return xs.map(x => {
+    if (!(o.required_facts as string[]).includes(x.key) || !isFactKey(x.key)) throw invalid(`"${x.key}" bu kuralın koşullarından biri değil.`);
+    if (seen.has(x.key)) throw invalid('Aynı bilgi iki kez seçilmiş.');
+    seen.add(x.key);
+    if (!matchesType(FACTS[x.key].type, x.proposed)) throw invalid(`${FACTS[x.key].label} için değer tipi ${FACTS[x.key].type} olmalı.`);
+    return { key: x.key, proposed: x.proposed };
+  });
+}
+
+/** What the rule engine would decide if the disputed facts held (confirmed) on top of the current ones. */
+async function engineWith(tx: Tx, companyId: string, o: any, disputed: { key: FactKey; proposed: unknown }[]) {
+  const facts = { ...(await currentFacts(tx, companyId, o.site_id)) };
+  const now = new Date().toISOString();
+  for (const d of disputed) {
+    facts[d.key] = { id: 'proposed', key: d.key, value: d.proposed, source: 'user_declared', verification: 'user_confirmed', validFrom: null, validTo: null, recordedAt: now };
+  }
+  return decide({ ruleVersionId: o.rule_version_id, condition: o.condition, effectiveFrom: '0000-01-01', effectiveTo: null, ambiguityNote: o.ambiguity_note }, facts, today())
+    ?? { decision: 'not_applicable' as const };
 }
 
 async function assertCurrent(tx: Tx, companyId: string, o: any) {
@@ -198,14 +244,38 @@ export async function reviewOverride(tx: Tx, p: Principal, companyId: string, re
   if (r.requested_by === p.userId) throw forbidden('Kendi isteğini inceleyemezsin; başka bir yetkili ya da uzman incelemeli.');
   if (r.status !== 'pending') throw conflict('NOT_PENDING', 'Bu istek artık beklemede değil.');
   if (b.notes.trim().length < 5) throw invalid('İnceleme notu yaz.');
-  const o = (await tx.query(`SELECT * FROM obligations WHERE id = $1`, [r.obligation_id])).rows[0];
+  const o = (await tx.query(`SELECT o.*, rv.condition, rv.required_facts, rv.ambiguity_note FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id
+     WHERE o.id = $1`, [r.obligation_id])).rows[0];
   if (b.decision === 'approved') await assertCurrent(tx, companyId, o);
-  await tx.query(`UPDATE obligation_override_requests SET status = $2, reviewed_by = $3, reviewed_at = clock_timestamp(), review_notes = $4 WHERE id = $1`,
-    [requestId, b.decision, p.userId, b.notes.trim()]);
   let newId: string | null = null;
+  let engineOutcome: string | null = null;
   if (b.decision === 'approved') {
-    newId = await applyNotApplicable(tx, companyId, o, r.requested_by, `${r.reason} (İnceleme: ${b.notes.trim()})`, { id: p.userId, requestId });
-  } else {
+    // Two signatures are not the decision. Approving means the reviewer confirms the disputed facts;
+    // they are recorded as reviewed profile facts and the rule engine decides again from them.
+    if (!r.disputed_facts) throw new AppError(422, 'CLAIM_INCOMPLETE', 'Bu istek hangi koşulun sağlanmadığını belirtmiyor; reddet ve gerekçeli yeni istek açılsın.');
+    const expert = can(p, 'profile.verify', { companyId, siteId: r.site_id }).ok;
+    if (!expert && !can(p, 'profile.write', { companyId, siteId: r.site_id }).ok) throw forbidden('Bilgileri doğrulama yetkin yok; inceleme için profil doğrulama yetkisi gerekir.');
+    for (const d of r.disputed_facts as { key: FactKey; proposed: unknown }[]) {
+      await recordFact(tx, p, companyId, { siteId: FACTS[d.key].level === 'site' ? r.site_id : null, key: d.key, value: d.proposed,
+        source: expert ? 'expert' : 'user_declared', verification: expert ? 'expert_verified' : 'user_confirmed',
+        sourceRef: `override_request:${requestId}`, note: `İnceleme: ${b.notes.trim()} · Dayanak: ${r.basis}` });
+    }
+    await recomputeSite(tx, companyId, r.site_id, p.userId, new Date(), o.rule_id);
+    const now = (await currentObligations(tx, companyId, r.site_id)).find(x => x.rule_id === o.rule_id)!;
+    engineOutcome = now.decision;
+    if (now.decision !== 'not_applicable') {
+      // Rolled back with the transaction: the facts still meet the rule, so it stays in force.
+      throw new AppError(422, 'RULE_STILL_APPLIES', now.decision === 'applies'
+        ? 'Doğrulanan bilgilerle kuralın koşulları hâlâ karşılanıyor; yükümlülük devreden çıkmaz. İsteği reddet ya da bilgileri düzelt.'
+        : `Kural motoru bu bilgilerle "uygulanmaz" sonucuna varmadı (sonuç: ${now.decision}); yükümlülük devreden çıkmaz.`, { outcome: now.decision });
+    }
+    newId = now.id;
+    await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'obligation.override_approved', entityType: 'obligation', entityId: now.id,
+      payload: { requestId, requestedBy: r.requested_by, reviewedBy: p.userId, disputedFacts: r.disputed_facts, basis: r.basis, engineOutcome, notes: b.notes.trim() } });
+  }
+  await tx.query(`UPDATE obligation_override_requests SET status = $2, reviewed_by = $3, reviewed_at = clock_timestamp(), review_notes = $4, engine_outcome = $5 WHERE id = $1`,
+    [requestId, b.decision, p.userId, b.notes.trim(), engineOutcome]);
+  if (b.decision !== 'approved') {
     await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'obligation.override_rejected', entityType: 'obligation', entityId: o.id,
       payload: { requestId, notes: b.notes.trim() } });
   }

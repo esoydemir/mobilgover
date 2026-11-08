@@ -1,4 +1,4 @@
-# Kapsam durumu — modül bazında (inceleme: 01.11.2026 · 1. ve 2. teslim işlendi)
+# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1., 2. ve 3. teslim işlendi)
 
 **Kaynaklar:**
 - Tasarım prototipi ve sohbeti: `project/`, `chats/chat1.md`
@@ -53,7 +53,7 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 |---|---|---|
 | Yükümlülük listesi + "Neden bana uygulanıyor?" | ✅ | Daha → Yükümlülükler |
 | Bilgi eksik → soru; uzman incelemesi gerekir durumu | ✅ | |
-| Elle "uygulanmaz" kararı (gerekçeli, rol sınırlı) ve geri alma | ✅ (1.–2. teslim) | İyi uygulama önerisinde hemen uygulanır. **Zorunlu yükümlülükte incelemeye gider**: başka bir sahip/merkez yöneticisi ya da inceleme yetkili uzman onaylar veya reddeder; o zamana kadar kontroller sürer. Saati geçmiş kontroller "kaçırıldı" olarak kalır, silinmez |
+| Elle "uygulanmaz" kararı (gerekçeli, rol sınırlı) ve geri alma | ✅ (1.–3. teslim) | İyi uygulama önerisinde hemen uygulanır. **Zorunlu yükümlülükte** istek, kuralın hangi koşulunun (işletme bilgisinin) sağlanmadığını, doğru değeri ve dayanağı belirtmek zorunda; önerilen bilgilerle kural hâlâ uyuyorsa istek açılmaz. İnceleyen (başka bir sahip/merkez yöneticisi ya da inceleme yetkili uzman) onaylarsa bilgiler doğrulanmış olarak profile işlenir ve **kararı kural motoru verir**; bilgiler kurala hâlâ uyuyorsa onay reddedilir ve yükümlülük sürer (3. teslim). Saati geçmiş kontroller "kaçırıldı" olarak kalır, silinmez |
 | Kural sürümü onayı, alan uzmanı onayı, yayın | ✅ | Daha → Yönetim (platform rolleri) |
 | Yeni kural / yeni sürüm yazma ekranı | ✗ | Yalnızca API ile. Ekrandan yazılamıyor |
 | Yayın öncesi etki simülasyonu | ◐ | API var; ekranda gösterilmiyor |
@@ -85,18 +85,21 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Nedene göre destek önerisi (açıklama, hizmet talebi formu, ekipman, ekip, takip aksiyonu) | ✅ (2. teslim) | Öneri yalnızca yol gösterir; talep, sipariş ya da kapanış kendiliğinden olmaz. Eğitim modülü yok ("henüz yok" olarak gösterilir) |
 | Tekrarlanabilir aksiyonlar (düzeltme, düzeltici faaliyet, takip) sorumlu ve terminle | ✅ (2. teslim) | |
 | Etkinlik kontrolü → doğrulama; etkili değilse kayıt açık kalır ve yeni tur başlar; gerekçeli yeniden açma | ✅ (2. teslim) | |
-| Yüksek riskte bağımsız doğrulama (bu turun düzeltmesini yapan doğrulayamaz) | ✅ | |
+| Yüksek riskte bağımsız doğrulama | ✅ (3. teslim) | Bu turdaki düzeltme ve düzeltici faaliyetlerin sorumlusu, "yapıldı" diyen ve kanıt veren kişilerin hiçbiri kaydı doğrulayamaz (yalnız son düğmeye basan değil) |
 | Hizmet teslim kabulü uygunsuzluğu kapatmaz | ✅ | Testle sabitlendi |
 | Pasifleştirilen sorumlunun açık işleri → yöneticinin yeniden atama listesi | ✅ (2. teslim) | Uygunsuzluk, aksiyon ve görevler |
-| "Yapıldığı beyan edilen işlem → kanıt" neden türü | ✗ | Bu teslimin kapsamında istenmedi |
+| "Yapıldı" beyanı → kanıt → doğrulama (aksiyonun doğrulama durumu) | ✅ (3. teslim) | Aksiyon açılırken istenecek kanıt seçilir (yok / fotoğraf / belge). "Yapıldı" bir beyandır: gerekli kanıt yüklenmeden verilemez; başka bir yönetici (sorumlu, beyan eden ve kanıt veren dışında) doğrulayana kadar akışta sonuç sayılmaz. Reddedilen beyan aksiyonu yeniden açar. Güncellemeden önce yeni akışta "tamamlandı" denmiş aksiyonlar "doğrulama bekliyor"a geçti; ilk akıştan (v1) kalanlar olduğu gibi sayılır |
 
 ## 6. Belgeler, geçerlilik süreleri, hatırlatmalar
 
 | Özellik | Durum | Not |
 |---|---|---|
-| Belge kasası, geçerlilik tarihleri | ✗ | Prototipte vardı, sahte veri gösterdiği için kaldırıldı |
-| Göreve belge kanıtı | ◐ | Kanıt türü olarak var; ayrı bir belge kaydı yok |
-| Süre dolumu hatırlatması | ✗ | Bildirim altyapısı yok (§11) |
+| Belge kasası: belge türü, işletme / şube / ekipman bağlantısı, sürümler | ✅ (3. teslim) | Daha → Belge kasası. Türler örnek listedir (ruhsat, kayıt belgesi, kalibrasyon, bakım raporu, eğitim, sağlık raporu, sigorta, sözleşme, diğer) |
+| İnceleme durumu: yüklenen dosya geçerli sayılmaz | ✅ (3. teslim) | Yükleyenden başka bir yetkili inceleyip tarihleri onaylamadan (ya da düzeltmeden) belge "geçerli" olmaz. Yenileme incelenene kadar eski incelenmiş sürüm geçerli kalır. Belge, düzenleyen kurumla doğrulanmaz |
+| Geçerlilik ve süre hatırlatmaları | ✅ (3. teslim) | Bitişe 30 gün kala (örnek süre) ve bitince yöneticilere uygulama içi bildirim; her sürüm için bir kez |
+| Şube yöneticisinin işletme geneli belgeleri görmesi | ✗ | İşletme geneli belgeler yalnız sahip ve merkez yöneticisinde |
+| Telefon uygulamasında PDF seçme | ◐ | Web'de PDF/JPEG/PNG seçiliyor; telefonda şimdilik kamera/galeri (fotoğraf). Dosya açma şimdilik web'de |
+| Göreve belge kanıtı | ◐ | Kanıt türü olarak var; belge kasasına bağlanmıyor |
 
 ## 7. Eğitim, içerik, değerlendirme
 
@@ -125,7 +128,7 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Uzman arama (ad, şehir, kategori) | ◐ | Yalnızca hizmet talebi açarken, kategoriye göre onaylı uzman sayısı |
 | Bağlantı / takip | ✗ | |
 | Paylaşım / gönderi | ✗ | |
-| Doğrulanmış hizmet geçmişi (teslim kabul edilmiş işler) | ✗ | Veri var (`service_jobs`), profilde gösterilmiyor |
+| Doğrulanmış hizmet geçmişi (teslim kabul edilmiş işler) | ✅ (3. teslim) | Yalnız raporu teslim edilip işletmece kabul edilmiş, değerlendirilmiş ve işletmenin profilde gösterilmesine izin verdiği işler; kategori, şehir, ay ve puanlar görünür, işletme adı görünmez |
 | Gizlilik: işletmenin uygunsuzluk ve belgeleri ağa açılmaz | ✅ | Sunucu paylaşımı yalnızca talep kapsamında ve süreli |
 
 Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
@@ -139,14 +142,14 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 | Teklif karşılaştırma, kabul | ✅ | |
 | İş giriş kodu, uzman raporu, teslim kabulü veya itiraz | ✅ | |
 | İşe giriş kodu yerine QR | ◐ | 8 haneli kod var; QR yok |
-| Hizmet değerlendirmesi (puan, yorum) | ✗ | |
+| Hizmet değerlendirmesi (kalite, zamanlama, iletişim; yorum) | ✅ (3. teslim) | Yalnız teslim kabul edilmiş işe, iş başına bir kez. Profilde gösterim varsayılan olarak kapalı |
 | Ödeme | ⏳ | Kapsam dışı (`payment_status = not_in_scope`) |
 
 ## 11. Bildirimler, arama, filtreler, raporlar
 
 | Özellik | Durum | Not |
 |---|---|---|
-| Uygulama içi bildirim merkezi | ◐ (2. teslim) | Uygunsuzluk akışı için var: atama, aksiyon ataması, yaklaşan termin, gecikme, doğrulama isteği, başarısız doğrulama, yeniden açma, yeniden atama, "uygulanmaz" incelemesi. Yinelenmez; rol ve şube sınırlı. Görev gecikmesi, teklif ve teslim bildirimleri henüz yok |
+| Uygulama içi bildirim merkezi | ◐ (2.–3. teslim) | Uygunsuzluk akışı (atama, termin, gecikme, doğrulama, "yapıldı" beyanı ve sonucu, yeniden açma, yeniden atama), "uygulanmaz" incelemesi, yeni teklif, hizmet raporu teslimi, belge incelemesi ve belge süresi. Yinelenmez; rol ve şube sınırlı. Uzman tarafına (teklifin kabul edilmesi vb.) ve görev gecikmesine bildirim yok |
 | Anlık bildirim (push) ve e-posta bildirimi | ⏳ | Mağaza derlemesi ve SMTP |
 | Görev filtreleri | ✅ | |
 | Uygunsuzluk filtreleri | ✅ | Açık / kapalı |
@@ -185,9 +188,9 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 **P2 — Günlük kullanımı tamamlayan:**
 5. ✅ Uygunsuzluk uçtan uca akışı ve nedene göre destek önerisi (2. teslim).
 6. ✅ Uygunsuzluk sorumlusu, termini, elle uygunsuzluk açma (2. teslim).
-7. ◐ Bildirim merkezi: uygunsuzluk akışı tamam (2. teslim); görev gecikmesi, teklif, teslim ve kural değişikliği bildirimleri kaldı.
-8. Belge kasası: belge kaydı, geçerlilik tarihi, süre dolumu uyarısı.
-9. Hizmet değerlendirmesi ve uzman profilinde doğrulanmış hizmet geçmişi.
+7. ◐ Bildirim merkezi: uygunsuzluk, teklif, teslim ve belge bildirimleri tamam (2.–3. teslim); görev gecikmesi, uzman tarafı ve kural değişikliği bildirimleri kaldı.
+8. ✅ Belge kasası: belge kaydı, sürüm, inceleme, geçerlilik, süre hatırlatması (3. teslim).
+9. ✅ Hizmet değerlendirmesi ve uzman profilinde doğrulanmış hizmet geçmişi (3. teslim).
 
 **P3 — Genişleme:**
 10. Uzman arama.

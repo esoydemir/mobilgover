@@ -21,6 +21,8 @@ type ProfileView = {
   otherCategoryRequests: { category_code: string; name: string; status: string; expired: boolean; valid_until: string | null }[];
   notChecked: string[];
   disclaimer: string;
+  serviceHistory?: { items: { month: string; category_name: string; city: string; quality: number; timeliness: number; communication: number; comment: string | null }[];
+    summary: { count: number; quality: number | null; timeliness: number | null; communication: number | null }; note: string };
 };
 type Category = { code: string; name: string; required_credentials: string[]; is_example: boolean };
 type Inbox = {
@@ -73,6 +75,22 @@ function ProfileCard({ v }: { v: ProfileView }) {
           <Text key={a.category_code} style={[type(12.5, 600, { color: C.crit }), { marginTop: 10 }]}>Süresi doldu: {a.name}. Yeni iş alınamaz; güncel belgeyle yeniden onay iste.</Text>
         ))}
       </Card>
+      {v.serviceHistory ? (
+        <Card>
+          <Eyebrow>DOĞRULANMIŞ HİZMET GEÇMİŞİ</Eyebrow>
+          {v.serviceHistory.summary.count === 0 ? <Text testID="pro-history-empty" style={[type(12.5, 400, { color: C.t2 }), { marginTop: 10 }]}>Profilde gösterilmesine izin verilmiş tamamlanmış iş yok.</Text> : (
+            <Text testID="pro-history-summary" style={[type(13, 600), { marginTop: 10 }]}>{v.serviceHistory.summary.count} iş · kalite {v.serviceHistory.summary.quality} · zamanlama {v.serviceHistory.summary.timeliness} · iletişim {v.serviceHistory.summary.communication} (5 üzerinden)</Text>
+          )}
+          {v.serviceHistory.items.map((h, i) => (
+            <View key={i} style={{ marginTop: 10, gap: 2 }}>
+              <Text style={type(12.5, 600)}>{h.category_name} · {h.city} · {h.month.split('-').reverse().join('.')}</Text>
+              <Text style={type(11.5, 400, { color: C.t3 })}>Kalite {h.quality} · zamanlama {h.timeliness} · iletişim {h.communication}</Text>
+              {h.comment ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>"{h.comment}"</Text> : null}
+            </View>
+          ))}
+          <Text style={[type(11, 400, { color: C.t3, lh: 1.45 }), { marginTop: 10 }]}>{v.serviceHistory.note}</Text>
+        </Card>
+      ) : null}
       <View style={{ borderWidth: 1, borderColor: tint.info(0.3), backgroundColor: tint.info(0.06), borderRadius: 16, padding: 13 }}>
         <Text style={type(12.5, 600, { color: C.info, lh: 1.45 })}>{v.disclaimer}</Text>
       </View>

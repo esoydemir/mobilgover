@@ -13,18 +13,20 @@ export type Action =
   | 'task.read' | 'task.execute' | 'task.generate' | 'task.assign'
   | 'ncr.read' | 'ncr.act' | 'ncr.verify_close' | 'ncr.report' | 'ncr.manage' | 'obligation.review'
   | 'indicators.read' | 'audit.export' | 'audit.verify'
-  | 'members.manage' | 'service.request';
+  | 'members.manage' | 'service.request'
+  | 'document.read' | 'document.write' | 'document.review';
 
 /** What each company role may do. `site` = only within the member's site when the membership is site-scoped. */
 export const ROLE_MATRIX: Record<CompanyRole, Action[]> = {
   owner: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
-    'members.manage', 'service.request'],
+    'members.manage', 'service.request', 'document.read', 'document.write', 'document.review'],
   hq_manager: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
-    'members.manage', 'service.request'],
+    'members.manage', 'service.request', 'document.read', 'document.write', 'document.review'],
   site_manager: ['profile.read', 'obligation.read', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'service.request'],
+    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'service.request',
+    'document.read', 'document.write', 'document.review'],
   // Staff see and do their own assigned work, including emergency instructions; no scores, penalties or other people's data.
   // Staff may report a problem they see (ncr.report); they then work on what is assigned to them.
   staff: ['task.read', 'task.execute', 'ncr.read', 'ncr.act', 'ncr.report', 'equipment.read'],
@@ -45,6 +47,8 @@ export const GRANT_SCOPES: Record<string, Action[]> = {
   tasks: ['task.read'],
   nonconformities: ['ncr.read'],
   audit: ['audit.export', 'audit.verify'],
+  // An outside expert may read the document vault; reviewing a document stays with the business.
+  documents: ['document.read'],
 };
 
 export type Principal = {

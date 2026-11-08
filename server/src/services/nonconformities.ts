@@ -5,6 +5,7 @@ import { CAUSE_CATEGORIES, flow, suggestions, verifierConflict, type CauseCatego
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { notify, siteManagers } from './notifications';
+import { ALLOWED_MIME } from '../storage/local';
 
 /** Example response windows per risk level; a company sets its own in production. */
 const RESPONSE_HOURS: Record<string, number> = { critical: 4, high: 24, medium: 72, low: 168 };
@@ -108,11 +109,14 @@ async function flowData(tx: Tx, n: any) {
      FROM ncr_steps s JOIN users u ON u.id = s.done_by WHERE s.ncr_id = $1 ORDER BY s.done_at`, [n.id])).rows;
   const causes = (await tx.query(`SELECT c.id, c.stage, c.iteration, c.categories, c.notes, c.migrated, c.done_by, c.done_at, u.display_name AS done_by_name
      FROM ncr_cause_assessments c JOIN users u ON u.id = c.done_by WHERE c.ncr_id = $1 ORDER BY c.done_at`, [n.id])).rows;
-  const actions = (await tx.query(`SELECT a.*, ou.display_name AS owner_name, du.display_name AS done_by_name,
+  const actions = (await tx.query(`SELECT a.*, ou.display_name AS owner_name, du.display_name AS done_by_name, vu.display_name AS verified_by_name,
+       COALESCE((SELECT json_agg(json_build_object('id', e.id, 'kind', e.kind, 'status', e.status, 'mime', e.mime, 'body', e.body,
+          'created_by', e.created_by, 'created_at', e.created_at, 'rejection_reason', e.rejection_reason) ORDER BY e.created_at)
+          FROM evidence e WHERE e.action_id = a.id), '[]'::json) AS evidence,
        (a.status = 'open' AND a.due_at IS NOT NULL AND a.due_at < now()) AS overdue,
        (a.owner_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = a.owner_id AND m.company_id = a.company_id
           AND m.status = 'active' AND (m.site_id IS NULL OR m.site_id = $2))) AS owner_inactive
-     FROM ncr_actions a LEFT JOIN users ou ON ou.id = a.owner_id LEFT JOIN users du ON du.id = a.done_by
+     FROM ncr_actions a LEFT JOIN users ou ON ou.id = a.owner_id LEFT JOIN users du ON du.id = a.done_by LEFT JOIN users vu ON vu.id = a.verified_by
     WHERE a.ncr_id = $1 ORDER BY a.created_at`, [n.id, n.site_id])).rows;
   const verifications = (await tx.query(`SELECT v.iteration, v.result, v.notes, v.verified_by, v.verified_at, u.display_name AS verified_by_name
      FROM ncr_verifications v JOIN users u ON u.id = v.verified_by WHERE v.ncr_id = $1 ORDER BY v.verified_at`, [n.id])).rows;
@@ -121,7 +125,8 @@ async function flowData(tx: Tx, n: any) {
     independentVerification: !!n.risk_rationale.independentVerification,
     steps: steps.map(s => ({ step: s.step, iteration: s.iteration, doneBy: s.done_by })),
     causes: causes.map(c => ({ stage: c.stage, iteration: c.iteration, categories: c.categories, migrated: c.migrated })),
-    actions: actions.map(a => ({ kind: a.kind, iteration: a.iteration, status: a.status, doneBy: a.done_by })),
+    actions: actions.map(a => ({ kind: a.kind, iteration: a.iteration, status: a.status, doneBy: a.done_by, ownerId: a.owner_id,
+      verification: a.verification_status, evidenceBy: (a.evidence as { created_by: string }[]).map(e => e.created_by) })),
   };
   return { steps, causes, actions, verifications, input };
 }
@@ -150,7 +155,15 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
     overdue: n.status !== 'closed' && !!n.due_at && new Date(n.due_at) < new Date(),
     equipment, task,
     flow: f,
-    steps: d.steps, causes: d.causes, actions: d.actions, verifications: d.verifications, services, history,
+    steps: d.steps, causes: d.causes, verifications: d.verifications, services, history,
+    actions: d.actions.map(a => {
+      const performers = new Set([a.owner_id, a.done_by, ...(a.evidence as { created_by: string }[]).map(e => e.created_by)].filter(Boolean));
+      const declared = a.status === 'done' && a.verification_status === 'declared';
+      const manage = can(p, 'ncr.manage', { companyId, siteId: n.site_id }).ok;
+      return { ...a, can_verify: declared && n.status !== 'closed' && manage && !performers.has(p.userId),
+        verify_blocked_reason: declared && manage && performers.has(p.userId) ? 'Bu aksiyonda payın var (sorumlu, beyan eden ya da kanıt veren); sonucu başka bir yetkili doğrular.' : null,
+        can_add_evidence: a.status === 'open' && n.status !== 'closed' && (a.owner_id === p.userId || manage) };
+    }),
     cause: { initial: latestInitial ?? null, verified: latestVerified ?? null },
     suggestions: latestInitial ? suggestions(latestInitial.categories as CauseCategory[], {
       hasEquipment: !!equipment, hasObligation: !!task?.obligation_id, serviceCategory: equipment ? SERVICE_FOR_EQUIPMENT[equipment.type] ?? null : null,
@@ -160,7 +173,7 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
       manage: can(p, 'ncr.manage', target).ok,
       verify: canVerify && n.status === 'awaiting_verification' && !verifierConflict(d.input, p.userId),
       verifyBlockedReason: canVerify && n.status === 'awaiting_verification' && verifierConflict(d.input, p.userId)
-        ? 'Bu turdaki düzeltmeyi sen yaptın; yüksek riskli kaydı başka bir yetkili doğrulamalı.' : null,
+        ? 'Bu turdaki düzeltme ya da düzeltici faaliyette payın var (sorumlu, yapan veya kanıt veren); yüksek riskli kaydı başka bir yetkili doğrulamalı.' : null,
       reopen: canVerify && n.status === 'closed',
       serviceRequest: can(p, 'service.request', target).ok,
     },
@@ -240,7 +253,8 @@ export async function assessCause(tx: Tx, p: Principal, companyId: string, id: s
     payload: { stage: b.stage, categories: cats, notes: b.notes.trim(), iteration: n.iteration } });
 }
 
-export type ActionInput = { kind: 'correction' | 'corrective_action' | 'follow_up'; description: string; ownerId: string | null; dueAt: string | null; supportRef: Record<string, unknown> | null };
+export type ActionInput = { kind: 'correction' | 'corrective_action' | 'follow_up'; description: string; ownerId: string | null; dueAt: string | null;
+  supportRef: Record<string, unknown> | null; evidenceRequired?: 'none' | 'photo' | 'document' };
 
 export async function addAction(tx: Tx, p: Principal, companyId: string, id: string, b: ActionInput) {
   const n = await load(tx, p, companyId, id, 'ncr.act', true);
@@ -253,30 +267,89 @@ export async function addAction(tx: Tx, p: Principal, companyId: string, id: str
   const owner = b.ownerId ?? p.userId;
   await assertEligible(tx, companyId, n.site_id, owner);
   const a = (await tx.query<{ id: string }>(
-    `INSERT INTO ncr_actions (company_id, ncr_id, iteration, kind, description, owner_id, due_at, support_ref, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-    [companyId, id, n.iteration, b.kind, b.description.trim(), owner, b.dueAt, b.supportRef ? JSON.stringify(b.supportRef) : null, p.userId])).rows[0]!;
+    `INSERT INTO ncr_actions (company_id, ncr_id, iteration, kind, description, owner_id, due_at, support_ref, created_by, evidence_required)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [companyId, id, n.iteration, b.kind, b.description.trim(), owner, b.dueAt, b.supportRef ? JSON.stringify(b.supportRef) : null, p.userId, b.evidenceRequired ?? 'none'])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.action_added', entityType: 'nonconformity', entityId: id,
-    payload: { actionId: a.id, kind: b.kind, description: b.description.trim(), ownerId: owner, dueAt: b.dueAt, iteration: n.iteration, supportRef: b.supportRef } });
+    payload: { actionId: a.id, kind: b.kind, description: b.description.trim(), ownerId: owner, dueAt: b.dueAt, iteration: n.iteration, supportRef: b.supportRef,
+      evidenceRequired: b.evidenceRequired ?? 'none' } });
   await notify(tx, { companyId, siteId: n.site_id, userIds: [owner], except: p.userId, kind: 'action_assigned', entityType: 'nonconformity', entityId: id,
     dedupeKey: `action_assigned:${a.id}:${owner}`, title: 'Sana bir aksiyon atandı', body: `${b.description.trim()} · ${n.title}` });
   return { id: a.id };
 }
 
-/** Complete, cancel or reassign an action. Completing needs what was done; the owner or a manager may complete. */
+const EVIDENCE_TR: Record<string, string> = { photo: 'fotoğraf', document: 'belge' };
+
+/**
+ * Who may not verify this action's result: its owner, whoever declared it done and whoever
+ * gave its evidence. Nobody checks their own work.
+ */
+async function actionPerformers(tx: Tx, a: any): Promise<Set<string>> {
+  const ev = (await tx.query<{ created_by: string }>(`SELECT DISTINCT created_by FROM evidence WHERE action_id = $1`, [a.id])).rows;
+  return new Set([a.owner_id, a.done_by, ...ev.map(e => e.created_by)].filter(Boolean));
+}
+
+/**
+ * Declare done ("yapıldı"), verify that declaration, cancel or reassign an action.
+ * Declaring needs what was done and, when the action asks for it, stored evidence; it stays a
+ * claim ("declared") until someone else with manager rights checks it. Only a verified
+ * result counts toward the effectiveness check. A rejected claim reopens the action.
+ */
 export async function updateAction(tx: Tx, p: Principal, companyId: string, id: string, actionId: string,
-  b: { op: 'done' | 'cancel' | 'reassign'; notes?: string; ownerId?: string; dueAt?: string | null }) {
+  b: { op: 'done' | 'cancel' | 'reassign' | 'verify'; notes?: string; ownerId?: string; dueAt?: string | null; result?: 'accepted' | 'rejected' }) {
   const n = await load(tx, p, companyId, id, 'ncr.act', true);
   const a = (await tx.query(`SELECT * FROM ncr_actions WHERE id = $1 AND ncr_id = $2 FOR UPDATE`, [actionId, id])).rows[0];
   if (!a) throw notFound('Aksiyon');
-  if (n.status !== 'open') throw conflict('NCR_NOT_OPEN', n.status === 'closed' ? 'Kapalı kayıtta aksiyon değişmez.' : 'Doğrulama beklenirken aksiyon değişmez.');
-  if (a.status !== 'open') throw conflict('ACTION_NOT_OPEN', 'Bu aksiyon zaten kapanmış.');
   const manager = can(p, 'ncr.manage', { companyId, siteId: n.site_id }).ok;
   const notes = (b.notes ?? '').trim();
+  if (b.op === 'verify') {
+    if (n.status === 'closed') throw conflict('NCR_NOT_OPEN', 'Kapalı kayıtta aksiyon değişmez.');
+    if (!manager) throw forbidden('"Yapıldı" beyanını yönetici yetkisi olan biri doğrular.');
+    if (a.status !== 'done' || a.verification_status !== 'declared') throw conflict('ACTION_NOT_DECLARED', 'Bu aksiyon için doğrulama bekleyen bir "yapıldı" beyanı yok.');
+    if ((await actionPerformers(tx, a)).has(p.userId)) {
+      throw new AppError(422, 'VERIFIER_NOT_INDEPENDENT', 'Bu aksiyonda sorumlu, beyan eden ya da kanıt veren sensin; sonucunu başka bir yetkili doğrulamalı.');
+    }
+    if (!b.result) throw invalid('Sonucu seç: doğrulandı ya da reddedildi.');
+    if (notes.length < (b.result === 'accepted' ? 5 : 10)) throw invalid(b.result === 'accepted' ? 'Neyi kontrol ettiğini yaz.' : 'Neden reddettiğini yaz.');
+    if (a.evidence_required !== 'none' && b.result === 'accepted') {
+      const ok = (await tx.query(`SELECT 1 FROM evidence WHERE action_id = $1 AND status = 'stored' AND kind = $2`, [actionId, a.evidence_required])).rowCount;
+      if (!ok) throw new AppError(422, 'EVIDENCE_INCOMPLETE', `Gerekli ${EVIDENCE_TR[a.evidence_required]} kanıtı yok; doğrulanamaz.`);
+    }
+    if (b.result === 'accepted') {
+      await tx.query(`UPDATE ncr_actions SET verification_status = 'verified', verified_by = $2, verified_at = clock_timestamp(), verification_notes = $3 WHERE id = $1`,
+        [actionId, p.userId, notes]);
+    } else {
+      // The claim did not hold: the action is open again; the earlier claim stays in the history.
+      await tx.query(`UPDATE ncr_actions SET status = 'open', verification_status = 'rejected', verified_by = $2, verified_at = clock_timestamp(), verification_notes = $3,
+          done_by = NULL, done_at = NULL WHERE id = $1`, [actionId, p.userId, notes]);
+    }
+    await notify(tx, { companyId, siteId: n.site_id, userIds: [a.owner_id, a.done_by].filter(Boolean), except: p.userId,
+      kind: b.result === 'accepted' ? 'action_verified' : 'action_rejected', entityType: 'nonconformity', entityId: id,
+      dedupeKey: `action_${b.result}:${actionId}:${a.done_at ? new Date(a.done_at).toISOString() : ''}`,
+      title: b.result === 'accepted' ? 'Aksiyon sonucu doğrulandı' : 'Aksiyon sonucu kabul edilmedi: yeniden yapılmalı', body: `${a.description} · ${notes}` });
+    await appendAudit(tx, { companyId, actorId: p.userId, eventType: b.result === 'accepted' ? 'nonconformity.action_verified' : 'nonconformity.action_rejected',
+      entityType: 'nonconformity', entityId: id, payload: { actionId, notes, declaredBy: a.done_by } });
+    return;
+  }
+  if (n.status !== 'open') throw conflict('NCR_NOT_OPEN', n.status === 'closed' ? 'Kapalı kayıtta aksiyon değişmez.' : 'Doğrulama beklenirken aksiyon değişmez.');
+  if (a.status !== 'open') throw conflict('ACTION_NOT_OPEN', 'Bu aksiyon zaten kapanmış.');
   if (b.op === 'done') {
     if (a.owner_id !== p.userId && !manager) throw forbidden('Aksiyonu sorumlusu ya da bir yönetici tamamlar.');
     if (notes.length < 5) throw invalid('Ne yapıldığını yaz.');
-    await tx.query(`UPDATE ncr_actions SET status = 'done', result_notes = $2, done_by = $3, done_at = clock_timestamp() WHERE id = $1`, [actionId, notes, p.userId]);
+    const ev = (await tx.query<{ kind: string; status: string }>(`SELECT kind, status FROM evidence WHERE action_id = $1`, [actionId])).rows;
+    if (ev.some(e => e.status === 'pending_upload')) throw new AppError(422, 'EVIDENCE_PENDING', 'Yüklenmesi süren kanıt var; yükleme bitince tekrar dene.');
+    if (a.evidence_required !== 'none' && !ev.some(e => e.status === 'stored' && e.kind === a.evidence_required)) {
+      throw new AppError(422, 'EVIDENCE_INCOMPLETE', `Bu aksiyon için ${EVIDENCE_TR[a.evidence_required]} kanıtı gerekli; önce kanıtı ekle.`);
+    }
+    await tx.query(`UPDATE ncr_actions SET status = 'done', result_notes = $2, done_by = $3, done_at = clock_timestamp(), verification_status = 'declared',
+        verified_by = NULL, verified_at = NULL WHERE id = $1`, [actionId, notes, p.userId]);
+    if (a.kind !== 'follow_up') {
+      const performers = await actionPerformers(tx, { ...a, done_by: p.userId });
+      const managers = (await siteManagers(tx, companyId, n.site_id)).filter(u => !performers.has(u));
+      await notify(tx, { companyId, siteId: n.site_id, userIds: managers, except: p.userId, kind: 'action_declared', entityType: 'nonconformity', entityId: id,
+        dedupeKey: `action_declared:${actionId}:${new Date((await tx.query(`SELECT done_at FROM ncr_actions WHERE id = $1`, [actionId])).rows[0].done_at).toISOString()}`,
+        title: 'Aksiyon "yapıldı" olarak bildirildi: doğrulaman bekleniyor', body: `${a.description} · ${notes}` });
+    }
   } else if (b.op === 'cancel') {
     if (!manager && a.created_by !== p.userId) throw forbidden('Aksiyonu açan kişi ya da bir yönetici iptal eder.');
     if (notes.length < 5) throw invalid('İptal gerekçesi yaz.');
@@ -290,7 +363,33 @@ export async function updateAction(tx: Tx, p: Principal, companyId: string, id: 
       dedupeKey: `action_assigned:${actionId}:${b.ownerId}`, title: 'Sana bir aksiyon atandı', body: `${a.description} · ${n.title}` });
   }
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: `nonconformity.action_${b.op}`, entityType: 'nonconformity', entityId: id,
-    payload: { actionId, notes: notes || null, owner: b.op === 'reassign' ? { from: a.owner_id, to: b.ownerId } : undefined } });
+    payload: { actionId, notes: notes || null, owner: b.op === 'reassign' ? { from: a.owner_id, to: b.ownerId } : undefined,
+      verification: b.op === 'done' ? 'declared' : undefined } });
+}
+
+/**
+ * Evidence for an action (photo or document). Registered as pending with the device's hash; it
+ * counts only after the bytes arrive and match. The action's owner or a manager adds it while
+ * the action is open.
+ */
+export async function addActionEvidence(tx: Tx, p: Principal, companyId: string, id: string, actionId: string,
+  e: { kind: 'photo' | 'document'; mime: string; sha256: string; sizeBytes: number }) {
+  const n = await load(tx, p, companyId, id, 'ncr.act', true);
+  const a = (await tx.query(`SELECT * FROM ncr_actions WHERE id = $1 AND ncr_id = $2 FOR UPDATE`, [actionId, id])).rows[0];
+  if (!a) throw notFound('Aksiyon');
+  if (n.status === 'closed') throw conflict('NCR_CLOSED', 'Kapalı kayıtta kanıt eklenemez.');
+  if (a.status !== 'open') throw conflict('ACTION_NOT_OPEN', 'Kanıt, aksiyon "yapıldı" diye bildirilmeden önce eklenir.');
+  if (a.owner_id !== p.userId && !can(p, 'ncr.manage', { companyId, siteId: n.site_id }).ok) throw forbidden('Kanıtı aksiyonun sorumlusu ya da bir yönetici ekler.');
+  if (!ALLOWED_MIME.includes(e.mime)) throw invalid(`Dosya türü kabul edilmiyor: ${e.mime}`);
+  if (e.kind === 'photo' && !e.mime.startsWith('image/')) throw invalid('Fotoğraf kanıtı JPEG ya da PNG olmalı.');
+  if (!/^[0-9a-f]{64}$/.test(e.sha256)) throw invalid('sha256 64 karakterlik onaltılık özet olmalı.');
+  const row = (await tx.query<{ id: string; status: string }>(
+    `INSERT INTO evidence (company_id, ncr_id, action_id, kind, status, mime, declared_sha256, size_bytes, created_by)
+     VALUES ($1,$2,$3,$4,'pending_upload',$5,$6,$7,$8) RETURNING id, status`,
+    [companyId, id, actionId, e.kind, e.mime, e.sha256, e.sizeBytes, p.userId])).rows[0]!;
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'evidence.added', entityType: 'evidence', entityId: row.id,
+    payload: { ncrId: id, actionId, kind: e.kind, sha256: e.sha256 } });
+  return row;
 }
 
 /**
@@ -304,7 +403,10 @@ export async function verify(tx: Tx, p: Principal, companyId: string, id: string
   if (n.status !== 'awaiting_verification') throw new AppError(422, 'FLOW_INCOMPLETE', 'Önce etkinlik kontrolü kaydedilmeli.');
   if (b.notes.trim().length < (b.result === 'effective' ? 5 : 10)) throw invalid(b.result === 'effective' ? 'Neyi kontrol ettiğini yaz.' : 'Neden etkili bulmadığını yaz.');
   const d = await flowData(tx, n);
-  if (verifierConflict(d.input, p.userId)) throw new AppError(422, 'VERIFIER_NOT_INDEPENDENT', 'Yüksek riskli kayıtta kapanışı, bu turun düzeltmesini yapan kişiden farklı bir yetkili doğrulamalı.');
+  if (verifierConflict(d.input, p.userId)) throw new AppError(422, 'VERIFIER_NOT_INDEPENDENT', 'Yüksek riskli kayıtta kapanışı, bu turda düzeltme ya da düzeltici faaliyet yapan, kanıt veren veya sorumlusu olan kişilerden farklı bir yetkili doğrulamalı.');
+  // A "done" that nobody has checked yet is not a result; the case cannot be closed on it.
+  const f = flow(d.input);
+  if (b.result === 'effective' && !f.readyForEffectiveness) throw new AppError(422, 'FLOW_INCOMPLETE', `Önce: ${f.blockers.join(' ')}`);
   await tx.query(`INSERT INTO ncr_verifications (company_id, ncr_id, iteration, result, notes, verified_by) VALUES ($1,$2,$3,$4,$5,$6)`,
     [companyId, id, n.iteration, b.result, b.notes.trim(), p.userId]);
   if (b.result === 'effective') {

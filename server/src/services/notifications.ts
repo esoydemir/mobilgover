@@ -62,6 +62,8 @@ export async function listNotifications(tx: Tx, p: Principal, companyId: string,
       return can(p, 'ncr.read', { companyId, siteId: r.ncr_site, assigneeId: involved ? p.userId : r.ncr_owner }).ok;
     }
     if (r.entity_type === 'obligation') return can(p, 'obligation.read', { companyId, siteId: r.site_id }).ok;
+    if (r.entity_type === 'service_request') return can(p, 'service.request', { companyId, siteId: r.site_id }).ok;
+    if (r.entity_type === 'document') return can(p, 'document.read', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'membership') return can(p, 'ncr.manage', { companyId, siteId: r.site_id }).ok || can(p, 'members.manage', { companyId }).ok;
     return true;
   }).map(({ ncr_owner, ncr_site, ncr_action_owner, ...r }) => r);

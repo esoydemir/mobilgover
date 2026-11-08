@@ -3,6 +3,7 @@ import type { Tx } from '../db/pool';
 import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
+import { notify, siteManagers } from './notifications';
 
 /*
  * Professional network and service marketplace.
@@ -58,8 +59,22 @@ export async function profileView(tx: Tx, profileId: string) {
        FROM service_authorizations a JOIN service_categories c ON c.code = a.category_code
       WHERE a.profile_id = $1 ORDER BY c.name`, [profileId, today()])).rows;
   const identity = ver.find(v => v.kind === 'identity' && v.status === 'verified');
+  // Only jobs that were delivered and accepted, reviewed, and that the business allowed to show.
+  // The business is never named; the month and the category are enough.
+  const history = (await tx.query(
+    `SELECT to_char(j.accepted_at AT TIME ZONE 'Europe/Istanbul', 'YYYY-MM') AS month, c.name AS category_name, r.city,
+            sr.quality, sr.timeliness, sr.communication, sr.comment
+       FROM service_reviews sr JOIN service_jobs j ON j.id = sr.job_id JOIN service_requests r ON r.id = j.request_id
+       JOIN service_categories c ON c.code = r.category_code
+      WHERE sr.provider_profile_id = $1 AND sr.show_on_profile AND j.status = 'accepted' ORDER BY j.accepted_at DESC LIMIT 50`, [profileId])).rows;
+  const avg = (k: 'quality' | 'timeliness' | 'communication') => history.length ? Math.round(history.reduce((a, h) => a + h[k], 0) / history.length * 10) / 10 : null;
   return {
     profile: pr,
+    serviceHistory: {
+      items: history,
+      summary: { count: history.length, quality: avg('quality'), timeliness: avg('timeliness'), communication: avg('communication') },
+      note: 'Yalnızca teslim edilip işletmece kabul edilmiş ve işletmenin profilde gösterilmesine izin verdiği işler; işletme adı gösterilmez.',
+    },
     identity: identity ? { status: 'verified', checkedAt: identity.checked_at, method: identity.check_method } : { status: 'not_verified' },
     credentials: ver.filter(v => v.kind === 'credential'),
     businessRegistration: ver.filter(v => v.kind === 'business_registration'),
@@ -201,7 +216,8 @@ export async function requestDetail(tx: Tx, p: Principal, companyId: string, id:
     `SELECT q.*, pp.display_name, (q.price_net * (1 + q.vat_rate / 100))::numeric(12,2) AS price_gross, (q.valid_until < now()) AS expired
        FROM quotes q JOIN professional_profiles pp ON pp.id = q.provider_profile_id WHERE q.request_id = $1 ORDER BY q.created_at`, [id])).rows;
   const job = (await tx.query(`SELECT * FROM service_jobs WHERE request_id = $1`, [id])).rows[0] ?? null;
-  return { request: r, quotes, job };
+  const review = job ? (await tx.query(`SELECT id, quality, timeliness, communication, comment, show_on_profile, created_at FROM service_reviews WHERE job_id = $1`, [job.id])).rows[0] ?? null : null;
+  return { request: r, quotes, job, review, canReview: !!job && job.status === 'accepted' && !review };
 }
 
 export async function acceptQuote(tx: Tx, p: Principal, companyId: string, quoteId: string) {
@@ -279,6 +295,9 @@ export async function submitQuote(tx: Tx, p: Principal, requestId: string, b: { 
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
     [requestId, r.company_id, pr.id, b.scope, b.exclusions, b.priceNet, b.vatRate, b.materials, b.durationText, b.warrantyText, b.validUntil]);
   await appendAudit(tx, { companyId: r.company_id, actorId: p.userId, eventType: 'service.quote_submitted', entityType: 'quote', entityId: q.rows[0]!.id, payload: { priceNet: b.priceNet, vatRate: b.vatRate } });
+  await notify(tx, { companyId: r.company_id, siteId: r.site_id, userIds: await businessSide(tx, r.company_id, r.site_id, r.created_by),
+    kind: 'quote_received', entityType: 'service_request', entityId: requestId, dedupeKey: `quote_received:${q.rows[0]!.id}`,
+    title: 'Yeni teklif geldi', body: `${r.title} · ${pr.display_name}. Teklif kabul edilmedikçe iş başlamaz.` });
   return { id: q.rows[0]!.id };
 }
 
@@ -304,4 +323,36 @@ export async function submitReport(tx: Tx, p: Principal, jobId: string, report: 
   if (report.trim().length < 20) throw invalid('Raporda ne yapıldığını, ölçümleri ve kullanılan parçaları yaz.');
   await tx.query(`UPDATE service_jobs SET status = 'report_submitted', report = $2, report_submitted_at = now() WHERE id = $1`, [jobId, report]);
   await appendAudit(tx, { companyId: j.company_id, actorId: p.userId, eventType: 'service.report_submitted', entityType: 'service_job', entityId: jobId, payload: { length: report.length } });
+  const r = (await tx.query(`SELECT id, site_id, title, created_by FROM service_requests WHERE id = $1`, [j.request_id])).rows[0];
+  await notify(tx, { companyId: j.company_id, siteId: r.site_id, userIds: await businessSide(tx, j.company_id, r.site_id, r.created_by),
+    kind: 'service_report_delivered', entityType: 'service_request', entityId: r.id, dedupeKey: `service_report_delivered:${jobId}`,
+    title: 'Hizmet raporu teslim edildi: kabulün bekleniyor', body: `${r.title} · raporu oku, kabul et ya da itiraz et. Kabul, bağlı uygunsuzluğu kapatmaz.` });
+}
+
+/** On the business side: whoever opened the request and the people who manage that site. */
+async function businessSide(tx: Tx, companyId: string, siteId: string, requestedBy: string) {
+  return [requestedBy, ...(await siteManagers(tx, companyId, siteId))];
+}
+
+/**
+ * Review of a job that actually happened: the provider delivered a report and the business
+ * accepted it. One review per job. Whether it may appear on the provider's profile (without the
+ * business name) is the business's choice; by default it does not.
+ */
+export async function reviewJob(tx: Tx, p: Principal, companyId: string, jobId: string,
+  b: { quality: number; timeliness: number; communication: number; comment: string | null; showOnProfile: boolean }) {
+  const j = (await tx.query(`SELECT j.*, r.site_id FROM service_jobs j JOIN service_requests r ON r.id = j.request_id WHERE j.id = $1 AND j.company_id = $2 FOR UPDATE OF j`,
+    [jobId, companyId])).rows[0];
+  if (!j || !can(p, 'service.request', { companyId, siteId: j.site_id }).ok) throw notFound('Hizmet işi');
+  if (j.status !== 'accepted') throw new AppError(422, 'JOB_NOT_ACCEPTED', 'Değerlendirme yalnızca raporu teslim edilmiş ve işletmece kabul edilmiş iş için yapılır.');
+  if ((await tx.query(`SELECT 1 FROM service_reviews WHERE job_id = $1`, [jobId])).rowCount) throw conflict('ALREADY_REVIEWED', 'Bu iş zaten değerlendirildi.');
+  const comment = b.comment?.trim() || null;
+  if (comment && comment.length > 1000) throw invalid('Yorum en fazla 1000 karakter olabilir.');
+  const r = (await tx.query<{ id: string }>(
+    `INSERT INTO service_reviews (company_id, job_id, provider_profile_id, quality, timeliness, communication, comment, show_on_profile, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+    [companyId, jobId, j.provider_profile_id, b.quality, b.timeliness, b.communication, comment, b.showOnProfile, p.userId])).rows[0]!;
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'service.reviewed', entityType: 'service_job', entityId: jobId,
+    payload: { reviewId: r.id, quality: b.quality, timeliness: b.timeliness, communication: b.communication, showOnProfile: b.showOnProfile } });
+  return { id: r.id };
 }

@@ -14,7 +14,11 @@ export async function uploadContent(db: Db, store: EvidenceStore, p: Principal, 
     const r = (await tx.query(
       `SELECT e.*, t.site_id, t.assignee_id FROM evidence e LEFT JOIN tasks t ON t.id = e.task_id WHERE e.id = $1 AND e.company_id = $2`,
       [evidenceId, companyId])).rows[0];
-    if (!r || !can(p, 'task.execute', { companyId, siteId: r.site_id, assigneeId: r.assignee_id }).ok) throw notFound('Kanıt');
+    if (!r) throw notFound('Kanıt');
+    // Task evidence: whoever may do the task. Action and document evidence: only the person who
+    // registered it (they were authorised at registration), so nobody else can fill in their file.
+    const ok = r.task_id ? can(p, 'task.execute', { companyId, siteId: r.site_id, assigneeId: r.assignee_id }).ok : r.created_by === p.userId;
+    if (!ok) throw notFound('Kanıt');
     return r;
   });
   // The details tell a client whose earlier answer was lost what actually happened.
@@ -66,4 +70,32 @@ export async function verifyStoredFiles(tx: Tx, store: EvidenceStore, companyId:
     out.push({ evidenceId: r.id, status: !bytes ? 'missing' : sha256Hex(bytes) === r.sha256 ? 'intact' : 'modified' });
   }
   return out;
+}
+
+/**
+ * Reads a stored file for someone allowed to see what it belongs to: a task (task.read),
+ * a nonconformity action (ncr.read on the case) or a document version (document.read).
+ */
+export async function readContent(db: Db, store: EvidenceStore, p: Principal, companyId: string, evidenceId: string) {
+  const ev = await db.tenant(companyId, async tx => {
+    const r = (await tx.query(
+      `SELECT e.id, e.status, e.mime, e.storage_key, e.sha256, e.task_id, e.ncr_id, e.action_id, e.document_version_id,
+              t.site_id AS task_site, t.assignee_id AS task_assignee, n.site_id AS ncr_site, n.owner_id AS ncr_owner, d.site_id AS doc_site
+         FROM evidence e LEFT JOIN tasks t ON t.id = e.task_id LEFT JOIN nonconformities n ON n.id = e.ncr_id
+         LEFT JOIN document_versions v ON v.id = e.document_version_id LEFT JOIN documents d ON d.id = v.document_id
+        WHERE e.id = $1 AND e.company_id = $2`, [evidenceId, companyId])).rows[0];
+    if (!r) throw notFound('Kanıt');
+    let ok = false;
+    if (r.task_id) ok = can(p, 'task.read', { companyId, siteId: r.task_site, assigneeId: r.task_assignee }).ok;
+    else if (r.ncr_id) {
+      const holds = (await tx.query(`SELECT 1 FROM ncr_actions WHERE ncr_id = $1 AND owner_id = $2 LIMIT 1`, [r.ncr_id, p.userId])).rowCount;
+      ok = can(p, 'ncr.read', { companyId, siteId: r.ncr_site, assigneeId: r.ncr_owner === p.userId || holds ? p.userId : r.ncr_owner }).ok;
+    } else if (r.document_version_id) ok = can(p, 'document.read', { companyId, siteId: r.doc_site }).ok;
+    if (!ok) throw notFound('Kanıt');
+    return r;
+  });
+  if (ev.status !== 'stored' || !ev.storage_key) throw conflict('EVIDENCE_NOT_STORED', 'Bu kanıtın dosyası yok (yüklenmedi ya da reddedildi).');
+  const bytes = await store.get(ev.storage_key);
+  if (!bytes) throw notFound('Kanıt dosyası');
+  return { mime: ev.mime as string, bytes, sha256: ev.sha256 as string };
 }

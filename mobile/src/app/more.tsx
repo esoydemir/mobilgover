@@ -16,6 +16,7 @@ export default function MoreRoute() {
     { icon: '📋', label: 'Yükümlülükler', sub: 'Neden uygulandığı, kaynak ve kural sürümü', href: '/obligations', show: manager },
     { icon: '🔔', label: 'Bildirimler', sub: 'Atama, termin, gecikme ve doğrulama istekleri', href: '/notifications' },
     { icon: '⚠️', label: 'Uygunsuzluklar', sub: 'Sorun bildir, sorumlu ve termin, neden, aksiyon, doğrulama', href: '/ncrs' },
+    { icon: '🗂️', label: 'Belge kasası', sub: 'Ruhsat, sertifika, rapor; sürüm, inceleme ve süre hatırlatması', href: '/documents', show: manager },
     { icon: '🧑‍🔧', label: 'Hizmet talepleri', sub: 'Uzman bul, teklif karşılaştır, teslim kabul', href: '/services', show: manager },
     { icon: '🏢', label: 'İşletme profili', sub: 'Yükümlülükleri belirleyen yanıtlar', href: '/profile', show: role === 'owner' || role === 'hq_manager' },
     { icon: '👥', label: 'Ekip', sub: 'Şube yöneticisi ve personel ekle', href: '/team', show: role === 'owner' || role === 'hq_manager' },

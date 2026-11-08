@@ -183,8 +183,11 @@ describe('nonconformity and CAPA', () => {
     expect((await manager().post(`${N}/causes`, { stage: 'initial', categories: ['equipment'], notes: 'Kapı contası aşınmış olabilir.' })).status).toBe(201);
     const corr = await manager().post(`${N}/actions`, { kind: 'correction', description: 'Kapı contası değiştirildi.' });
     expect((await manager().post(`${N}/actions/${corr.body.id}`, { op: 'done', notes: 'Conta değişti, kapı tam kapanıyor.' })).status).toBe(200);
+    // "Done" is a claim until someone else checks it.
+    expect((await owner().post(`${N}/actions/${corr.body.id}`, { op: 'verify', result: 'accepted', notes: 'Kapıyı kapatıp denedim.' })).status).toBe(200);
     const ca = await manager().post(`${N}/actions`, { kind: 'corrective_action', description: 'Conta kontrolü aylık bakım listesine eklenecek.' });
     expect((await manager().post(`${N}/actions/${ca.body.id}`, { op: 'done', notes: 'Bakım listesine eklendi.' })).status).toBe(200);
+    expect((await owner().post(`${N}/actions/${ca.body.id}`, { op: 'verify', result: 'accepted', notes: 'Bakım listesini gördüm.' })).status).toBe(200);
     expect((await manager().post(`${N}/causes`, { stage: 'verified', categories: ['equipment', 'process'], notes: 'Conta aşınmış; bakım planında conta kontrolü yoktu.' })).status).toBe(201);
     expect((await manager().post(`${N}/steps`, { step: 'effectiveness_check', notes: '3 gün boyunca ölçümler 2–4 °C aralığında.' })).status).toBe(201);
     expect((await owner().get(N)).body.status).toBe('awaiting_verification');

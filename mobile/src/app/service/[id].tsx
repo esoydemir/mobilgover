@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../components/ui';
+import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -15,7 +15,9 @@ import { REQ_STATUS } from '../services';
 type Quote = { id: string; display_name: string; provider_profile_id: string; scope: string; exclusions: string; price_net: number; vat_rate: number; price_gross: number;
   materials: string; duration_text: string; warranty_text: string; valid_until: string; status: string; expired: boolean };
 type Job = { id: string; status: string; checkin_code: string; checked_in_at: string | null; report: string | null; report_submitted_at: string | null; accepted_at: string | null; business_note: string | null; payment_status: string };
-type Detail = { request: { id: string; title: string; description: string; category_name: string; status: string; ncr_id: string | null; created_at: string }; quotes: Quote[]; job: Job | null };
+type Review = { id: string; quality: number; timeliness: number; communication: number; comment: string | null; show_on_profile: boolean; created_at: string };
+type Detail = { request: { id: string; title: string; description: string; category_name: string; status: string; ncr_id: string | null; created_at: string }; quotes: Quote[]; job: Job | null;
+  review?: Review | null; canReview?: boolean };
 
 const JOB_TEXT: Record<string, string> = {
   scheduled: 'Planlandı · uzman gelince giriş kodunu ona göster', checked_in: 'Uzman giriş yaptı (yalnızca yerinde bulunma kaydı)',
@@ -70,6 +72,14 @@ export default function ServiceDetailRoute() {
             </View>
           ) : null}
           {d.job.business_note ? <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 10 }]}>Notun: {d.job.business_note}</Text> : null}
+          {d.review ? (
+            <View testID="job-review" style={{ marginTop: 12, gap: 3 }}>
+              <Text style={type(11, 600, { ls: 0.1, color: C.t3 })}>DEĞERLENDİRMEN</Text>
+              <Text style={type(12.5, 500)}>Kalite {d.review.quality} · zamanlama {d.review.timeliness} · iletişim {d.review.communication} (5 üzerinden)</Text>
+              {d.review.comment ? <Text style={type(12, 400, { color: C.t2 })}>{d.review.comment}</Text> : null}
+              <Text style={type(11, 400, { color: C.t3 })}>{d.review.show_on_profile ? 'Uzman profilinde işletme adın olmadan görünür.' : 'Uzman profilinde görünmez.'}</Text>
+            </View>
+          ) : d.canReview ? <ReviewForm jobId={d.job.id} onDone={q.reload} /> : null}
           <Text style={[type(11, 400, { color: C.t3, lh: 1.45 }), { marginTop: 12 }]}>Ödeme: bu aşamada uygulama dışında. QR/kod girişi işin yapıldığını kanıtlamaz; rapor ve teslim kabulü ayrıdır.</Text>
         </Card>
       ) : null}
@@ -96,5 +106,51 @@ export default function ServiceDetailRoute() {
       ))}
       {error ? <ErrorBox message={error} /> : null}
     </Screen>
+  );
+}
+
+/** Only for a job whose report was delivered and accepted; one review per job. */
+function ReviewForm({ jobId, onDone }: { jobId: string; onDone: () => void }) {
+  const { company, call } = useSession();
+  const { showToast } = useUi();
+  const [scores, setScores] = useState<Record<'quality' | 'timeliness' | 'communication', number>>({ quality: 0, timeliness: 0, communication: 0 });
+  const [comment, setComment] = useState('');
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ready = Object.values(scores).every(v => v >= 1);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try {
+      await call('POST', `/companies/${company!.id}/jobs/${jobId}/review`, { ...scores, comment: comment.trim() || null, showOnProfile: show });
+      showToast('Değerlendirme kaydedildi', show ? 'Uzman profilinde işletme adın olmadan görünecek.' : 'Uzman profilinde görünmeyecek.');
+      onDone();
+    } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
+  };
+  return (
+    <View style={{ marginTop: 14, gap: 10, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 12 }}>
+      <Text style={type(11, 600, { ls: 0.1, color: C.t3 })}>HİZMETİ DEĞERLENDİR</Text>
+      {([['quality', 'İşin kalitesi'], ['timeliness', 'Zamanlama'], ['communication', 'İletişim']] as const).map(([k, l]) => (
+        <View key={k} style={{ gap: 6 }}>
+          <Text style={type(12.5, 600)}>{l}</Text>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {[1, 2, 3, 4, 5].map(n => (
+              <Tap key={n} testID={`review-${k}-${n}`} onPress={() => setScores(s => ({ ...s, [k]: n }))}
+                style={{ width: 38, height: 34, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+                  borderColor: scores[k] >= n ? tint.lime(0.4) : C.bd, backgroundColor: scores[k] >= n ? tint.lime(0.1) : C.chip }}>
+                <Text style={type(13, 600, { color: scores[k] >= n ? C.lime : C.t2 })}>{n}</Text>
+              </Tap>
+            ))}
+          </View>
+        </View>
+      ))}
+      <Field label="Yorum (isteğe bağlı)" testID="review-comment" value={comment} onChangeText={setComment} multiline />
+      <Tap testID="review-show" onPress={() => setShow(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+        <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: show ? C.lime : C.t3, backgroundColor: show ? C.lime : 'transparent' }} />
+        <Text style={[type(12.5, 500), { flex: 1 }]}>Uzman profilinde gösterilmesine izin ver (işletme adı gösterilmez; kategori, şehir ve ay görünür)</Text>
+      </Tap>
+      {error ? <ErrorBox message={error} /> : null}
+      <PrimaryButton testID="review-save" label={busy ? 'Kaydediliyor…' : 'Değerlendirmeyi kaydet'} glow={false} height={44} size={13} disabled={busy || !ready} onPress={save} />
+    </View>
   );
 }

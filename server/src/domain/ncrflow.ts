@@ -22,8 +22,18 @@ export type FlowInput = {
   independentVerification: boolean;
   steps: { step: string; iteration: number; doneBy: string }[];
   causes: { stage: 'initial' | 'verified'; iteration: number; categories: string[]; migrated: boolean }[];
-  actions: { kind: 'correction' | 'corrective_action' | 'follow_up'; iteration: number; status: 'open' | 'done' | 'cancelled'; doneBy: string | null }[];
+  actions: {
+    kind: 'correction' | 'corrective_action' | 'follow_up'; iteration: number; status: 'open' | 'done' | 'cancelled'; doneBy: string | null;
+    /** A "done" is a claim: it counts only once verified (or recorded before this rule existed: legacy). */
+    verification?: 'not_declared' | 'declared' | 'verified' | 'rejected' | 'legacy';
+    ownerId?: string | null;
+    /** People who uploaded evidence for this action. */
+    evidenceBy?: string[];
+  }[];
 };
+
+/** A completed action counts toward the flow only when its result was verified (or is legacy). */
+export const counts = (a: FlowInput['actions'][number]) => a.status === 'done' && (a.verification === undefined || a.verification === 'verified' || a.verification === 'legacy');
 
 export type StageKey = 'containment' | 'assignment' | 'cause' | 'actions' | 'root_cause' | 'effectiveness' | 'verification';
 export type StageState = 'done' | 'active' | 'todo';
@@ -48,18 +58,20 @@ export function flow(n: FlowInput): Flow {
   const assignment = !!n.ownerId && !!n.dueAt;
   const cause = has(n.causes, c => c.stage === 'initial');
   const openCurrent = cur.filter(a => a.status === 'open' && a.kind !== 'follow_up').length;
+  const awaiting = cur.filter(a => a.status === 'done' && a.kind !== 'follow_up' && !counts(a)).length;
+  const pendingText = awaiting ? `${awaiting} aksiyonun "yapıldı" beyanı kanıtla doğrulanmayı bekliyor.` : null;
   let actionsOk: boolean;
   let actionsMissing: string | null = null;
   if (capa && it === 1) {
-    const corr = has(n.actions, a => a.kind === 'correction' && a.status === 'done');
-    const ca = has(cur, a => a.kind === 'corrective_action' && a.status === 'done');
-    actionsOk = corr && ca && openCurrent === 0;
-    actionsMissing = !corr ? 'En az bir düzeltme tamamlanmalı.' : !ca ? 'En az bir düzeltici faaliyet tamamlanmalı.' : openCurrent ? `${openCurrent} açık aksiyon tamamlanmalı ya da iptal edilmeli.` : null;
+    const corr = has(n.actions, a => a.kind === 'correction' && counts(a));
+    const ca = has(cur, a => a.kind === 'corrective_action' && counts(a));
+    actionsOk = corr && ca && openCurrent === 0 && awaiting === 0;
+    actionsMissing = pendingText ?? (!corr ? 'En az bir düzeltme tamamlanıp doğrulanmalı.' : !ca ? 'En az bir düzeltici faaliyet tamamlanıp doğrulanmalı.' : openCurrent ? `${openCurrent} açık aksiyon tamamlanmalı ya da iptal edilmeli.` : null);
   } else {
-    const any = has(cur, a => a.kind !== 'follow_up' && a.status === 'done');
-    actionsOk = any && openCurrent === 0;
-    actionsMissing = !any ? (it > 1 ? 'Bu tur için yeni bir aksiyon tamamlanmalı (önceki doğrulama başarısız oldu).' : 'En az bir aksiyon tamamlanmalı.')
-      : openCurrent ? `${openCurrent} açık aksiyon tamamlanmalı ya da iptal edilmeli.` : null;
+    const any = has(cur, a => a.kind !== 'follow_up' && counts(a));
+    actionsOk = any && openCurrent === 0 && awaiting === 0;
+    actionsMissing = pendingText ?? (!any ? (it > 1 ? 'Bu tur için yeni bir aksiyon tamamlanıp doğrulanmalı (önceki doğrulama başarısız oldu).' : 'En az bir aksiyon tamamlanıp doğrulanmalı.')
+      : openCurrent ? `${openCurrent} açık aksiyon tamamlanmalı ya da iptal edilmeli.` : null);
   }
   // Full CAPA needs a root cause confirmed in this round (a failed check means the cause may have been wrong).
   const rootCause = !capa || has(n.causes, c => c.stage === 'verified' && (c.iteration === it || (v1 && c.migrated)));
@@ -91,12 +103,28 @@ export function flow(n: FlowInput): Flow {
 }
 
 /**
- * Independent verification: for high risk, whoever completed this round's correction or
- * corrective action may not verify their own work.
+ * People who did this round's fix: whoever owns, completed (pressed the button for) or gave
+ * evidence for a correction or corrective action in the round.
+ */
+export function roundPerformers(n: Pick<FlowInput, 'iteration' | 'actions'>): Set<string> {
+  const out = new Set<string>();
+  for (const a of n.actions) {
+    if (a.iteration !== n.iteration || a.kind === 'follow_up' || a.status !== 'done') continue;
+    if (a.doneBy) out.add(a.doneBy);
+    if (a.ownerId) out.add(a.ownerId);
+    for (const e of a.evidenceBy ?? []) out.add(e);
+  }
+  return out;
+}
+
+/**
+ * Independent verification: for high risk, nobody who did this round's correction or
+ * corrective action (owner, the person who marked it done, or who gave its evidence)
+ * may verify the case.
  */
 export function verifierConflict(n: Pick<FlowInput, 'independentVerification' | 'iteration' | 'actions'>, verifierId: string): boolean {
   if (!n.independentVerification) return false;
-  return n.actions.some(a => a.iteration === n.iteration && a.status === 'done' && a.kind !== 'follow_up' && a.doneBy === verifierId);
+  return roundPerformers(n).has(verifierId);
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { Db } from '../db/pool';
 import { localDay } from '../domain/schedule';
+import { scanDocumentExpiry } from './documents';
 import { scanDeadlines } from './notifications';
 import { generateTasks } from './tasks';
 
@@ -38,6 +39,9 @@ export function startTaskHorizon(db: Db, opts: { days: number; everyMs: number; 
       // Due-soon and overdue notifications (each deadline announced once).
       const n = await scanDeadlines(db);
       if (n.created) opts.log({ level: 'info', event: 'deadline_notifications', ...n });
+      // Document end dates: a warning before, and a notice once passed (each once per version).
+      const d = await scanDocumentExpiry(db);
+      if (d.created) opts.log({ level: 'info', event: 'document_expiry_notifications', ...d });
     } catch (e) {
       opts.log({ level: 'error', event: 'task_horizon_failed', error: (e as Error).message });
     } finally { running = false; }

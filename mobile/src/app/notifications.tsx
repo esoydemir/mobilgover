@@ -15,6 +15,8 @@ const TONE: Record<string, string> = {
   ncr_overdue: C.crit, action_overdue: C.crit, ncr_verification_failed: C.crit, ncr_reopened: C.warn,
   ncr_due_soon: C.warn, action_due_soon: C.warn, reassignment_needed: C.warn, obligation_review_requested: C.warn,
   ncr_verification_requested: C.lime, ncr_assigned: C.info, action_assigned: C.info, ncr_reported: C.info, obligation_review_done: C.info,
+  action_declared: C.lime, action_rejected: C.crit, action_verified: C.info, doc_expired: C.crit, doc_expiring: C.warn, doc_review_needed: C.lime,
+  doc_rejected: C.crit, doc_verified: C.info, quote_received: C.info, service_report_delivered: C.lime,
 };
 
 /** In-app notifications for this business: only what the person can still open. */
@@ -27,6 +29,8 @@ export default function NotificationsRoute() {
     if (n.entity_type === 'nonconformity') router.push(`/ncr/${n.entity_id}`);
     else if (n.entity_type === 'obligation') router.push(`/obligation/${n.entity_id}`);
     else if (n.entity_type === 'membership') router.push('/ncrs');
+    else if (n.entity_type === 'document') router.push(`/documents/${n.entity_id}`);
+    else if (n.entity_type === 'service_request') router.push(`/service/${n.entity_id}`);
   };
   return (
     <Screen title="Bildirimler" titleEn="Notifications" gap={10} onRefresh={q.reload} refreshing={q.loading}>
@@ -36,7 +40,7 @@ export default function NotificationsRoute() {
         <GhostButton testID="notes-read-all" label={`Tümünü okundu say (${q.data.unread})`} height={36} size={12} style={{ alignSelf: 'flex-start' }}
           onPress={async () => { await call('POST', `${base}/read`, { ids: 'all' }); await q.reload(); }} />
       ) : null}
-      {q.data && q.data.items.length === 0 ? <Empty title="Bildirim yok" body="Atama, yaklaşan termin, gecikme ve doğrulama istekleri burada görünür." /> : null}
+      {q.data && q.data.items.length === 0 ? <Empty title="Bildirim yok" body="Atama, termin, doğrulama istekleri, yeni teklif, hizmet raporu ve belge süreleri burada görünür." /> : null}
       {(q.data?.items ?? []).map(n => (
         <Tap key={n.id} testID={`note-${n.kind}`} onPress={() => void open(n)}
           style={{ flexDirection: 'row', gap: 12, borderWidth: 1, borderColor: n.read_at ? C.bd : tint.white(0.16), backgroundColor: n.read_at ? C.bg : C.card, borderRadius: 20, padding: 14 }}>

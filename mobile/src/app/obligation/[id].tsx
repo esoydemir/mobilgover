@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
 import { C, tint, type } from '../../theme';
@@ -15,8 +15,9 @@ import { DECISION } from '../obligations';
 type Explanation = {
   obligation: { id: string; decision: keyof typeof DECISION; reason: string; decidedBy: string; decidedByName: string | null; decidedAt: string; missingFacts: string[];
     isCurrent: boolean; currentId: string; manual: boolean; canOverride: boolean; mandatory: boolean };
-  pendingReview: { id: string; reason: string; requestedByName: string; requestedAt: string; canReview: boolean } | null;
-  reviews: { id: string; status: string; reason: string; requested_at: string; reviewed_at: string | null; review_notes: string | null; requested_by_name: string; reviewed_by_name: string | null }[];
+  pendingReview: { id: string; reason: string; basis: string | null; disputedFacts: { key: string; proposed: unknown }[] | null; requestedByName: string; requestedAt: string; canReview: boolean } | null;
+  conditionFacts: { key: string; label: string; type: 'boolean' | 'number' | 'string' | 'string[]'; current: unknown; source: string | null; verification: string | null }[];
+  reviews: { id: string; status: string; reason: string; basis: string | null; engine_outcome: string | null; requested_at: string; reviewed_at: string | null; review_notes: string | null; requested_by_name: string; reviewed_by_name: string | null }[];
   rule: { code: string; version: number; status: string; kind: string; isExample: boolean; title: string; summary: string; effectiveFrom: string; ambiguityNote: string | null; label: string };
   provisions: { ref: string; excerpt: string; version_label: string; source_title: string; issuer: string; is_example: boolean }[];
   matchedFacts: Record<string, { value: unknown; source: string; verification: string; recordedAt: string } | null>;
@@ -59,6 +60,8 @@ export default function ObligationRoute() {
                     {r.status === 'approved' ? 'Onaylandı' : r.status === 'rejected' ? 'Reddedildi · yükümlülük sürüyor' : 'Geri çekildi'}
                   </Text>
                   <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>İstek: {r.reason} ({r.requested_by_name}, {fmtDateTime(r.requested_at)})</Text>
+                  {r.basis ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Dayanak: {r.basis}</Text> : null}
+                  {r.engine_outcome ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Doğrulanan bilgilerle kural motorunun kararı: {DECISION[r.engine_outcome as keyof typeof DECISION]?.[0] ?? r.engine_outcome}</Text> : null}
                   {r.review_notes ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İnceleme: {r.review_notes} ({r.reviewed_by_name}{r.reviewed_at ? `, ${fmtDateTime(r.reviewed_at)}` : ''})</Text> : null}
                 </View>
               ))}
@@ -113,9 +116,18 @@ function DecisionCard({ e, onDone }: { e: Explanation; onDone: (newId: string) =
   const { showToast } = useUi();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
+  const [basis, setBasis] = useState('');
+  const [proposed, setProposed] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const base = `/companies/${company!.id}/obligations/${e.obligation.id}`;
+  const disputed = Object.entries(proposed).flatMap(([key, raw]) => {
+    const f = e.conditionFacts.find(x => x.key === key);
+    if (!f || raw === '') return [];
+    const value = f.type === 'boolean' ? raw === 'true' : f.type === 'number' ? Number(raw) : f.type === 'string[]' ? raw.split(',').map(x => x.trim()).filter(Boolean) : raw.trim();
+    return f.type === 'number' && !Number.isFinite(value) ? [] : [{ key, proposed: value }];
+  });
+  const mandatoryReady = !e.obligation.mandatory || (disputed.length > 0 && basis.trim().length >= 10);
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setError(null);
     try { await fn(); } catch (x) { setError(errorText(x)); } finally { setBusy(false); }
@@ -160,12 +172,44 @@ function DecisionCard({ e, onDone }: { e: Explanation; onDone: (newId: string) =
           <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>{e.obligation.mandatory
             ? 'Bu zorunlu bir yükümlülük; karar hemen uygulanmaz. İsteğin başka bir yetkili ya da yetkilendirilmiş uzman tarafından incelenir. İnceleme bitene kadar kontroller sürer. Onaylanırsa ileriye dönük kontroller iptal edilir; saati geçmiş kontroller "kaçırıldı" olarak kayıtlarda kalır.'
             : 'Bu yükümlülüğün ileriye dönük açık kontrolleri iptal edilir ve yenileri oluşmaz; saati geçmiş kontroller "kaçırıldı" olarak kayıtlarda kalır. Karar adınla ve gerekçesiyle kayda geçer; denetim dosyasında görünür. İstediğin zaman geri alabilirsin.'}</Text>
+          {e.obligation.mandatory ? (
+            <View style={{ gap: 10 }}>
+              <Text style={type(12.5, 600)}>Kuralın hangi koşulu sizin için doğru değil?</Text>
+              <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İki kişinin onayı tek başına yetmez. Seçtiğin bilgiler inceleyen tarafından doğrulanır, işletme profiline işlenir ve kararı kural motoru yeniden verir. Bilgiler kurala hâlâ uyuyorsa yükümlülük sürer.</Text>
+              {e.conditionFacts.map(f => {
+                const v = proposed[f.key];
+                const on = v !== undefined;
+                return (
+                  <View key={f.key} style={{ borderWidth: 1, borderColor: on ? tint.warn(0.35) : C.bd, borderRadius: 14, padding: 11, gap: 7 }}>
+                    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                      <Text style={[type(12.5, 600), { flex: 1 }]}>{f.label}</Text>
+                      <Text style={type(11.5, 500, { color: C.t2 })}>Şu an: {fmt(f.current)}</Text>
+                    </View>
+                    {!on ? <GhostButton testID={`dispute-${f.key}`} label="Bu bilgi bizde farklı" height={32} size={11.5} style={{ alignSelf: 'flex-start' }}
+                      onPress={() => setProposed(p => ({ ...p, [f.key]: f.type === 'boolean' ? String(!(f.current === true)) : '' }))} /> : (
+                      <>
+                        {f.type === 'boolean' ? (
+                          <View style={{ flexDirection: 'row', gap: 7 }}>
+                            <FilterChip testID={`dispute-${f.key}-true`} label="Doğrusu: Evet" px={12} active={v === 'true'} onPress={() => setProposed(p => ({ ...p, [f.key]: 'true' }))} />
+                            <FilterChip testID={`dispute-${f.key}-false`} label="Doğrusu: Hayır" px={12} active={v === 'false'} onPress={() => setProposed(p => ({ ...p, [f.key]: 'false' }))} />
+                          </View>
+                        ) : <Field label={f.type === 'string[]' ? 'Doğru değer (virgülle ayır)' : 'Doğru değer'} value={v} onChangeText={x => setProposed(p => ({ ...p, [f.key]: x }))} />}
+                        <GhostButton label="Bu bilgiyi çıkar" height={30} size={11} style={{ alignSelf: 'flex-start' }} onPress={() => setProposed(p => { const n = { ...p }; delete n[f.key]; return n; })} />
+                      </>
+                    )}
+                  </View>
+                );
+              })}
+              <Field label="Dayanak (hangi belge, gözlem ya da kayıt gösteriyor?)" testID="override-basis" value={basis} onChangeText={setBasis} multiline placeholder="ör. Dolap içi fotoğrafları ve menü: soğukta gıda saklanmıyor." />
+            </View>
+          ) : null}
           <Field label="Gerekçe (en az bir cümle)" testID="override-reason" value={reason} onChangeText={setReason} multiline placeholder="ör. Mutfakta hazırlık yapılmıyor; yalnızca paketli ürün satılıyor." />
           {error ? <ErrorBox message={error} /> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <PrimaryButton testID="override-save" label={busy ? 'Kaydediliyor…' : e.obligation.mandatory ? 'İncelemeye gönder' : 'Uygulanmaz olarak kaydet'} disabled={busy || reason.trim().length < 10} height={44} size={12.5} glow={false} style={{ flex: 1 }}
+            <PrimaryButton testID="override-save" label={busy ? 'Kaydediliyor…' : e.obligation.mandatory ? 'İncelemeye gönder' : 'Uygulanmaz olarak kaydet'} disabled={busy || reason.trim().length < 10 || !mandatoryReady} height={44} size={12.5} glow={false} style={{ flex: 1 }}
               onPress={() => run(async () => {
-                const r = await call<{ id: string; status: 'applied' | 'pending_review' }>('POST', `${base}/not-applicable`, { reason: reason.trim() });
+                const r = await call<{ id: string; status: 'applied' | 'pending_review' }>('POST', `${base}/not-applicable`,
+                  e.obligation.mandatory ? { reason: reason.trim(), basis: basis.trim(), disputedFacts: disputed } : { reason: reason.trim() });
                 if (r.status === 'pending_review') showToast('İncelemeye gönderildi', 'İnceleyenlere bildirildi; kontroller sürüyor.');
                 else showToast('Uygulanmaz olarak kaydedildi', 'İleriye dönük kontroller iptal edildi.');
                 onDone(r.id);
@@ -196,14 +240,24 @@ function ReviewCard({ e, onDone }: { e: Explanation; onDone: (newId: string) => 
       <Eyebrow color={C.warn}>"UYGULANMAZ" İSTEĞİ · İNCELEME BEKLİYOR</Eyebrow>
       <Text style={type(13, 500, { lh: 1.45 })}>{r.reason}</Text>
       <Text style={type(11, 400, { color: C.t3 })}>{r.requestedByName} · {fmtDateTime(r.requestedAt)}</Text>
-      <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>İnceleme bitene kadar yükümlülük uygulanmaya ve kontroller oluşmaya devam eder.</Text>
+      {r.disputedFacts?.length ? (
+        <View style={{ gap: 5, borderWidth: 1, borderColor: C.bd, borderRadius: 14, padding: 11 }}>
+          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>İTİRAZ EDİLEN KOŞULLAR</Text>
+          {r.disputedFacts.map(d => {
+            const f = e.conditionFacts.find(x => x.key === d.key);
+            return <Text key={d.key} style={type(12, 500, { lh: 1.45 })}>{f?.label ?? d.key}: şu an {fmt(f?.current)} → önerilen {fmt(d.proposed)}</Text>;
+          })}
+          {r.basis ? <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Dayanak: {r.basis}</Text> : null}
+        </View>
+      ) : <Text style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>Bu istek hangi koşulun sağlanmadığını belirtmiyor; onaylanamaz. Reddedip gerekçeli yeni istek açılmalı.</Text>}
+      <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>İnceleme bitene kadar yükümlülük uygulanmaya ve kontroller oluşmaya devam eder. Onay, yukarıdaki bilgileri doğrulanmış olarak işletme profiline işler; kararı kural motoru verir.</Text>
       {error ? <ErrorBox message={error} /> : null}
       {r.canReview ? (
         <>
           <Field label="İnceleme notu (neye baktın?)" testID="review-notes" value={notes} onChangeText={setNotes} multiline />
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <PrimaryButton testID="review-approve" label="Onayla" glow={false} height={42} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5}
-              onPress={() => run(async () => { const x = await call<{ obligationId: string }>('POST', `${base}/review`, { decision: 'approved', notes: notes.trim() }); showToast('İstek onaylandı', 'Yükümlülük "uygulanmaz" oldu.'); onDone(x.obligationId); })} />
+              onPress={() => run(async () => { const x = await call<{ obligationId: string }>('POST', `${base}/review`, { decision: 'approved', notes: notes.trim() }); showToast('Bilgiler doğrulandı', 'Kural motoru yeniden karar verdi: uygulanmaz.'); onDone(x.obligationId); })} />
             <GhostButton testID="review-reject" label="Reddet" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 5}
               onPress={() => run(async () => { await call('POST', `${base}/review`, { decision: 'rejected', notes: notes.trim() }); showToast('İstek reddedildi', 'Yükümlülük sürüyor.'); onDone(e.obligation.id); })} />
           </View>

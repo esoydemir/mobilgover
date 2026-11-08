@@ -71,9 +71,10 @@ export function GhostButton({ label, onPress, height = 48, size = 13.5, style, c
 }
 
 /** Segmented filter chip (Bugün / Gecikmiş / Yaklaşan …). */
-export function FilterChip({ label, active, onPress, px = 15 }: { label: string; active: boolean; onPress: () => void; px?: number }) {
+export function FilterChip({ label, active, onPress, px = 15, testID }: { label: string; active: boolean; onPress: () => void; px?: number; testID?: string }) {
   return (
     <Tap
+      testID={testID}
       onPress={onPress}
       style={{
         height: 34, paddingHorizontal: px, borderRadius: 999, justifyContent: 'center', borderWidth: 1,

@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedDemoCompany, seedDemoProvider, seedPlatform } from '../../src/seed/demo';
 import { scanDeadlines } from '../../src/services/notifications';
 import { createSession } from '../../src/services/principal';
-import { client, freshEnv, type Env } from '../support/env';
+import { createHash } from 'node:crypto';
+import { client, fakeJpeg, freshEnv, type Env } from '../support/env';
 
 /**
  * Nonconformity flow v2 end to end, over real HTTP and PostgreSQL:
@@ -26,6 +27,19 @@ const notes = async (userId: string, kind?: string) => (await env.ownerDb.query(
   `SELECT kind, entity_id, dedupe_key FROM notifications WHERE user_id = $1 AND ($2::text IS NULL OR kind = $2) ORDER BY created_at`, [userId, kind ?? null])).rows;
 
 let ncr: string;
+type C = ReturnType<typeof client>;
+/** A manager other than the people who did the action checks the claimed result. */
+const verifyAction = async (by: C, ncrId: string, actionId: string, notes = 'Yerinde kontrol ettim, yapılmış.') =>
+  by.post(`${C()}/nonconformities/${ncrId}/actions/${actionId}`, { op: 'verify', result: 'accepted', notes });
+/** Registers a photo for an action and uploads its bytes. */
+const photo = async (by: C, ncrId: string, actionId: string, seed: string) => {
+  const img = fakeJpeg(seed);
+  const r = await by.post(`${C()}/nonconformities/${ncrId}/actions/${actionId}/evidence`, { kind: 'photo', mime: 'image/jpeg',
+    sha256: createHash('sha256').update(img).digest('hex'), sizeBytes: img.length });
+  expect(r.status).toBe(201);
+  expect((await by.put(`${C()}/evidence/${r.body.id}/content`, img, 'image/jpeg')).status).toBe(200);
+  return r.body.id as string;
+};
 
 beforeAll(async () => {
   env = await freshEnv();
@@ -150,14 +164,120 @@ describe('actions, deadlines and notifications', () => {
     const N = `${C()}/nonconformities/${ncr}`;
     expect((await staff().post(`${N}/steps`, { step: 'effectiveness_check', notes: 'Kapı kapanıyor.' })).body.error.code).toBe('FLOW_INCOMPLETE');
     expect((await staff().post(`${N}/actions/${correction}`, { op: 'done', notes: 'Bant yapıştırıldı, kapı kapanıyor.' })).status).toBe(200);
+    expect((await verifyAction(manager(), ncr, correction)).status).toBe(200);
     const ca = await manager().post(`${N}/actions`, { kind: 'corrective_action', description: 'Contayı yenisiyle değiştir (servis).', ownerId: demo.users.manager.id });
     expect((await manager().post(`${N}/actions/${ca.body.id}`, { op: 'done', notes: 'Yeni conta takıldı.' })).status).toBe(200);
+    expect((await verifyAction(owner(), ncr, ca.body.id)).status).toBe(200);
     const d = (await staff().get(N)).body;
     expect(d.flow.blockers.join(' ')).toContain('Kök neden');
     expect((await manager().post(`${N}/causes`, { stage: 'verified', categories: ['equipment', 'process'], notes: 'Conta aşınmış; açılış kontrolünde kapı yoktu.' })).status).toBe(201);
     expect((await staff().post(`${N}/steps`, { step: 'effectiveness_check', notes: 'İki gün boyunca kapı kapalı, ölçümler 3 °C.' })).status).toBe(201);
     expect((await notes(demo.users.manager.id, 'ncr_verification_requested')).length).toBe(1);
     expect((await notes(demo.users.owner.id, 'ncr_verification_requested')).length).toBe(1);
+  });
+});
+
+describe('"done" is a claim: evidence and verification', () => {
+  let n2: string, act: string, ev: string;
+  it('an action asking for a photo cannot be declared done without it; a pending upload blocks too', async () => {
+    const r = await staff().post(`${C()}/nonconformities`, { siteId: demo.siteId, title: 'Bulaşık alanında kırık fayans', description: 'Lavabo önünde kırık fayans, su birikiyor.',
+      hazardType: 'cleaning', severity: 'minor', containment: 'Alanı ıslak zemin uyarısıyla kapattım.' });
+    n2 = r.body.id;
+    await manager().post(`${C()}/nonconformities/${n2}/assignment`, { ownerId: demo.users.staff.id, dueAt: later(24) });
+    await staff().post(`${C()}/nonconformities/${n2}/causes`, { stage: 'initial', categories: ['equipment'], notes: 'Fayans eskimiş.' });
+    const a = await manager().post(`${C()}/nonconformities/${n2}/actions`, { kind: 'correction', description: 'Kırık fayansı değiştir.', ownerId: demo.users.staff.id, evidenceRequired: 'photo' });
+    expect(a.status).toBe(201);
+    act = a.body.id;
+    const N = `${C()}/nonconformities/${n2}`;
+    expect((await staff().post(`${N}/actions/${act}`, { op: 'done', notes: 'Fayans değişti.' })).body.error.code).toBe('EVIDENCE_INCOMPLETE');
+    // Registered but not uploaded: still not evidence.
+    const img = fakeJpeg('yarim');
+    const pend = await staff().post(`${N}/actions/${act}/evidence`, { kind: 'photo', mime: 'image/jpeg', sha256: createHash('sha256').update(img).digest('hex'), sizeBytes: img.length });
+    expect((await staff().post(`${N}/actions/${act}`, { op: 'done', notes: 'Fayans değişti.' })).body.error.code).toBe('EVIDENCE_PENDING');
+    // Someone else cannot fill in that file.
+    expect((await manager().put(`${C()}/evidence/${pend.body.id}/content`, img, 'image/jpeg')).status).toBe(404);
+    expect((await staff().put(`${C()}/evidence/${pend.body.id}/content`, img, 'image/jpeg')).status).toBe(200);
+    ev = pend.body.id;
+  });
+
+  it('declared done is not a verified result: the flow waits; the doer cannot verify their own claim', async () => {
+    const N = `${C()}/nonconformities/${n2}`;
+    expect((await staff().post(`${N}/actions/${act}`, { op: 'done', notes: 'Fayans değişti, zemin kuru.' })).status).toBe(200);
+    expect((await notes(demo.users.manager.id, 'action_declared')).filter(x => x.entity_id === n2).length).toBe(1);
+    const d = (await manager().get(N)).body;
+    const row = d.actions.find((x: any) => x.id === act);
+    expect(row).toMatchObject({ status: 'done', verification_status: 'declared', can_verify: true });
+    expect(row.evidence).toHaveLength(1);
+    expect(d.flow.stages.find((s: any) => s.key === 'actions')).toMatchObject({ state: 'active' });
+    expect(d.flow.blockers.join(' ')).toContain('doğrulanmayı bekliyor');
+    expect((await staff().post(`${N}/steps`, { step: 'effectiveness_check', notes: 'Zemin kuru.' })).body.error.code).toBe('FLOW_INCOMPLETE');
+    // Staff hold no manager rights; the evidence giver/owner cannot verify either.
+    expect((await verifyAction(staff(), n2, act)).status).toBe(403);
+    // The verifier can open the photo.
+    const file = await env.app.inject({ method: 'GET', url: `${C()}/evidence/${ev}/content`, headers: { authorization: `Bearer ${demo.users.manager.token}` } });
+    expect(file.statusCode).toBe(200);
+    expect(file.headers['content-type']).toBe('image/jpeg');
+    expect((await env.app.inject({ method: 'GET', url: `${C()}/evidence/${ev}/content`, headers: { authorization: `Bearer ${otherManager.token}` } })).statusCode).toBe(404);
+  });
+
+  it('a rejected claim reopens the action; a verified one counts', async () => {
+    const N = `${C()}/nonconformities/${n2}`;
+    expect((await manager().post(`${N}/actions/${act}`, { op: 'verify', result: 'rejected', notes: 'kısa' })).status).toBe(422);
+    expect((await manager().post(`${N}/actions/${act}`, { op: 'verify', result: 'rejected', notes: 'Fotoğrafta eski fayans görünüyor, değişmemiş.' })).status).toBe(200);
+    let row = (await staff().get(N)).body.actions.find((x: any) => x.id === act);
+    expect(row).toMatchObject({ status: 'open', verification_status: 'rejected', done_by: null });
+    expect((await notes(demo.users.staff.id, 'action_rejected')).length).toBe(1);
+    await photo(staff(), n2, act, 'yeni-fayans');
+    expect((await staff().post(`${N}/actions/${act}`, { op: 'done', notes: 'Yeni fayans döşendi, fotoğraf ekte.' })).status).toBe(200);
+    expect((await verifyAction(manager(), n2, act)).status).toBe(200);
+    row = (await staff().get(N)).body.actions.find((x: any) => x.id === act);
+    expect(row).toMatchObject({ status: 'done', verification_status: 'verified', verified_by: demo.users.manager.id });
+    expect((await staff().get(N)).body.flow.readyForEffectiveness).toBe(true);
+    // Verifying twice is refused.
+    expect((await verifyAction(owner(), n2, act)).body.error.code).toBe('ACTION_NOT_DECLARED');
+  });
+});
+
+describe('high risk: nobody who worked on the round verifies it', () => {
+  it('the action owner, whoever pressed "done" and whoever gave evidence cannot verify the action or close the case; another manager can', async () => {
+    // A: owner of the corrective action (an HQ manager); B: presses "done" (site manager); C: gives evidence (owner); D: independent.
+    const [A, D] = await env.db.system(async tx => {
+      const out: { id: string; token: string }[] = [];
+      for (const [name, mail] of [['Hakan (merkez)', 'hakan@ornek.test'], ['Deniz (merkez)', 'deniz@ornek.test']]) {
+        const u = (await tx.query(`INSERT INTO users (display_name, email) VALUES ($1,$2) RETURNING id`, [name, mail])).rows[0].id;
+        await tx.query(`INSERT INTO memberships (user_id, company_id, site_id, role, status, activated_at) VALUES ($1,$2,NULL,'hq_manager','active',now())`, [u, demo.companyId]);
+        out.push({ id: u, token: await createSession(tx, u) });
+      }
+      return out;
+    });
+    const a = () => client(env, A!.token), d = () => client(env, D!.token);
+    const r = await manager().post(`${C()}/nonconformities`, { siteId: demo.siteId, title: 'Dondurucu alarmı çalışmıyor', description: 'Sıcaklık alarmı test edildiğinde ses vermedi.',
+      hazardType: 'equipment_failure', severity: 'critical', equipmentId: null, containment: 'Saatlik elle ölçüm başlatıldı.' });
+    expect(r.body.depth).toBe('capa');
+    const N = `${C()}/nonconformities/${r.body.id}`;
+    await manager().post(`${N}/assignment`, { ownerId: demo.users.manager.id, dueAt: later(24) });
+    await manager().post(`${N}/causes`, { stage: 'initial', categories: ['equipment'], notes: 'Alarm pili bitmiş olabilir.' });
+    const corr = (await manager().post(`${N}/actions`, { kind: 'correction', description: 'Alarm pilini değiştir.', ownerId: demo.users.manager.id })).body.id;
+    await manager().post(`${N}/actions/${corr}`, { op: 'done', notes: 'Pil değişti, alarm çalıyor.' });
+    expect((await verifyAction(d(), r.body.id, corr)).status).toBe(200);
+    const ca = (await manager().post(`${N}/actions`, { kind: 'corrective_action', description: 'Alarm testini haftalık listeye ekle.', ownerId: A!.id, evidenceRequired: 'photo' })).body.id;
+    await photo(owner(), r.body.id, ca, 'haftalik-liste');                       // C gives the evidence
+    expect((await manager().post(`${N}/actions/${ca}`, { op: 'done', notes: 'Listeye eklendi.' })).status).toBe(200); // B presses done
+    for (const who of [a(), manager(), owner()]) expect((await verifyAction(who, r.body.id, ca)).body.error.code).toBe('VERIFIER_NOT_INDEPENDENT');
+    expect((await d().get(N)).body.actions.find((x: any) => x.id === ca).can_verify).toBe(true);
+    expect((await owner().get(N)).body.actions.find((x: any) => x.id === ca).can_verify).toBe(false);
+    expect((await verifyAction(d(), r.body.id, ca)).status).toBe(200);
+    await d().post(`${N}/causes`, { stage: 'verified', categories: ['equipment', 'process'], notes: 'Pil ömrü takip edilmiyordu; test listesinde alarm yoktu.' });
+    expect((await manager().post(`${N}/steps`, { step: 'effectiveness_check', notes: 'Bir hafta alarm testleri başarılı.' })).status).toBe(201);
+    // Case verification: A (owner of the action), B (pressed done), C (gave evidence) are all refused.
+    for (const who of [a(), manager(), owner()]) {
+      const v = await who.post(`${N}/verify`, { result: 'effective', notes: 'Kontrol ettim, çalışıyor.' });
+      expect(v.body.error.code).toBe('VERIFIER_NOT_INDEPENDENT');
+    }
+    const det = (await owner().get(N)).body;
+    expect(det.permissions).toMatchObject({ verify: false });
+    expect(det.permissions.verifyBlockedReason).toContain('payın var');
+    expect((await d().post(`${N}/verify`, { result: 'effective', notes: 'Alarm test kayıtları ve fotoğraf incelendi.' })).body.status).toBe('closed');
   });
 });
 
@@ -178,6 +298,7 @@ describe('verification, failure, close, reopen', () => {
     const N = `${C()}/nonconformities/${ncr}`;
     const a = await manager().post(`${N}/actions`, { kind: 'corrective_action', description: 'Kapı menteşesi ayarlansın (servis).', ownerId: demo.users.manager.id });
     await manager().post(`${N}/actions/${a.body.id}`, { op: 'done', notes: 'Menteşe ayarlandı, kapı kendiliğinden kapanıyor.' });
+    expect((await verifyAction(owner(), ncr, a.body.id)).status).toBe(200);
     await manager().post(`${N}/causes`, { stage: 'verified', categories: ['equipment'], notes: 'Menteşe sarkmış; conta tek başına yetmedi.' });
     expect((await staff().post(`${N}/steps`, { step: 'effectiveness_check', notes: 'Üç gün boyunca 2–4 °C.' })).status).toBe(201);
     expect((await manager().post(`${N}/verify`, { result: 'effective', notes: 'Kontrol ettim.' })).body.error.code).toBe('VERIFIER_NOT_INDEPENDENT');
@@ -228,7 +349,9 @@ describe('suspended owner → reassignment list', () => {
     expect((await client(env, otherManager.token).get(`${C()}/reassignment-queue`)).body.nonconformities).toEqual([]);
     expect((await notes(demo.users.manager.id, 'reassignment_needed')).length).toBe(1);
     // Reassigning removes it from the list.
-    await manager().post(`${C()}/nonconformities/${ncr}/assignment`, { ownerId: demo.users.manager.id, dueAt: later(24), reason: 'Elif ayrıldı, ben alıyorum.' });
+    for (const x of q.nonconformities) {
+      await manager().post(`${C()}/nonconformities/${x.id}/assignment`, { ownerId: demo.users.manager.id, dueAt: later(24), reason: 'Elif ayrıldı, ben alıyorum.' });
+    }
     expect(q.actions.length).toBe(2); // this one and the earlier follow-up still open
     for (const x of q.actions) await manager().post(`${C()}/nonconformities/${ncr}/actions/${x.id}`, { op: 'reassign', ownerId: demo.users.manager.id });
     const q2 = (await manager().get(`${C()}/reassignment-queue`)).body;
