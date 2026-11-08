@@ -62,3 +62,59 @@ describe('manual "does not apply"', () => {
     expect(audit).toBe(1);
   });
 });
+
+describe('"does not apply" on a mandatory obligation goes to review', () => {
+  const expert = () => client(env, demo.users.expert.token);
+  const staffC = () => client(env, demo.users.staff.token);
+  let coldId: string, requestId: string, overdueTask: string;
+
+  it('the request does not take effect; checks continue; the requester cannot review it', async () => {
+    const list = (await owner().get(`${C()}/obligations`)).body as any[];
+    coldId = list.find(o => o.rule === 'EX-COLD-CHAIN').id;
+    expect((await manager().post(`${C()}/obligations/${coldId}/not-applicable`, { reason: 'Bizde soğuk muhafaza yok, dolap boş duruyor.' })).status).toBe(403);
+    const r = await owner().post(`${C()}/obligations/${coldId}/not-applicable`, { reason: 'Dolap yalnızca içecek için; gıda saklanmıyor.' });
+    expect(r.status).toBe(201);
+    expect(r.body.status).toBe('pending_review');
+    requestId = r.body.requestId;
+    expect((await owner().post(`${C()}/obligations/${coldId}/not-applicable`, { reason: 'Tekrar deniyorum, aynı gerekçe.' })).status).toBe(409);
+    const e = (await owner().get(`${C()}/obligations/${coldId}/explanation`)).body;
+    expect(e.obligation).toMatchObject({ decision: 'applies', isCurrent: true, mandatory: true });
+    expect(e.pendingReview).toMatchObject({ id: requestId, canReview: false });
+    expect((await env.ownerDb.query(`SELECT count(*)::int AS n FROM tasks WHERE company_id = $1 AND template_code = 'fridge_temp' AND status = 'open'`, [demo.companyId])).rows[0].n).toBeGreaterThan(0);
+    expect((await owner().post(`${C()}/override-requests/${requestId}/review`, { decision: 'approved', notes: 'Kendi isteğim.' })).status).toBe(403);
+    expect((await staffC().post(`${C()}/override-requests/${requestId}/review`, { decision: 'approved', notes: 'Onaylıyorum.' })).status).toBe(403);
+    // Reviewers are told (the expert holds review access); the requester is not.
+    const n = (await env.ownerDb.query(`SELECT user_id FROM notifications WHERE kind = 'obligation_review_requested'`)).rows.map(r => r.user_id);
+    expect(n).toEqual([demo.users.expert.id]);
+  });
+
+  it('approved by the expert: future checks are cancelled, an overdue check becomes "missed" and stays in the audit file; records stay', async () => {
+    overdueTask = (await env.ownerDb.query(`SELECT id FROM tasks WHERE company_id = $1 AND template_code = 'fridge_temp' AND status = 'open' ORDER BY due_at LIMIT 1`, [demo.companyId])).rows[0].id;
+    await env.ownerDb.query(`UPDATE tasks SET due_at = now() - interval '3 hours' WHERE id = $1`, [overdueTask]);
+    const before = (await env.ownerDb.query(`SELECT (SELECT count(*) FROM measurements)::int AS m, (SELECT count(*) FROM evidence)::int AS e, (SELECT count(*) FROM tasks)::int AS t`)).rows[0];
+    const r = await expert().post(`${C()}/override-requests/${requestId}/review`, { decision: 'approved', notes: 'Fotoğraflarda dolapta yalnızca içecek var.' });
+    expect(r.status).toBe(200);
+    const e = (await owner().get(`${C()}/obligations/${r.body.obligationId}/explanation`)).body;
+    expect(e.obligation).toMatchObject({ decision: 'not_applicable', manual: true });
+    expect(e.reviews.at(-1)).toMatchObject({ status: 'approved' });
+    expect((await env.ownerDb.query(`SELECT status, status_reason FROM tasks WHERE id = $1`, [overdueTask])).rows[0].status).toBe('missed');
+    const after = (await env.ownerDb.query(`SELECT (SELECT count(*) FROM measurements)::int AS m, (SELECT count(*) FROM evidence)::int AS e, (SELECT count(*) FROM tasks)::int AS t`)).rows[0];
+    expect(after).toEqual(before);
+    const period = `from=${new Date(Date.now() - 86400000).toISOString().slice(0, 10)}T00:00:00%2B03:00&to=2099-01-01T00:00:00Z`;
+    const audit = (await owner().get(`${C()}/audit-export?${period}`)).body;
+    expect(audit.gaps.some((g: any) => g.type === 'overdue_check' && g.taskId === overdueTask)).toBe(true);
+  });
+
+  it('a rejected request changes nothing; the requester is told', async () => {
+    const list = (await owner().get(`${C()}/obligations`)).body as any[];
+    const lpg = list.find(o => o.rule === 'EX-LPG-CHECK');
+    const r = await owner().post(`${C()}/obligations/${lpg.id}/not-applicable`, { reason: 'LPG tüpü bahçede, mutfakta değil.' });
+    expect(r.body.status).toBe('pending_review');
+    expect((await expert().post(`${C()}/override-requests/${r.body.requestId}/review`, { decision: 'rejected', notes: 'Tüp nerede olursa olsun bağlantı mutfakta.' })).status).toBe(200);
+    const e = (await owner().get(`${C()}/obligations/${lpg.id}/explanation`)).body;
+    expect(e.obligation).toMatchObject({ decision: 'applies', isCurrent: true });
+    expect(e.pendingReview).toBeNull();
+    const told = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND kind = 'obligation_review_done'`, [demo.users.owner.id])).rows[0].n;
+    expect(told).toBe(2);
+  });
+});

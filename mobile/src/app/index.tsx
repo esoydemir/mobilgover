@@ -31,7 +31,8 @@ export default function HomeRoute() {
   const weekFrom = addDays(today, -6);
   const tasks = useApi<Task[]>(base && siteId ? `${base}/tasks?siteId=${siteId}&from=${encodeURIComponent(weekFrom.toISOString())}&to=${encodeURIComponent(addDays(today, 8).toISOString())}` : null);
   const isStaff = role === 'staff';
-  const ncrs = useApi<Ncr[]>(base && !isStaff ? `${base}/nonconformities?status=open` : null);
+  // Staff get only the cases they own or hold an action in (server-side).
+  const ncrs = useApi<Ncr[]>(base ? `${base}/nonconformities?status=open` : null);
   const obligations = useApi<Obligation[]>(base && !isStaff ? `${base}/obligations` : null);
   const ind = useApi<Indicators>(base && siteId && !isStaff ? `${base}/indicators?siteId=${siteId}&from=${encodeURIComponent(addDays(today, -30).toISOString())}&to=${encodeURIComponent(addDays(today, 1).toISOString())}` : null);
 
@@ -131,6 +132,14 @@ export default function HomeRoute() {
           <Text style={type(10, 700, { ls: 0.11, color: C.warn })}>GECİKMİŞ KONTROL</Text>
           <Text style={[type(16, 600), { marginTop: 8 }]}>{derived.overdue[0].title}{derived.overdue[0].equipment_name ? ` · ${derived.overdue[0].equipment_name}` : ''}</Text>
           <Text style={[type(12.5, 400, { color: C.t2 }), { marginTop: 4 }]}>Son tarih {fmtDate(derived.overdue[0].due_at)} {fmtTime(derived.overdue[0].due_at)}</Text>
+        </Tap>
+      ) : null}
+
+      {isStaff && !critical && (ncrs.data?.length ?? 0) > 0 ? (
+        <Tap testID="home-my-ncrs" onPress={() => router.push('/ncrs')} style={{ borderWidth: 1, borderColor: tint.warn(0.3), borderRadius: 26, backgroundColor: C.card, padding: 18 }}>
+          <Text style={type(10, 700, { ls: 0.11, color: C.warn })}>SANA ATANAN UYGUNSUZLUK</Text>
+          <Text style={[type(16, 600), { marginTop: 8 }]}>{ncrs.data!.length} açık kayıt</Text>
+          <Text style={[type(12.5, 400, { color: C.t2 }), { marginTop: 4 }]}>{ncrs.data![0]!.title}</Text>
         </Tap>
       ) : null}
 

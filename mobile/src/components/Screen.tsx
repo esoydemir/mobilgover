@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import type { ReactNode } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../api/queue';
@@ -7,7 +7,8 @@ import { useSession } from '../api/session';
 import { goBack } from '../state/app';
 import { C, tint, type } from '../theme';
 import { GradientFill } from './Gradient';
-import { BackIcon } from './Icons';
+import { useApi } from '../api/useApi';
+import { BackIcon, BellIcon } from './Icons';
 import { Tap } from './ui';
 
 /** Bottom padding that keeps content clear of the floating tab bar. */
@@ -87,7 +88,26 @@ function BrandHeader() {
         <Text numberOfLines={1} style={[type(16, 700, { ls: -0.015 }), { marginTop: 2 }]}>{company?.name ?? 'GoverHub'}</Text>
       </View>
       <SyncChip />
+      {company ? <NotificationBell companyId={company.id} /> : null}
     </View>
+  );
+}
+
+/** Bell with the unread count (in-app notifications). */
+function NotificationBell({ companyId }: { companyId: string }) {
+  const q = useApi<{ unread: number }>(`/companies/${companyId}/notifications`);
+  useFocusEffect(useCallback(() => { void q.reload(); }, [])); // eslint-disable-line react-hooks/exhaustive-deps
+  const unread = q.data?.unread ?? 0;
+  return (
+    <Tap testID="home-bell" accessibilityLabel={unread ? `${unread} okunmamış bildirim` : 'Bildirimler'} onPress={() => router.push('/notifications')}
+      style={{ width: 36, height: 36, borderRadius: 999, borderWidth: 1, borderColor: tint.white(0.09), backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center' }}>
+      <BellIcon size={17} color={unread ? C.t1 : C.t2} />
+      {unread ? (
+        <View style={{ position: 'absolute', top: -3, right: -3, minWidth: 17, height: 17, borderRadius: 999, paddingHorizontal: 4, backgroundColor: C.lime, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={type(9.5, 800, { color: C.ink })}>{unread > 9 ? '9+' : unread}</Text>
+        </View>
+      ) : null}
+    </Tap>
   );
 }
 

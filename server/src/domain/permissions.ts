@@ -11,22 +11,23 @@ export type Action =
   | 'obligation.read' | 'obligation.override'
   | 'equipment.read' | 'equipment.write'
   | 'task.read' | 'task.execute' | 'task.generate' | 'task.assign'
-  | 'ncr.read' | 'ncr.act' | 'ncr.verify_close'
+  | 'ncr.read' | 'ncr.act' | 'ncr.verify_close' | 'ncr.report' | 'ncr.manage' | 'obligation.review'
   | 'indicators.read' | 'audit.export' | 'audit.verify'
   | 'members.manage' | 'service.request';
 
 /** What each company role may do. `site` = only within the member's site when the membership is site-scoped. */
 export const ROLE_MATRIX: Record<CompanyRole, Action[]> = {
-  owner: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'equipment.read', 'equipment.write',
+  owner: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
     'members.manage', 'service.request'],
-  hq_manager: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'equipment.read', 'equipment.write',
+  hq_manager: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
     'members.manage', 'service.request'],
-  site_manager: ['profile.read', 'obligation.read', 'equipment.read', 'equipment.write',
+  site_manager: ['profile.read', 'obligation.read', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'service.request'],
   // Staff see and do their own assigned work, including emergency instructions; no scores, penalties or other people's data.
-  staff: ['task.read', 'task.execute', 'ncr.read', 'ncr.act', 'equipment.read'],
+  // Staff may report a problem they see (ncr.report); they then work on what is assigned to them.
+  staff: ['task.read', 'task.execute', 'ncr.read', 'ncr.act', 'ncr.report', 'equipment.read'],
 };
 
 /** For these roles and actions the target must be assigned to the user. */
@@ -39,6 +40,8 @@ export const GRANT_SCOPES: Record<string, Action[]> = {
   profile: ['profile.read'],
   profile_verify: ['profile.read', 'profile.verify'],
   obligations: ['obligation.read'],
+  // An outside expert asked to review "does not apply" requests on mandatory obligations.
+  obligation_review: ['obligation.read', 'obligation.review'],
   tasks: ['task.read'],
   nonconformities: ['ncr.read'],
   audit: ['audit.export', 'audit.verify'],

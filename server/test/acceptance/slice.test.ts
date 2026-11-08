@@ -171,21 +171,31 @@ describe('nonconformity and CAPA', () => {
     expect(n.emergency_instruction).toContain('ÖRNEK TALİMAT');
   });
 
-  it('enforces step order and keeps correction separate from corrective action', async () => {
-    const early = await manager().post(`${C()}/nonconformities/${ncrId}/steps`, { step: 'correction', notes: 'Termostat ayarlandı.' });
-    expect(early.status).toBe(422);
-    for (const [step, notes] of [['containment', 'Ürünler yedek üniteye taşındı.'], ['correction', 'Kapı contası değiştirildi.'],
-      ['root_cause', 'Conta aşınmış; bakım planında yoktu.'], ['corrective_action', 'Conta kontrolü aylık bakım listesine eklendi.'],
-      ['effectiveness_check', '3 gün boyunca ölçümler 2–4 °C aralığında.']] as const) {
-      expect((await manager().post(`${C()}/nonconformities/${ncrId}/steps`, { step, notes })).status).toBe(201);
-    }
+  it('follows the flow: first response, owner and due date, cause, actions, verified root cause, effectiveness check', async () => {
+    const N = `${C()}/nonconformities/${ncrId}`;
+    // Old step names are refused with a clear message (they are actions and cause assessments now).
+    expect((await manager().post(`${N}/steps`, { step: 'correction', notes: 'Termostat ayarlandı.' })).body.error.code).toBe('STEP_MOVED');
+    const early = await manager().post(`${N}/steps`, { step: 'effectiveness_check', notes: '3 gün ölçüm.' });
+    expect(early.body.error.code).toBe('FLOW_INCOMPLETE');
+    expect((await manager().post(`${N}/steps`, { step: 'containment', notes: 'Ürünler yedek üniteye taşındı.' })).status).toBe(201);
+    const asg = await owner().post(`${N}/assignment`, { ownerId: demo.users.manager.id, dueAt: new Date(Date.now() + 86400000).toISOString() });
+    expect(asg.status).toBe(200);
+    expect((await manager().post(`${N}/causes`, { stage: 'initial', categories: ['equipment'], notes: 'Kapı contası aşınmış olabilir.' })).status).toBe(201);
+    const corr = await manager().post(`${N}/actions`, { kind: 'correction', description: 'Kapı contası değiştirildi.' });
+    expect((await manager().post(`${N}/actions/${corr.body.id}`, { op: 'done', notes: 'Conta değişti, kapı tam kapanıyor.' })).status).toBe(200);
+    const ca = await manager().post(`${N}/actions`, { kind: 'corrective_action', description: 'Conta kontrolü aylık bakım listesine eklenecek.' });
+    expect((await manager().post(`${N}/actions/${ca.body.id}`, { op: 'done', notes: 'Bakım listesine eklendi.' })).status).toBe(200);
+    expect((await manager().post(`${N}/causes`, { stage: 'verified', categories: ['equipment', 'process'], notes: 'Conta aşınmış; bakım planında conta kontrolü yoktu.' })).status).toBe(201);
+    expect((await manager().post(`${N}/steps`, { step: 'effectiveness_check', notes: '3 gün boyunca ölçümler 2–4 °C aralığında.' })).status).toBe(201);
+    expect((await owner().get(N)).body.status).toBe('awaiting_verification');
   });
 
   it('high risk is closed only by someone other than the person who fixed it', async () => {
-    const self = await manager().post(`${C()}/nonconformities/${ncrId}/close`, { notes: 'Kontrol ettim.' });
+    const self = await manager().post(`${C()}/nonconformities/${ncrId}/verify`, { result: 'effective', notes: 'Kontrol ettim.' });
     expect(self.body.error.code).toBe('VERIFIER_NOT_INDEPENDENT');
-    const ok = await owner().post(`${C()}/nonconformities/${ncrId}/close`, { notes: 'Ölçüm kayıtları ve conta faturası incelendi.' });
+    const ok = await owner().post(`${C()}/nonconformities/${ncrId}/verify`, { result: 'effective', notes: 'Ölçüm kayıtları ve conta faturası incelendi.' });
     expect(ok.status).toBe(200);
+    expect(ok.body.status).toBe('closed');
   });
 });
 

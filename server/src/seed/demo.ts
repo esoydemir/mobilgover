@@ -138,7 +138,7 @@ export async function seedDemoCompany(db: Db, opts: { name?: string; isDemo?: bo
     await tx.query(`INSERT INTO memberships (user_id, company_id, site_id, role) VALUES ($1,$4,NULL,'owner'), ($2,$4,$5,'site_manager'), ($3,$4,$5,'staff')`,
       [owner.id, manager.id, staff.id, companyId, siteId]);
     await tx.query(`INSERT INTO access_grants (company_id, user_id, kind, scopes, granted_by, reason, expires_at)
-                    VALUES ($1,$2,'expert','{profile_verify,obligations,nonconformities}',$3,'Gıda güvenliği danışmanlığı (demo)', now() + interval '90 days')`,
+                    VALUES ($1,$2,'expert','{profile_verify,obligations,obligation_review,nonconformities}',$3,'Gıda güvenliği danışmanlığı (demo)', now() + interval '90 days')`,
       [companyId, expert.id, owner.id]);
     const fridgeId = (await tx.query<{ id: string }>(`INSERT INTO equipment (company_id, site_id, type, name, serial) VALUES ($1,$2,'refrigerator','Buzdolabı · Mutfak arka','GH-EQ-4471') RETURNING id`, [companyId, siteId])).rows[0]!.id;
     const thermometerId = (await tx.query<{ id: string }>(`INSERT INTO equipment (company_id, site_id, type, name, calibrated_until) VALUES ($1,$2,'thermometer','Dijital termometre', (now() + interval '180 days')::date) RETURNING id`, [companyId, siteId])).rows[0]!.id;

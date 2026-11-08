@@ -37,24 +37,45 @@ describe('equipment edits', () => {
     expect((await owner().patch(`${C()}/equipment/00000000-0000-4000-8000-000000000000`, { name: 'Başka ad' })).status).toBe(404);
   });
 
-  it('taking a unit out of use needs a reason and cancels only its open checks from today on', async () => {
-    expect(await openFridgeTasks()).toBeGreaterThan(0);
+  it('taking a unit out of use needs a reason; checks ahead are cancelled, a check already past its time stays as overdue', async () => {
+    // A check of this unit whose time has passed (overdue): it must not disappear.
+    const past = (await env.ownerDb.query(`SELECT id FROM tasks WHERE equipment_id = $1 AND status = 'open' ORDER BY due_at LIMIT 1`, [demo.fridgeId])).rows[0].id;
+    await env.ownerDb.query(`UPDATE tasks SET due_at = now() - interval '2 hours' WHERE id = $1`, [past]);
+    const preview = (await owner().get(`${C()}/equipment/${demo.fridgeId}/open-checks`)).body;
+    expect(preview.overdue).toBe(1);
+    expect(preview.upcoming).toBeGreaterThan(0);
     expect((await owner().patch(`${C()}/equipment/${demo.fridgeId}`, { active: false })).status).toBe(422);
     const r = await owner().patch(`${C()}/equipment/${demo.fridgeId}`, { active: false, reason: 'Arızalı, servise gitti' });
     expect(r.status).toBe(200);
-    expect(r.body.cancelledTasks).toBeGreaterThan(0);
-    expect(await openFridgeTasks()).toBe(0);
-    const reason = (await env.ownerDb.query(`SELECT status_reason FROM tasks WHERE equipment_id = $1 AND status = 'cancelled' LIMIT 1`, [demo.fridgeId])).rows[0].status_reason;
-    expect(reason).toContain('Arızalı');
+    expect(r.body.cancelledTasks).toBe(preview.upcoming);
+    expect(r.body.overdueKept).toBe(1);
+    expect((await env.ownerDb.query(`SELECT status FROM tasks WHERE id = $1`, [past])).rows[0].status).toBe('open');
+    const reason = (await env.ownerDb.query(`SELECT status_reason, cancel_code FROM tasks WHERE equipment_id = $1 AND status = 'cancelled' LIMIT 1`, [demo.fridgeId])).rows[0];
+    expect(reason.status_reason).toContain('Arızalı');
+    expect(reason.cancel_code).toBe('equipment_retired');
     // While out of use, no new checks are generated for it.
     await topUpAllSites(env.db, 10);
-    expect(await openFridgeTasks()).toBe(0);
+    expect((await env.ownerDb.query(`SELECT count(*)::int AS n FROM tasks WHERE equipment_id = $1 AND status = 'open' AND due_at >= now()`, [demo.fridgeId])).rows[0].n).toBe(0);
   });
 
-  it('back in use: checks are generated again', async () => {
+  it('back in use: the cancelled checks are reopened, not created again; no period has two tasks', async () => {
+    const before = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM tasks WHERE equipment_id = $1`, [demo.fridgeId])).rows[0].n;
     const r = await owner().patch(`${C()}/equipment/${demo.fridgeId}`, { active: true });
     expect(r.status).toBe(200);
-    expect(r.body.createdTasks).toBeGreaterThan(0);
-    expect(await openFridgeTasks()).toBe(r.body.createdTasks);
+    expect(r.body.restoredTasks).toBeGreaterThan(0);
+    expect(r.body.openChecks).toBeGreaterThanOrEqual(r.body.restoredTasks);
+    const after = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM tasks WHERE equipment_id = $1`, [demo.fridgeId])).rows[0].n;
+    // Only periods beyond the earlier horizon may be new.
+    expect(after - before).toBe(r.body.openChecks - r.body.restoredTasks);
+    const dup = (await env.ownerDb.query(`SELECT period_key, count(*)::int AS n FROM tasks WHERE equipment_id = $1 GROUP BY template_code, period_key HAVING count(*) > 1`, [demo.fridgeId])).rows;
+    expect(dup).toEqual([]);
+    // Retire and reactivate again: still one task per period.
+    await owner().patch(`${C()}/equipment/${demo.fridgeId}`, { active: false, reason: 'İkinci kez arıza' });
+    await owner().patch(`${C()}/equipment/${demo.fridgeId}`, { active: true });
+    await topUpAllSites(env.db, 14);
+    const dup2 = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM (SELECT 1 FROM tasks WHERE equipment_id = $1 GROUP BY template_code, period_key HAVING count(*) > 1) d`, [demo.fridgeId])).rows[0].n;
+    expect(dup2).toBe(0);
+    // The overdue check kept from before is still there, still open.
+    expect((await env.ownerDb.query(`SELECT count(*)::int AS n FROM tasks WHERE equipment_id = $1 AND status = 'open' AND due_at < now()`, [demo.fridgeId])).rows[0].n).toBe(1);
   });
 });

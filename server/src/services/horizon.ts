@@ -1,5 +1,6 @@
 import type { Db } from '../db/pool';
 import { localDay } from '../domain/schedule';
+import { scanDeadlines } from './notifications';
 import { generateTasks } from './tasks';
 
 /**
@@ -34,6 +35,9 @@ export function startTaskHorizon(db: Db, opts: { days: number; everyMs: number; 
     try {
       const r = await topUpAllSites(db, opts.days);
       if (r.created || r.failed.length) opts.log({ level: r.failed.length ? 'warn' : 'info', event: 'task_horizon', days: opts.days, ...r });
+      // Due-soon and overdue notifications (each deadline announced once).
+      const n = await scanDeadlines(db);
+      if (n.created) opts.log({ level: 'info', event: 'deadline_notifications', ...n });
     } catch (e) {
       opts.log({ level: 'error', event: 'task_horizon_failed', error: (e as Error).message });
     } finally { running = false; }

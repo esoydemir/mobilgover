@@ -14,10 +14,10 @@ type Provider = { id: string; display_name: string; headline: string; city: stri
 
 /** The user describes the problem in their own words; the category is a routing choice, not a diagnosis. */
 export default function NewServiceRoute() {
-  const params = useLocalSearchParams<{ ncrId?: string; title?: string }>();
+  const params = useLocalSearchParams<{ ncrId?: string; title?: string; category?: string }>();
   const { company, siteId, call } = useSession();
   const cats = useApi<Category[]>('/service-categories');
-  const [cat, setCat] = useState<string | null>(null);
+  const [cat, setCat] = useState<string | null>(params.category ?? null);
   const [title, setTitle] = useState(params.title ?? '');
   const [description, setDescription] = useState('');
   const [city, setCity] = useState('İstanbul');
@@ -36,7 +36,7 @@ export default function NewServiceRoute() {
 
   return (
     <Screen title="Hizmet talebi" titleEn="New service request">
-      {params.ncrId ? <Text style={type(12.5, 600, { color: C.warn })}>Bu talep açık bir uygunsuzluğa bağlanacak. Uygunsuzluk, hizmet tamamlanınca kendiliğinden kapanmaz.</Text> : null}
+      {params.ncrId ? <Text style={type(12.5, 600, { color: C.warn })}>Bu talep açık bir uygunsuzluğa bağlanacak. "Talebi aç"a basmadıkça talep oluşmaz; teklif kabul etmedikçe iş başlamaz. Uygunsuzluk, hizmet tamamlanınca kendiliğinden kapanmaz.</Text> : null}
       <Field label="Sorunu kendi cümlelerinle anlat" testID="svc-desc" value={description} onChangeText={setDescription} multiline placeholder="ör. Mutfak arkadaki buzdolabı 12 °C gösteriyor, kapı contası açık kalıyor." />
       <Field label="Kısa başlık" testID="svc-title" value={title} onChangeText={setTitle} />
       <Text style={type(12.5, 600)}>Hangi hizmet?</Text>

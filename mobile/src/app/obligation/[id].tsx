@@ -14,7 +14,9 @@ import { DECISION } from '../obligations';
 
 type Explanation = {
   obligation: { id: string; decision: keyof typeof DECISION; reason: string; decidedBy: string; decidedByName: string | null; decidedAt: string; missingFacts: string[];
-    isCurrent: boolean; currentId: string; manual: boolean; canOverride: boolean };
+    isCurrent: boolean; currentId: string; manual: boolean; canOverride: boolean; mandatory: boolean };
+  pendingReview: { id: string; reason: string; requestedByName: string; requestedAt: string; canReview: boolean } | null;
+  reviews: { id: string; status: string; reason: string; requested_at: string; reviewed_at: string | null; review_notes: string | null; requested_by_name: string; reviewed_by_name: string | null }[];
   rule: { code: string; version: number; status: string; kind: string; isExample: boolean; title: string; summary: string; effectiveFrom: string; ambiguityNote: string | null; label: string };
   provisions: { ref: string; excerpt: string; version_label: string; source_title: string; issuer: string; is_example: boolean }[];
   matchedFacts: Record<string, { value: unknown; source: string; verification: string; recordedAt: string } | null>;
@@ -46,7 +48,22 @@ export default function ObligationRoute() {
               <Text style={type(12.5, 500, { color: C.warn, lh: 1.45 })}>Bu, geçmişte verilmiş bir karar. Şu an geçerli olan karar farklı.</Text>
               <GhostButton label="Güncel kararı aç" height={36} size={12} onPress={() => router.replace(`/obligation/${e.obligation.currentId}`)} style={{ alignSelf: 'flex-start' }} />
             </View>
-          ) : e.obligation.canOverride ? <DecisionCard e={e} onDone={newId => (newId === id ? q.reload() : router.replace(`/obligation/${newId}`))} /> : null}
+          ) : e.pendingReview ? <ReviewCard e={e} onDone={newId => (newId === id ? q.reload() : router.replace(`/obligation/${newId}`))} />
+            : e.obligation.canOverride ? <DecisionCard e={e} onDone={newId => (newId === id ? q.reload() : router.replace(`/obligation/${newId}`))} /> : null}
+          {e.reviews.filter(r => r.status !== 'pending').length ? (
+            <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+              <Eyebrow>"UYGULANMAZ" İNCELEMELERİ</Eyebrow>
+              {e.reviews.filter(r => r.status !== 'pending').map(r => (
+                <View key={r.id} style={{ gap: 2 }}>
+                  <Text style={type(12.5, 600, { color: r.status === 'approved' ? C.warn : r.status === 'rejected' ? C.lime : C.t2 })}>
+                    {r.status === 'approved' ? 'Onaylandı' : r.status === 'rejected' ? 'Reddedildi · yükümlülük sürüyor' : 'Geri çekildi'}
+                  </Text>
+                  <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>İstek: {r.reason} ({r.requested_by_name}, {fmtDateTime(r.requested_at)})</Text>
+                  {r.review_notes ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İnceleme: {r.review_notes} ({r.reviewed_by_name}{r.reviewed_at ? `, ${fmtDateTime(r.reviewed_at)}` : ''})</Text> : null}
+                </View>
+              ))}
+            </Card>
+          ) : null}
           <View style={{ borderWidth: 1, borderColor: e.rule.isExample ? tint.warn(0.3) : C.bd, borderRadius: 16, padding: 13 }}>
             <Text style={type(12.5, 600, { color: e.rule.isExample ? C.warn : C.t1 })}>{e.rule.label}</Text>
           </View>
@@ -139,21 +156,65 @@ function DecisionCard({ e, onDone }: { e: Explanation; onDone: (newId: string) =
         </>
       ) : (
         <>
-          <Eyebrow color={C.warn}>UYGULANMAZ KARARI</Eyebrow>
-          <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>Bu yükümlülüğün açık kontrolleri iptal edilir ve yenileri oluşmaz. Karar adınla ve gerekçesiyle kayda geçer; denetim dosyasında görünür. İstediğin zaman geri alabilirsin.</Text>
+          <Eyebrow color={C.warn}>{e.obligation.mandatory ? 'UYGULANMAZ İSTEĞİ · İNCELEMEYE GİDER' : 'UYGULANMAZ KARARI'}</Eyebrow>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>{e.obligation.mandatory
+            ? 'Bu zorunlu bir yükümlülük; karar hemen uygulanmaz. İsteğin başka bir yetkili ya da yetkilendirilmiş uzman tarafından incelenir. İnceleme bitene kadar kontroller sürer. Onaylanırsa ileriye dönük kontroller iptal edilir; saati geçmiş kontroller "kaçırıldı" olarak kayıtlarda kalır.'
+            : 'Bu yükümlülüğün ileriye dönük açık kontrolleri iptal edilir ve yenileri oluşmaz; saati geçmiş kontroller "kaçırıldı" olarak kayıtlarda kalır. Karar adınla ve gerekçesiyle kayda geçer; denetim dosyasında görünür. İstediğin zaman geri alabilirsin.'}</Text>
           <Field label="Gerekçe (en az bir cümle)" testID="override-reason" value={reason} onChangeText={setReason} multiline placeholder="ör. Mutfakta hazırlık yapılmıyor; yalnızca paketli ürün satılıyor." />
           {error ? <ErrorBox message={error} /> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <PrimaryButton testID="override-save" label={busy ? 'Kaydediliyor…' : 'Uygulanmaz olarak kaydet'} disabled={busy || reason.trim().length < 10} height={44} size={12.5} glow={false} style={{ flex: 1 }}
+            <PrimaryButton testID="override-save" label={busy ? 'Kaydediliyor…' : e.obligation.mandatory ? 'İncelemeye gönder' : 'Uygulanmaz olarak kaydet'} disabled={busy || reason.trim().length < 10} height={44} size={12.5} glow={false} style={{ flex: 1 }}
               onPress={() => run(async () => {
-                const r = await call<{ id: string }>('POST', `${base}/not-applicable`, { reason: reason.trim() });
-                showToast('Uygulanmaz olarak kaydedildi', 'Açık kontroller iptal edildi.');
+                const r = await call<{ id: string; status: 'applied' | 'pending_review' }>('POST', `${base}/not-applicable`, { reason: reason.trim() });
+                if (r.status === 'pending_review') showToast('İncelemeye gönderildi', 'İnceleyenlere bildirildi; kontroller sürüyor.');
+                else showToast('Uygulanmaz olarak kaydedildi', 'İleriye dönük kontroller iptal edildi.');
                 onDone(r.id);
               })} />
             <GhostButton label="Vazgeç" height={44} size={12.5} onPress={() => { setOpen(false); setError(null); }} />
           </View>
         </>
       )}
+    </Card>
+  );
+}
+
+/** A pending "does not apply" request on a mandatory obligation: reviewer decides, requester may withdraw. */
+function ReviewCard({ e, onDone }: { e: Explanation; onDone: (newId: string) => void }) {
+  const { company, call } = useSession();
+  const { showToast } = useUi();
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const r = e.pendingReview!;
+  const base = `/companies/${company!.id}/override-requests/${r.id}`;
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setError(null);
+    try { await fn(); } catch (x) { setError(errorText(x)); } finally { setBusy(false); }
+  };
+  return (
+    <Card radius={22} border={tint.warn(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Eyebrow color={C.warn}>"UYGULANMAZ" İSTEĞİ · İNCELEME BEKLİYOR</Eyebrow>
+      <Text style={type(13, 500, { lh: 1.45 })}>{r.reason}</Text>
+      <Text style={type(11, 400, { color: C.t3 })}>{r.requestedByName} · {fmtDateTime(r.requestedAt)}</Text>
+      <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>İnceleme bitene kadar yükümlülük uygulanmaya ve kontroller oluşmaya devam eder.</Text>
+      {error ? <ErrorBox message={error} /> : null}
+      {r.canReview ? (
+        <>
+          <Field label="İnceleme notu (neye baktın?)" testID="review-notes" value={notes} onChangeText={setNotes} multiline />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <PrimaryButton testID="review-approve" label="Onayla" glow={false} height={42} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5}
+              onPress={() => run(async () => { const x = await call<{ obligationId: string }>('POST', `${base}/review`, { decision: 'approved', notes: notes.trim() }); showToast('İstek onaylandı', 'Yükümlülük "uygulanmaz" oldu.'); onDone(x.obligationId); })} />
+            <GhostButton testID="review-reject" label="Reddet" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 5}
+              onPress={() => run(async () => { await call('POST', `${base}/review`, { decision: 'rejected', notes: notes.trim() }); showToast('İstek reddedildi', 'Yükümlülük sürüyor.'); onDone(e.obligation.id); })} />
+          </View>
+        </>
+      ) : e.obligation.canOverride ? (
+        <>
+          <Text style={type(11.5, 500, { color: C.t3 })}>Kendi isteğini inceleyemezsin; başka bir yetkili ya da uzman inceler.</Text>
+          <GhostButton testID="review-withdraw" label="İsteği geri çek" height={38} size={12} style={{ alignSelf: 'flex-start' }} disabled={busy}
+            onPress={() => run(async () => { await call('POST', `${base}/withdraw`, {}); showToast('İstek geri çekildi'); onDone(e.obligation.id); })} />
+        </>
+      ) : null}
     </Card>
   );
 }

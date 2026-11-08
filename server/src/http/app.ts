@@ -10,8 +10,9 @@ import { canonical, sha256 } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { uploadContent } from '../services/evidence';
-import { closeNonconformity, completeStep, getNonconformity } from '../services/nonconformities';
-import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride } from '../services/obligations';
+import { MANUAL_HAZARDS, addAction, assessCause, createManual, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
+import { listNotifications, markRead } from '../services/notifications';
+import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
 import { confirmTotpSetup, listSessions, logout, revokeOtherSessions, revokeSession, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
 import { acceptInvitation, addMember, createCompany, listMyCompanies, listMyInvitations, setMemberStatus } from '../services/companies';
 import type { Mailer } from '../services/mail';
@@ -292,6 +293,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
       const e = (await tx.query(`SELECT * FROM equipment WHERE id = $1 AND company_id = $2`, [id, companyId])).rows[0];
       if (!e || !can(req.principal, 'equipment.read', { companyId, siteId: e.site_id }).ok) throw notFound('Ekipman');
       if (!can(req.principal, 'equipment.write', { companyId, siteId: e.site_id }).ok) throw forbidden();
+      const overdueKept = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM tasks WHERE company_id = $1 AND equipment_id = $2 AND status = 'open' AND due_at < now()`,
+        [companyId, id])).rows[0]!.n;
       if (b.active === false && e.active && (b.reason ?? '').length < 5) throw new AppError(422, 'INVALID', 'Kullanımdan kaldırma için gerekçe yaz (en az 5 karakter).');
       const siteTz = (await tx.query<{ timezone: string }>(`SELECT timezone FROM sites WHERE id = $1`, [e.site_id])).rows[0]!.timezone;
       const next = { name: b.name ?? e.name, serial: b.serial === undefined ? e.serial : b.serial,
@@ -300,22 +303,29 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
         [id, companyId, next.name, next.serial, next.calibrated_until, next.active]);
       let cancelledTasks = 0;
       if (e.active && !next.active) {
-        // "From today on" in the site's own time zone; earlier (overdue) checks stay visible as missed work.
-        cancelledTasks = (await tx.query(`UPDATE tasks SET status = 'cancelled', status_reason = $3
-          WHERE company_id = $1 AND equipment_id = $2 AND status = 'open'
-            AND due_at >= (date_trunc('day', now() AT TIME ZONE $4) AT TIME ZONE $4)`,
-          [companyId, id, `Ekipman kullanımdan kaldırıldı: ${b.reason}`, siteTz])).rowCount ?? 0;
+        // Checks whose time is still ahead are cancelled. Checks already past their time stay open
+        // (shown as overdue): the delay is not erased by retiring the unit.
+        cancelledTasks = (await tx.query(`UPDATE tasks SET status = 'cancelled', status_reason = $3, cancel_code = 'equipment_retired'
+          WHERE company_id = $1 AND equipment_id = $2 AND status = 'open' AND due_at >= now()`,
+          [companyId, id, `Ekipman kullanımdan kaldırıldı: ${b.reason}`])).rowCount ?? 0;
       }
       let createdTasks = 0;
+      let restoredTasks = 0;
       if (e.active !== next.active) {
         await syncEquipmentTypes(tx, companyId, e.site_id);
         await recomputeSite(tx, companyId, e.site_id, req.principal.userId);
         if (next.active) {
-          // Back in use: its checks come back right away for the usual horizon.
+          // Back in use: the checks cancelled when it was retired (still ahead in time) are reopened,
+          // so no second task is created for the same period; only missing periods are generated.
+          restoredTasks = (await tx.query(`UPDATE tasks t SET status = 'open', status_reason = NULL, cancel_code = NULL
+            WHERE t.company_id = $1 AND t.equipment_id = $2 AND t.status = 'cancelled' AND t.cancel_code = 'equipment_retired' AND t.due_at >= now()
+              AND NOT EXISTS (SELECT 1 FROM tasks o WHERE o.company_id = t.company_id AND o.site_id = t.site_id AND o.rule_id = t.rule_id
+                AND o.template_code = t.template_code AND o.equipment_id = t.equipment_id AND o.period_key = t.period_key AND o.status <> 'cancelled')`,
+            [companyId, id])).rowCount ?? 0;
           const now = new Date();
           await generateTasks(tx, companyId, e.site_id, localDay(now, siteTz), localDay(new Date(now.getTime() + 14 * 86_400_000), siteTz));
           createdTasks = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM tasks WHERE company_id = $1 AND equipment_id = $2 AND status = 'open'
-              AND due_at >= (date_trunc('day', now() AT TIME ZONE $3) AT TIME ZONE $3)`, [companyId, id, siteTz])).rows[0]!.n;
+              AND due_at >= now()`, [companyId, id])).rows[0]!.n;
         }
       }
       const changes: Record<string, unknown> = {};
@@ -324,8 +334,27 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
         if (String(before ?? '') !== String(next[k] ?? '')) changes[k] = { from: before ?? null, to: next[k] ?? null };
       }
       await appendAudit(tx, { companyId, actorId: req.principal.userId, eventType: 'equipment.updated', entityType: 'equipment', entityId: id,
-        payload: { changes, reason: b.reason ?? null, cancelledTasks } });
-      return { id, ...next, cancelledTasks, createdTasks };
+        payload: { changes, reason: b.reason ?? null, cancelledTasks, restoredTasks, overdueKept: e.active && !next.active ? overdueKept : undefined } });
+      return { id, ...next, cancelledTasks, restoredTasks, openChecks: createdTasks, createdTasks, overdueKept };
+    });
+  });
+
+  // What happens to this unit's checks if it is taken out of use now.
+  app.get('/companies/:companyId/equipment/:id/open-checks', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, async tx => {
+      const e = (await tx.query(`SELECT site_id FROM equipment WHERE id = $1 AND company_id = $2`, [id, companyId])).rows[0];
+      if (!e || !can(req.principal, 'equipment.read', { companyId, siteId: e.site_id }).ok) throw notFound('Ekipman');
+      const tz = (await tx.query<{ timezone: string }>(`SELECT timezone FROM sites WHERE id = $1`, [e.site_id])).rows[0]!.timezone;
+      const rows = (await tx.query(`SELECT t.id, t.due_at, t.status, tt.title, (t.due_at < now()) AS past FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
+         WHERE t.company_id = $1 AND t.equipment_id = $2 AND t.status = 'open' ORDER BY t.due_at`, [companyId, id])).rows;
+      const today = localDay(new Date(), tz);
+      return {
+        overdue: rows.filter(r => r.past).length,
+        upcoming: rows.filter(r => !r.past).length,
+        today: rows.filter(r => localDay(new Date(r.due_at), tz) === today).map(r => ({ id: r.id, title: r.title, dueAt: r.due_at, past: r.past })),
+      };
     });
   });
 
@@ -355,7 +384,18 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
     const { reason } = z.object({ reason: z.string() }).parse(req.body);
-    return mutate(req, reply, companyId, async tx => ({ id: await overrideNotApplicable(tx, req.principal, companyId, id, reason) }), 201);
+    return mutate(req, reply, companyId, tx => overrideNotApplicable(tx, req.principal, companyId, id, reason), 201);
+  });
+  app.post('/companies/:companyId/override-requests/:requestId/review', async (req, reply) => {
+    const companyId = company(req);
+    const { requestId } = z.object({ requestId: uuid }).parse(req.params);
+    const b = z.object({ decision: z.enum(['approved', 'rejected']), notes: z.string().max(2000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => reviewOverride(tx, req.principal, companyId, requestId, b));
+  });
+  app.post('/companies/:companyId/override-requests/:requestId/withdraw', async (req, reply) => {
+    const companyId = company(req);
+    const { requestId } = z.object({ requestId: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, async tx => { await withdrawOverrideRequest(tx, req.principal, companyId, requestId); return { ok: true }; });
   });
   app.post('/companies/:companyId/obligations/:id/withdraw-override', async (req, reply) => {
     const companyId = company(req);
@@ -439,10 +479,15 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.get('/companies/:companyId/nonconformities', async req => {
     const companyId = company(req);
     const { status } = z.object({ status: z.enum(['open', 'closed']).optional() }).parse(req.query);
-    return db.tenant(companyId, async tx => (await tx.query(
-      `SELECT id, site_id, title, risk_level, depth, status, recurrence_count, detected_at, closed_at, due_at, owner_id
-         FROM nonconformities WHERE company_id = $1 AND ($2::text IS NULL OR ($2 = 'closed') = (status = 'closed')) ORDER BY detected_at DESC`,
-      [companyId, status ?? null])).rows.filter(n => can(req.principal, 'ncr.read', { companyId, siteId: n.site_id, assigneeId: n.owner_id }).ok));
+    return db.tenant(companyId, tx => listNonconformities(tx, req.principal, companyId, status ?? null));
+  });
+  // A problem noticed outside a scheduled check.
+  app.post('/companies/:companyId/nonconformities', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ siteId: uuid, title: z.string().trim().min(5).max(200), description: z.string().trim().min(5).max(4000),
+      hazardType: z.enum(MANUAL_HAZARDS), severity: z.enum(['minor', 'major', 'critical']), equipmentId: uuid.nullable().default(null),
+      containment: z.string().trim().max(4000).nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => createManual(tx, req.principal, companyId, b), 201);
   });
   app.get('/companies/:companyId/nonconformities/:id', async req => {
     const companyId = company(req);
@@ -452,14 +497,73 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/nonconformities/:id/steps', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const b = z.object({ step: z.enum(['containment', 'correction', 'root_cause', 'corrective_action', 'effectiveness_check']), notes: z.string().max(4000) }).parse(req.body);
-    return mutate(req, reply, companyId, async tx => { await completeStep(tx, req.principal, companyId, id, b.step, b.notes); return { ok: true }; }, 201);
+    const b = z.object({ step: z.string(), notes: z.string().max(4000) }).parse(req.body);
+    if (b.step !== 'containment' && b.step !== 'effectiveness_check') {
+      throw new AppError(422, 'STEP_MOVED', 'Düzeltme ve düzeltici faaliyet artık "aksiyon", kök neden "neden değerlendirmesi" olarak kaydediliyor. Uygulamayı güncelle.');
+    }
+    return mutate(req, reply, companyId, async tx => { await recordStep(tx, req.principal, companyId, id, b.step as 'containment', b.notes); return { ok: true }; }, 201);
   });
+  app.post('/companies/:companyId/nonconformities/:id/assignment', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ ownerId: uuid, dueAt: z.iso.datetime({ offset: true }), reason: z.string().max(1000).nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => setAssignment(tx, req.principal, companyId, id, b));
+  });
+  app.post('/companies/:companyId/nonconformities/:id/causes', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ stage: z.enum(['initial', 'verified']), categories: z.array(z.enum(['knowledge', 'equipment', 'resource', 'process'])).min(1).max(4),
+      notes: z.string().max(4000) }).parse(req.body);
+    return mutate(req, reply, companyId, async tx => { await assessCause(tx, req.principal, companyId, id, b); return { ok: true }; }, 201);
+  });
+  app.post('/companies/:companyId/nonconformities/:id/actions', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ kind: z.enum(['correction', 'corrective_action', 'follow_up']), description: z.string().max(2000),
+      ownerId: uuid.nullable().default(null), dueAt: z.iso.datetime({ offset: true }).nullable().default(null),
+      supportRef: z.record(z.string(), z.unknown()).nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => addAction(tx, req.principal, companyId, id, b), 201);
+  });
+  app.post('/companies/:companyId/nonconformities/:id/actions/:actionId', async (req, reply) => {
+    const companyId = company(req);
+    const { id, actionId } = z.object({ id: uuid, actionId: uuid }).parse(req.params);
+    const b = z.object({ op: z.enum(['done', 'cancel', 'reassign']), notes: z.string().max(4000).optional(), ownerId: uuid.optional(),
+      dueAt: z.iso.datetime({ offset: true }).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, async tx => { await updateAction(tx, req.principal, companyId, id, actionId, b); return { ok: true }; });
+  });
+  app.post('/companies/:companyId/nonconformities/:id/verify', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ result: z.enum(['effective', 'not_effective']), notes: z.string().max(4000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => verify(tx, req.principal, companyId, id, b));
+  });
+  // Older app versions: "verify and close".
   app.post('/companies/:companyId/nonconformities/:id/close', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ notes: z.string().min(5).max(4000) }).parse(req.body);
-    return mutate(req, reply, companyId, async tx => { await closeNonconformity(tx, req.principal, companyId, id, b.notes); return { ok: true }; });
+    return mutate(req, reply, companyId, tx => verify(tx, req.principal, companyId, id, { result: 'effective', notes: b.notes }));
+  });
+  app.post('/companies/:companyId/nonconformities/:id/reopen', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ reason: z.string().max(4000) }).parse(req.body);
+    return mutate(req, reply, companyId, async tx => { await reopen(tx, req.principal, companyId, id, b.reason); return { ok: true }; });
+  });
+  app.get('/companies/:companyId/reassignment-queue', async req => {
+    const companyId = company(req);
+    return db.tenant(companyId, tx => reassignmentQueue(tx, req.principal, companyId));
+  });
+
+  // ── In-app notifications ──
+  app.get('/companies/:companyId/notifications', async req => {
+    const companyId = company(req);
+    return db.tenant(companyId, tx => listNotifications(tx, req.principal, companyId));
+  });
+  app.post('/companies/:companyId/notifications/read', async req => {
+    const companyId = company(req);
+    const b = z.object({ ids: z.union([z.array(uuid).max(200), z.literal('all')]) }).parse(req.body);
+    return db.tenant(companyId, tx => markRead(tx, req.principal, companyId, b.ids));
   });
 
   // ── Indicators and audit ──

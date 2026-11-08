@@ -14,7 +14,8 @@ export default function MoreRoute() {
   const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
   const items: Item[] = [
     { icon: '📋', label: 'Yükümlülükler', sub: 'Neden uygulandığı, kaynak ve kural sürümü', href: '/obligations', show: manager },
-    { icon: '⚠️', label: 'Uygunsuzluklar', sub: 'Düzeltme, CAPA ve kapanış doğrulaması', href: '/ncrs' },
+    { icon: '🔔', label: 'Bildirimler', sub: 'Atama, termin, gecikme ve doğrulama istekleri', href: '/notifications' },
+    { icon: '⚠️', label: 'Uygunsuzluklar', sub: 'Sorun bildir, sorumlu ve termin, neden, aksiyon, doğrulama', href: '/ncrs' },
     { icon: '🧑‍🔧', label: 'Hizmet talepleri', sub: 'Uzman bul, teklif karşılaştır, teslim kabul', href: '/services', show: manager },
     { icon: '🏢', label: 'İşletme profili', sub: 'Yükümlülükleri belirleyen yanıtlar', href: '/profile', show: role === 'owner' || role === 'hq_manager' },
     { icon: '👥', label: 'Ekip', sub: 'Şube yöneticisi ve personel ekle', href: '/team', show: role === 'owner' || role === 'hq_manager' },

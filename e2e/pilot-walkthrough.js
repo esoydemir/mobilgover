@@ -146,11 +146,27 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     // Invited, not yet a member: the invitation is accepted before any access.
     await id('invite-accept').waitFor({ timeout: 15000 }); await shot('davet-kabul'); await id('invite-accept').click(); await wait(3000);
     await goMore('more-ncrs'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
-    const steps = ['Ürünler yedek üniteye taşındı, sıcaklık 3 °C.', 'Kapı contası değiştirildi (uzman raporu).', 'Conta aşınmış; bakım planında conta kontrolü yoktu.', 'Conta kontrolü aylık bakım listesine eklendi.', 'Üç gün boyunca ölçümler 2–4 °C aralığında.'];
-    for (const s of steps) { await id('ncr-step-notes').fill(s); await id('ncr-step-save').click(); await wait(3500); }
-    await id('ncr-close-notes').waitFor({ timeout: 20000 });
+    // Flow: first response → owner and due date → cause → actions → verified root cause → effectiveness check.
+    await id('ncr-containment-notes').fill('Ürünler yedek üniteye taşındı, sıcaklık 3 °C.'); await id('ncr-containment-save').click(); await wait(3500);
+    await id('ncr-assign-open').click(); await wait(1500);
+    await part('· Şube yöneticisi').click(); await text('Yarın').click(); await id('ncr-assign-save').click(); await wait(2500);
+    await id('cause-initial-open').click(); await id('cause-equipment').click();
+    await id('cause-notes').fill('Kapı contası aşınmış görünüyor.'); await id('cause-save').click(); await wait(2500);
+    const addAction = async (kind, desc, done) => {
+      await id('action-add-open').click(); await wait(500);
+      if (kind) await text(kind).click();
+      await id('action-desc').fill(desc); await id('action-save').click(); await wait(2500);
+      await p.locator('[data-testid^="action-done-open-"]').first().click(); await wait(400);
+      await p.locator('[data-testid^="action-notes-"]').first().fill(done); await p.locator('[data-testid^="action-confirm-"]').first().click(); await wait(2500);
+    };
+    await addAction(null, 'Kapı contası değiştirildi (uzman raporu).', 'Conta değişti, kapı tam kapanıyor.');
+    await addAction('Düzeltici faaliyet', 'Conta kontrolü aylık bakım listesine eklenecek.', 'Bakım listesine eklendi.');
+    await id('cause-verified-open').click(); await id('cause-notes').fill('Conta aşınmış; bakım planında conta kontrolü yoktu.'); await id('cause-save').click(); await wait(2500);
+    await id('ncr-effectiveness-notes').fill('Üç gün boyunca ölçümler 2–4 °C aralığında.'); await id('ncr-effectiveness-save').click(); await wait(4000);
+    await p.reload(); await wait(3500);
     await shot('capa-adimlari');
-    await id('ncr-close-notes').fill('Kontrol ettim.'); await id('ncr-close').click(); await wait(2000);
+    // High risk: the person who did the fix cannot verify; the screen says so.
+    await part('başka bir yetkili doğrulamalı').waitFor({ timeout: 15000 });
     await shot('kendi-isini-kapatamaz');
     await logout();
 
@@ -159,7 +175,7 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
     await p.goto(WEB + '/report'); await wait(3500);
     await shot('rapor-kritik-risk-acik');
     await goMore('more-ncrs'); await part('Soğutucu sıcaklık kontrolü:').click(); await wait(2500);
-    await id('ncr-close-notes').fill('Ölçüm kayıtları, uzman raporu ve conta faturası incelendi.'); await id('ncr-close').click(); await wait(2500);
+    await id('ncr-verify-notes').fill('Ölçüm kayıtları, uzman raporu ve conta faturası incelendi.'); await id('ncr-verify-ok').click(); await wait(2500);
     await shot('uygunsuzluk-kapandi');
     await p.goto(WEB + '/report'); await wait(3500);
     await id('report-export').click(); await id('report-chain').waitFor({ timeout: 15000 }); await wait(800);

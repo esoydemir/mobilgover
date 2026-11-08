@@ -2,6 +2,7 @@ import type { Db, Tx } from '../db/pool';
 import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type CompanyRole, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
+import { notify, siteManagers } from './notifications';
 import { recomputeSite } from './obligations';
 
 /**
@@ -105,6 +106,20 @@ export async function setMemberStatus(tx: Tx, p: Principal, companyId: string, m
     if (m.status !== 'active') throw conflict('MEMBER_STATE', 'Yalnızca etkin üyelik pasifleştirilebilir.');
     if (reason.trim().length < 5) throw invalid('Gerekçe yaz.');
     await tx.query(`UPDATE memberships SET status = 'suspended', suspended_at = now(), suspended_by = $2, suspend_reason = $3 WHERE id = $1`, [membershipId, p.userId, reason.trim()]);
+    // Their open work goes to the managers' reassignment list (it is computed from active memberships);
+    // managers are told once per suspension.
+    const open = (await tx.query<{ site_id: string; n: number }>(
+      `SELECT site_id, count(*)::int AS n FROM (
+         SELECT site_id FROM nonconformities WHERE company_id = $1 AND owner_id = $2 AND status <> 'closed'
+         UNION ALL SELECT n.site_id FROM ncr_actions a JOIN nonconformities n ON n.id = a.ncr_id WHERE a.company_id = $1 AND a.owner_id = $2 AND a.status = 'open' AND n.status <> 'closed'
+         UNION ALL SELECT site_id FROM tasks WHERE company_id = $1 AND assignee_id = $2 AND status = 'open' AND due_at >= now()) w GROUP BY site_id`,
+      [companyId, m.user_id])).rows;
+    const who = (await tx.query<{ display_name: string }>(`SELECT display_name FROM users WHERE id = $1`, [m.user_id])).rows[0]?.display_name ?? 'Pasifleştirilen kişi';
+    for (const o of open) {
+      await notify(tx, { companyId, siteId: o.site_id, userIds: await siteManagers(tx, companyId, o.site_id), except: p.userId,
+        kind: 'reassignment_needed', entityType: 'membership', entityId: membershipId, dedupeKey: `reassign:${membershipId}:${o.site_id}:${new Date().toISOString().slice(0, 16)}`,
+        title: 'Yeniden atama bekleyen işler', body: `${who} pasifleştirildi; ${o.n} açık işi yeni sorumlu bekliyor.` });
+    }
   } else if (action === 'reactivate') {
     if (m.status !== 'suspended') throw conflict('MEMBER_STATE', 'Üyelik pasif değil.');
     await tx.query(`UPDATE memberships SET status = 'active', activated_at = now(), suspended_at = NULL, suspended_by = NULL, suspend_reason = NULL WHERE id = $1`, [membershipId]);

@@ -110,18 +110,41 @@ function EquipmentRow({ e, onSaved }: { e: Equipment; onSaved: () => void }) {
             onPress={() => patch({ name: name.trim(), ...(e.type === 'thermometer' ? { calibratedUntil: cal || null } : {}) }, 'Ekipman güncellendi')} />
           {e.active ? (
             <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 10 }}>
-              <Text style={type(12, 500, { color: C.t2, lh: 1.45 })}>Kullanımdan kaldırınca bu ekipmanın bugünden sonraki açık kontrolleri iptal edilir. Geçmiş kayıtlar değişmez.</Text>
+              <RetirePreview id={e.id} />
               <Field label="Gerekçe" testID={`eq-retire-reason-${e.id}`} value={reason} onChangeText={setReason} placeholder="ör. Arızalı, servise gönderildi" />
               <GhostButton testID={`eq-retire-${e.id}`} label="Kullanımdan kaldır" height={40} size={12.5} color={C.crit} border={tint.crit(0.35)}
                 disabled={busy || reason.trim().length < 5}
-                onPress={() => patch({ active: false, reason: reason.trim() }, 'Kullanımdan kaldırıldı', r => `${r.cancelledTasks} açık kontrol iptal edildi.`)} />
+                onPress={() => patch({ active: false, reason: reason.trim() }, 'Kullanımdan kaldırıldı', r => `${r.cancelledTasks} ileri tarihli kontrol iptal edildi${r.overdueKept ? `; saati geçmiş ${r.overdueKept} kontrol gecikmiş olarak duruyor` : ''}.`)} />
             </View>
           ) : (
             <GhostButton testID={`eq-reactivate-${e.id}`} label="Yeniden kullanıma al" height={40} size={12.5} disabled={busy}
-              onPress={() => patch({ active: true }, 'Yeniden kullanımda', r => `${r.createdTasks} kontrol yeniden oluşturuldu.`)} />
+              onPress={() => patch({ active: true }, 'Yeniden kullanımda', r => `${r.restoredTasks} iptal edilmiş kontrol geri açıldı${r.openChecks > r.restoredTasks ? `, ${r.openChecks - r.restoredTasks} yeni gün eklendi` : ''}. Aynı gün için ikinci kontrol oluşmaz.`)} />
           )}
         </View>
       )}
+    </View>
+  );
+}
+
+/** Before retiring: exactly what happens to this unit's open checks, including today's. */
+function RetirePreview({ id }: { id: string }) {
+  const { company } = useSession();
+  const q = useApi<{ overdue: number; upcoming: number; today: { id: string; title: string; dueAt: string; past: boolean }[] }>(company ? `/companies/${company.id}/equipment/${id}/open-checks` : null);
+  if (q.error) return <ErrorBox message={q.error} onRetry={q.reload} />;
+  if (!q.data) return <Text style={type(12, 400, { color: C.t3 })}>Açık kontroller hesaplanıyor…</Text>;
+  const d = q.data;
+  const time = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  return (
+    <View testID={`eq-retire-preview-${id}`} style={{ gap: 4 }}>
+      <Text style={type(12, 600, { color: C.t1 })}>Kullanımdan kaldırırsan:</Text>
+      <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>· Saati henüz gelmemiş {d.upcoming} açık kontrol iptal edilir.</Text>
+      <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>· Saati geçmiş {d.overdue} açık kontrol silinmez; "gecikmiş" olarak listelerde ve raporda kalır.</Text>
+      {d.today.map(t => (
+        <Text key={t.id} style={type(12, 500, { color: t.past ? C.warn : C.t2, lh: 1.45 })}>
+          · Bugünkü kontrol ({t.title}, saat {time(t.dueAt)}): {t.past ? 'saati geçti, gecikmiş olarak kalır' : 'iptal edilir; ekipman bugün yeniden kullanıma alınırsa geri açılır'}.
+        </Text>
+      ))}
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Yapılmış kontroller, ölçümler ve fotoğraflar değişmez.</Text>
     </View>
   );
 }

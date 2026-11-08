@@ -61,4 +61,13 @@ try {
       [row.company_id, row.site_id, row.staff_id, row.owner_id])).rowCount ?? 0;
   });
   if (assigned) console.log(`Demo: eldiven kontrolü personele (personel@) atandı; ${assigned} açık görev.`);
+
+  // Demo: the outside expert (danisman@) may review "does not apply" requests on mandatory
+  // obligations. Adds that one scope to the demo grant if it is missing; nothing else changes.
+  const scoped = await db.system(async tx => (await tx.query(
+    `UPDATE access_grants g SET scopes = array_append(g.scopes, 'obligation_review')
+       FROM companies c, users u
+      WHERE c.id = g.company_id AND c.is_demo AND c.name = 'Kahve Durağı (DEMO)' AND u.id = g.user_id AND u.email = 'danisman@demo.goverhub.test'
+        AND NOT ('obligation_review' = ANY(g.scopes))`)).rowCount ?? 0);
+  if (scoped) console.log('Demo: danışmana "uygulanmaz" isteklerini inceleme yetkisi eklendi.');
 } finally { await db.close(); }
