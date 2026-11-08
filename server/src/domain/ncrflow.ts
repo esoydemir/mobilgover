@@ -168,7 +168,8 @@ export function suggestions(categories: CauseCategory[], ctx: { hasEquipment: bo
     if (c === 'knowledge') {
       out.push({ category: c, kind: 'explanation', title: 'Talimatı ve "neden?" açıklamasını birlikte gözden geçir', available: ctx.hasObligation,
         body: ctx.hasObligation ? 'Görevin talimatı ve yükümlülüğün açıklaması, kaynağı ve kural sürümüyle açılır.' : 'Bu kayıt bir yükümlülüğe bağlı değil; açıklama yok.' });
-      out.push({ category: c, kind: 'training', title: 'Eğitim', available: false, body: 'Eğitim modülü henüz yok. Şimdilik bilgilendirmeyi bir "takip aksiyonu" olarak kaydedebilirsin.' });
+      out.push({ category: c, kind: 'training', title: 'Kişiye eğitim ata', available: true,
+        body: 'İlgili eğitimi ata: okuma, kısa değerlendirme ve sahada etkinlik doğrulaması ayrı kaydedilir. Eğitimin tamamlanması bu kaydı kapatmaz.' });
     }
     if (c === 'equipment') {
       out.push({ category: c, kind: 'service_request', title: 'Uzman hizmeti için talep hazırla', available: true,

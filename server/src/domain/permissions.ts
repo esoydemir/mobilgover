@@ -14,19 +14,25 @@ export type Action =
   | 'ncr.read' | 'ncr.act' | 'ncr.verify_close' | 'ncr.report' | 'ncr.manage' | 'ncr.verify' | 'obligation.review'
   | 'indicators.read' | 'audit.export' | 'audit.verify'
   | 'members.manage' | 'service.request'
-  | 'document.read' | 'document.write' | 'document.review';
+  | 'document.read' | 'document.write' | 'document.review'
+  // Training: writing content and publishing it are separate rights.
+  | 'training.author' | 'training.publish' | 'training.assign' | 'training.verify';
 
 /** What each company role may do. `site` = only within the member's site when the membership is site-scoped. */
 export const ROLE_MATRIX: Record<CompanyRole, Action[]> = {
   owner: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'ncr.verify', 'indicators.read', 'audit.export', 'audit.verify',
-    'members.manage', 'service.request', 'document.read', 'document.write', 'document.review'],
+    'members.manage', 'service.request', 'document.read', 'document.write', 'document.review',
+    'training.author', 'training.publish', 'training.assign', 'training.verify'],
   hq_manager: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'ncr.verify', 'indicators.read', 'audit.export', 'audit.verify',
-    'members.manage', 'service.request', 'document.read', 'document.write', 'document.review'],
+    'members.manage', 'service.request', 'document.read', 'document.write', 'document.review',
+    'training.author', 'training.publish', 'training.assign', 'training.verify'],
   site_manager: ['profile.read', 'obligation.read', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
     'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'ncr.verify', 'indicators.read', 'audit.export', 'service.request',
-    'document.read', 'document.write', 'document.review'],
+    'document.read', 'document.write', 'document.review',
+    // A site manager drafts and submits content and assigns it; publishing stays with owner / HQ.
+    'training.author', 'training.assign', 'training.verify'],
   // Staff see and do their own assigned work, including emergency instructions; no scores, penalties or other people's data.
   // Staff may report a problem they see (ncr.report); they then work on what is assigned to them.
   staff: ['task.read', 'task.execute', 'ncr.read', 'ncr.act', 'ncr.report', 'equipment.read'],
@@ -66,10 +72,11 @@ export type Principal = {
   mfaEnabled?: boolean;
   platformRoles: PlatformRole[];
   memberships: { companyId: string; siteId: string | null; role: CompanyRole }[];
-  grants: { companyId: string; kind: GrantKind; scopes: string[]; siteId?: string | null }[];
+  grants: { companyId: string; kind: GrantKind; scopes: string[]; siteId?: string | null; ncrIds?: string[] | null }[];
 };
 
-export type Target = { companyId: string; siteId?: string | null; assigneeId?: string | null };
+/** recordId: the nonconformity being accessed, for grants limited to selected cases. */
+export type Target = { companyId: string; siteId?: string | null; assigneeId?: string | null; recordId?: string | null };
 
 export type Permit = { ok: true; via: 'membership' | 'grant'; siteScope: string | null } | { ok: false };
 
@@ -86,6 +93,8 @@ export function can(p: Principal, action: Action, t: Target): Permit {
     if (g.companyId !== t.companyId) continue;
     // A site-limited grant covers that site only (never company-wide records).
     if (g.siteId && g.siteId !== t.siteId) continue;
+    // A grant limited to selected cases covers those cases only; anything else is denied by default.
+    if (g.ncrIds && !(t.recordId && g.ncrIds.includes(t.recordId))) continue;
     if (g.scopes.some(s => GRANT_SCOPES[s]?.includes(action))) return { ok: true, via: 'grant', siteScope: null };
   }
   return { ok: false };

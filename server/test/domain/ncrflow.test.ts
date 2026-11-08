@@ -76,9 +76,9 @@ describe('nonconformity flow', () => {
     expect(verifierConflict(n, 'x')).toBe(false); // a follow-up is not the fix
   });
 
-  it('suggestions only point somewhere; training is shown as not available yet', () => {
+  it('suggestions only point somewhere; training can be assigned from a knowledge gap', () => {
     const s = suggestions(['knowledge', 'resource'], { hasEquipment: false, hasObligation: true, serviceCategory: null });
     expect(s.map(x => x.kind)).toEqual(['explanation', 'training', 'assign', 'team']);
-    expect(s.find(x => x.kind === 'training')!.available).toBe(false);
+    expect(s.find(x => x.kind === 'training')!.available).toBe(true);
   });
 });

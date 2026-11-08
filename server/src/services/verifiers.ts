@@ -14,13 +14,22 @@ import { notify } from './notifications';
 export const VERIFIER_SCOPE = 'ncr_verify';
 const DAYS = [7, 30, 90] as const;
 
-export async function inviteVerifier(tx: Tx, p: Principal, companyId: string, b: { email: string; siteId: string | null; days: number; note: string; documents?: boolean }) {
+export async function inviteVerifier(tx: Tx, p: Principal, companyId: string, b: { email: string; siteId: string | null; days: number; note: string; documents?: boolean; ncrIds?: string[] | null }) {
   if (!can(p, 'members.manage', { companyId }).ok) throw forbidden('Dış doğrulayıcıyı işletme sahibi ya da merkez yöneticisi davet eder.');
   if (!DAYS.includes(b.days as 7)) throw invalid('Süre 7, 30 ya da 90 gün olmalı.');
   if (b.note.trim().length < 5) throw invalid('Neden davet ettiğini kısaca yaz (ör. tek yöneticiliyiz, bağımsız doğrulama için).');
   const email = b.email.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw invalid('Geçerli bir e-posta adresi gir.');
   if (b.siteId && !(await tx.query(`SELECT 1 FROM sites WHERE id = $1 AND company_id = $2`, [b.siteId, companyId])).rowCount) throw invalid('Şube bu işletmeye ait değil.');
+  // Selected cases only: the verifier sees those cases and the evidence needed to verify them, nothing else.
+  const ncrIds = b.ncrIds?.length ? [...new Set(b.ncrIds)] : null;
+  if (ncrIds) {
+    if (ncrIds.length > 20) throw invalid('En fazla 20 kayıt seçilebilir.');
+    const found = (await tx.query(`SELECT id, site_id FROM nonconformities WHERE company_id = $1 AND id = ANY($2)`, [companyId, ncrIds])).rows;
+    if (found.length !== ncrIds.length) throw invalid('Seçilen kayıtlardan biri bu işletmeye ait değil.');
+    if (b.siteId && found.some(f => f.site_id !== b.siteId)) throw invalid('Seçilen kayıtlar seçilen şubede değil.');
+    if (b.documents) throw invalid('Kayıtla sınırlı izin belge incelemesi içeremez.');
+  }
   await tx.query(`INSERT INTO users (display_name, email) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING`, [email.split('@')[0], email]);
   const userId = (await tx.query<{ id: string }>(`SELECT id FROM users WHERE email = $1`, [email])).rows[0]!.id;
   if (userId === p.userId) throw invalid('Kendini dış doğrulayıcı olarak davet edemezsin.');
@@ -31,21 +40,22 @@ export async function inviteVerifier(tx: Tx, p: Principal, companyId: string, b:
   if ((await tx.query(`SELECT 1 FROM access_grants WHERE user_id = $1 AND company_id = $2 AND revoked_at IS NULL AND expires_at > now() AND $3 = ANY(scopes)`,
     [userId, companyId, VERIFIER_SCOPE])).rowCount) throw conflict('ALREADY_INVITED', 'Bu kişinin geçerli bir doğrulayıcı izni zaten var.');
   const g = (await tx.query<{ id: string; expires_at: string }>(
-    `INSERT INTO access_grants (company_id, user_id, kind, scopes, granted_by, reason, expires_at, site_id)
-     VALUES ($1,$2,'expert',$3,$4,$5, now() + make_interval(days => $6), $7) RETURNING id, expires_at`,
-    [companyId, userId, b.documents ? [VERIFIER_SCOPE, 'documents_review'] : [VERIFIER_SCOPE], p.userId, b.note.trim(), b.days, b.siteId])).rows[0]!;
+    `INSERT INTO access_grants (company_id, user_id, kind, scopes, granted_by, reason, expires_at, site_id, ncr_ids)
+     VALUES ($1,$2,'expert',$3,$4,$5, now() + make_interval(days => $6), $7, $8) RETURNING id, expires_at`,
+    [companyId, userId, b.documents ? [VERIFIER_SCOPE, 'documents_review'] : [VERIFIER_SCOPE], p.userId, b.note.trim(), b.days, b.siteId, ncrIds])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'verifier.invited', entityType: 'access_grant', entityId: g.id,
-    payload: { userId, email, siteId: b.siteId, days: b.days, scopes: b.documents ? [VERIFIER_SCOPE, 'documents_review'] : [VERIFIER_SCOPE], note: b.note.trim() } });
+    payload: { userId, email, siteId: b.siteId, ncrIds, days: b.days, scopes: b.documents ? [VERIFIER_SCOPE, 'documents_review'] : [VERIFIER_SCOPE], note: b.note.trim() } });
   const company = (await tx.query<{ name: string }>(`SELECT name FROM companies WHERE id = $1`, [companyId])).rows[0]!.name;
   await notify(tx, { companyId, siteId: b.siteId, userIds: [userId], kind: 'verifier_invited', entityType: 'access_grant', entityId: g.id,
     dedupeKey: `verifier_invited:${g.id}`, title: 'Dış doğrulayıcı olarak davet edildin',
-    body: `${company} · ${b.days} gün · yalnızca uygunsuzlukları görme ve doğrulama${b.documents ? ', belge inceleme' : ''} yetkisi. Kendi katkın olan işi doğrulayamazsın.` });
+    body: `${company} · ${b.days} gün · ${ncrIds ? `yalnız ${ncrIds.length} seçili kayıt · ` : ''}yalnızca uygunsuzlukları görme ve doğrulama${b.documents ? ', belge inceleme' : ''} yetkisi. Kendi katkın olan işi doğrulayamazsın.` });
   return { id: g.id, userId, expiresAt: g.expires_at };
 }
 
 export async function listVerifiers(tx: Tx, p: Principal, companyId: string) {
   if (!can(p, 'members.manage', { companyId }).ok) throw forbidden();
-  return (await tx.query(`SELECT g.id, g.user_id, u.email, u.display_name, g.site_id, g.scopes, s.name AS site_name, g.reason, g.expires_at, g.revoked_at, g.created_at,
+  return (await tx.query(`SELECT g.id, g.user_id, u.email, u.display_name, g.site_id, g.scopes, g.ncr_ids,
+       (SELECT json_agg(json_build_object('id', n.id, 'title', n.title)) FROM nonconformities n WHERE n.id = ANY(g.ncr_ids)) AS ncrs, s.name AS site_name, g.reason, g.expires_at, g.revoked_at, g.created_at,
        gu.display_name AS granted_by_name, (g.revoked_at IS NULL AND g.expires_at > now()) AS active
      FROM access_grants g JOIN users u ON u.id = g.user_id JOIN users gu ON gu.id = g.granted_by LEFT JOIN sites s ON s.id = g.site_id
     WHERE g.company_id = $1 AND $2 = ANY(g.scopes) ORDER BY g.created_at DESC`, [companyId, VERIFIER_SCOPE])).rows;
@@ -67,7 +77,7 @@ export async function revokeVerifier(tx: Tx, p: Principal, companyId: string, gr
  */
 export async function verificationQueue(tx: Tx, p: Principal, companyId: string) {
   const ncrs = (await tx.query(`SELECT * FROM nonconformities WHERE company_id = $1 AND status <> 'closed' ORDER BY detected_at DESC`, [companyId])).rows
-    .filter(n => can(p, 'ncr.verify', { companyId, siteId: n.site_id }).ok || can(p, 'ncr.verify_close', { companyId, siteId: n.site_id }).ok);
+    .filter(n => can(p, 'ncr.verify', { companyId, siteId: n.site_id, recordId: n.id }).ok || can(p, 'ncr.verify_close', { companyId, siteId: n.site_id, recordId: n.id }).ok);
   const out: { kind: 'action' | 'closure'; ncrId: string; title: string; riskLevel: string; actionId?: string; description?: string; legacy?: boolean;
     canVerify: boolean; selfOnly: boolean; blockedReason: string | null }[] = [];
   for (const n of ncrs) {

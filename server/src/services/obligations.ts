@@ -6,6 +6,7 @@ import { canonical } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { notify } from './notifications';
+import { relatedCourses } from './training';
 import { currentFacts, recordFact } from './profile';
 import { FACTS, isFactKey, matchesType, type FactKey } from '../domain/facts';
 
@@ -135,6 +136,7 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
       const f = siteFacts[k];
       return { key: k, label: FACTS[k].label, type: FACTS[k].type, current: f?.value ?? null, source: f?.source ?? null, verification: f?.verification ?? null };
     }),
+    relatedTraining: await relatedCourses(tx, companyId, { ruleCode: rv.code }),
     matchedFacts: o.facts_snapshot,
     trace: o.trace,
     history,

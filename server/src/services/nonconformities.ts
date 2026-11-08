@@ -4,6 +4,7 @@ import { RECURRENCE_WINDOW_DAYS, assessRisk, type Severity } from '../domain/non
 import { CAUSE_CATEGORIES, SELF_VERIFY_MIN_REASON, actionContributors, flow, roundPerformers, selfVerifyAllowed, suggestions, type CauseCategory, type FlowInput, type RiskLevel } from '../domain/ncrflow';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
+import { listAssignments, relatedCourses } from './training';
 import { notify, siteManagers } from './notifications';
 import { ALLOWED_MIME } from '../storage/local';
 
@@ -96,7 +97,7 @@ async function load(tx: Tx, p: Principal, companyId: string, id: string, action:
   const n = (await tx.query(`SELECT * FROM nonconformities WHERE id = $1 AND company_id = $2 ${forUpdate ? 'FOR UPDATE' : ''}`, [id, companyId])).rows[0];
   if (!n) throw notFound('Uygunsuzluk');
   const actionOwner = (await tx.query(`SELECT 1 FROM ncr_actions WHERE ncr_id = $1 AND owner_id = $2 LIMIT 1`, [id, p.userId])).rowCount;
-  const target = { companyId, siteId: n.site_id, assigneeId: n.owner_id === p.userId || actionOwner ? p.userId : n.owner_id };
+  const target = { companyId, siteId: n.site_id, recordId: n.id, assigneeId: n.owner_id === p.userId || actionOwner ? p.userId : n.owner_id };
   if (!can(p, action, target).ok) {
     if (action !== 'ncr.read' && can(p, 'ncr.read', target).ok) throw forbidden();
     throw notFound('Uygunsuzluk');
@@ -141,11 +142,12 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
   const n = await load(tx, p, companyId, id, 'ncr.read');
   const d = await flowData(tx, n);
   const f = flow(d.input);
-  const target = { companyId, siteId: n.site_id, assigneeId: n.owner_id === p.userId || d.actions.some(a => a.owner_id === p.userId) ? p.userId : n.owner_id };
+  const target = { companyId, siteId: n.site_id, recordId: n.id, assigneeId: n.owner_id === p.userId || d.actions.some(a => a.owner_id === p.userId) ? p.userId : n.owner_id };
   const latestInitial = [...d.causes].reverse().find(c => c.stage === 'initial');
   const latestVerified = [...d.causes].reverse().find(c => c.stage === 'verified');
   const equipment = n.equipment_id ? (await tx.query(`SELECT id, name, type FROM equipment WHERE id = $1`, [n.equipment_id])).rows[0] : null;
-  const task = n.task_id ? (await tx.query(`SELECT t.id, t.obligation_id, tt.title, tt.instructions FROM tasks t JOIN task_templates tt ON tt.id = t.template_id WHERE t.id = $1`, [n.task_id])).rows[0] : null;
+  const task = n.task_id ? (await tx.query(`SELECT t.id, t.obligation_id, t.template_code, tt.title, tt.instructions, r.code AS rule_code FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
+     LEFT JOIN obligations o ON o.id = t.obligation_id LEFT JOIN rules r ON r.id = o.rule_id WHERE t.id = $1`, [n.task_id])).rows[0] : null;
   const services = (await tx.query(`SELECT r.id, r.title, r.status, r.category_code, j.status AS job_status FROM service_requests r
      LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.company_id = $1 AND r.ncr_id = $2 ORDER BY r.created_at`, [companyId, id])).rows;
   const owner = n.owner_id ? (await tx.query(`SELECT u.display_name, EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.company_id = $2
@@ -153,6 +155,10 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
   const history = (await tx.query(`SELECT e.event_type, e.payload, e.occurred_at, u.display_name AS actor_name FROM audit_events e
      LEFT JOIN users u ON u.id = e.actor_id WHERE e.company_id = $1 AND e.entity_type = 'nonconformity' AND e.entity_id = $2 ORDER BY e.seq`, [companyId, id])).rows;
   const canVerify = can(p, 'ncr.verify_close', target).ok;
+  // Training for this case: what was assigned (each state separate) and what fits the topic.
+  const trainingVisible = can(p, 'ncr.manage', target).ok;
+  const trainings = (await listAssignments(tx, p, companyId, trainingVisible ? 'managed' : 'mine', id));
+  const relatedTraining = trainingVisible ? await relatedCourses(tx, companyId, { hazard: n.hazard_type, templateCode: task?.template_code ?? null, ruleCode: task?.rule_code ?? null }) : [];
   const closure = closureOptions(n, d.input, p.userId, canVerify && n.status === 'awaiting_verification');
   return {
     ...n,
@@ -168,17 +174,17 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
     overdue: n.status !== 'closed' && !!n.due_at && new Date(n.due_at) < new Date(),
     equipment, task,
     flow: f,
-    steps: d.steps, causes: d.causes, verifications: d.verifications, services, history,
+    steps: d.steps, causes: d.causes, verifications: d.verifications, services, history, trainings, relatedTraining,
     actions: d.actions.map((a, i) => {
       const inp = d.input.actions[i]!;
       const contributors = actionContributors(inp);
       const isProvider = d.input.providerUsers?.includes(p.userId) ?? false;
       // Something to verify: a fresh claim, or an older "completed" that an open case now needs verified.
       const pending = a.status === 'done' && (a.verification_status === 'declared' || (a.verification_status === 'legacy' && n.status !== 'closed'));
-      const mayVerify = pending && n.status !== 'closed' && can(p, 'ncr.verify', { companyId, siteId: n.site_id }).ok;
+      const mayVerify = pending && n.status !== 'closed' && can(p, 'ncr.verify', { companyId, siteId: n.site_id, recordId: n.id }).ok;
       const mine = contributors.has(p.userId) || isProvider;
       const selfOk = mayVerify && contributors.has(p.userId) && !isProvider && selfVerifyAllowed(n.risk_level as RiskLevel, a.kind);
-      const manage = can(p, 'ncr.manage', { companyId, siteId: n.site_id }).ok;
+      const manage = can(p, 'ncr.manage', { companyId, siteId: n.site_id, recordId: n.id }).ok;
       return { ...a,
         legacy_unverified: a.verification_status === 'legacy' && n.status !== 'closed',
         can_verify: mayVerify && !mine,
@@ -226,10 +232,10 @@ function closureOptions(n: any, input: FlowInput, userId: string, able: boolean)
  * live grant there, minus the people who took part. For high risk everyone eligible is told;
  * otherwise outside verifiers only when nobody inside the business is eligible.
  */
-async function verifierRecipients(tx: Tx, companyId: string, siteId: string, exclude: Set<string>, highRisk: boolean) {
+async function verifierRecipients(tx: Tx, companyId: string, siteId: string, exclude: Set<string>, highRisk: boolean, ncrId: string) {
   const internal = (await siteManagers(tx, companyId, siteId)).filter(u => !exclude.has(u));
   const external = (await tx.query<{ user_id: string }>(`SELECT DISTINCT user_id FROM access_grants WHERE company_id = $1 AND revoked_at IS NULL
-     AND expires_at > now() AND 'ncr_verify' = ANY(scopes) AND (site_id IS NULL OR site_id = $2)`, [companyId, siteId])).rows.map(r => r.user_id).filter(u => !exclude.has(u));
+     AND expires_at > now() AND 'ncr_verify' = ANY(scopes) AND (site_id IS NULL OR site_id = $2) AND (ncr_ids IS NULL OR $3 = ANY(ncr_ids))`, [companyId, siteId, ncrId])).rows.map(r => r.user_id).filter(u => !exclude.has(u));
   return highRisk || !internal.length ? [...internal, ...external] : internal;
 }
 
@@ -278,7 +284,7 @@ export async function recordStep(tx: Tx, p: Principal, companyId: string, id: st
     if (!f.readyForEffectiveness) throw new AppError(422, 'FLOW_INCOMPLETE', `Önce: ${f.blockers.join(' ')}`);
     await tx.query(`INSERT INTO ncr_steps (company_id, ncr_id, step, notes, done_by, iteration) VALUES ($1,$2,'effectiveness_check',$3,$4,$5)`, [companyId, id, notes.trim(), p.userId, n.iteration]);
     await tx.query(`UPDATE nonconformities SET status = 'awaiting_verification' WHERE id = $1`, [id]);
-    const managers = await verifierRecipients(tx, companyId, n.site_id, roundPerformers(d.input), !!n.risk_rationale.independentVerification);
+    const managers = await verifierRecipients(tx, companyId, n.site_id, roundPerformers(d.input), !!n.risk_rationale.independentVerification, n.id);
     await notify(tx, { companyId, siteId: n.site_id, userIds: managers, except: p.userId, kind: 'ncr_verification_requested', entityType: 'nonconformity', entityId: id,
       dedupeKey: `ncr_verification_requested:${id}:${n.iteration}`, title: 'Doğrulama isteği', body: `${n.title} · etkinlik kontrolü kaydedildi, doğrulaman bekleniyor` });
   }
@@ -313,7 +319,7 @@ export async function addAction(tx: Tx, p: Principal, companyId: string, id: str
   if (n.status === 'awaiting_verification') throw conflict('AWAITING_VERIFICATION', 'Doğrulama beklenirken aksiyon eklenemez.');
   if (b.kind === 'corrective_action' && n.depth !== 'capa') throw invalid('Bu kayıt düzeltme akışında; düzeltici faaliyet yerine düzeltme ya da takip aksiyonu ekle.');
   if (b.description.trim().length < 5) throw invalid('Aksiyonu tarif et.');
-  const manager = can(p, 'ncr.manage', { companyId, siteId: n.site_id }).ok;
+  const manager = can(p, 'ncr.manage', { companyId, siteId: n.site_id, recordId: n.id }).ok;
   if (b.ownerId && b.ownerId !== p.userId && !manager) throw forbidden('Başkasına aksiyon atamak için yönetici olmalısın.');
   const owner = b.ownerId ?? p.userId;
   await assertEligible(tx, companyId, n.site_id, owner);
@@ -359,7 +365,7 @@ export async function updateAction(tx: Tx, p: Principal, companyId: string, id: 
   const n = await load(tx, p, companyId, id, b.op === 'verify' ? 'ncr.verify' : 'ncr.act', true);
   const a = (await tx.query(`SELECT * FROM ncr_actions WHERE id = $1 AND ncr_id = $2 FOR UPDATE`, [actionId, id])).rows[0];
   if (!a) throw notFound('Aksiyon');
-  const manager = can(p, 'ncr.manage', { companyId, siteId: n.site_id }).ok;
+  const manager = can(p, 'ncr.manage', { companyId, siteId: n.site_id, recordId: n.id }).ok;
   const notes = (b.notes ?? '').trim();
   if (b.op === 'verify') {
     if (n.status === 'closed') throw conflict('NCR_NOT_OPEN', 'Kapalı kayıtta aksiyon değişmez.');
@@ -378,7 +384,7 @@ export async function updateAction(tx: Tx, p: Principal, companyId: string, id: 
       if (b.result === 'accepted' && notes.length < SELF_VERIFY_MIN_REASON) throw invalid(`Öz doğrulama için gerekçe en az ${SELF_VERIFY_MIN_REASON} karakter olmalı (neye bakarak doğruladın, neden başkası doğrulamıyor).`);
       mode = 'self';
     }
-    const permit = can(p, 'ncr.verify', { companyId, siteId: n.site_id }); const via = permit.ok ? permit.via : null;
+    const permit = can(p, 'ncr.verify', { companyId, siteId: n.site_id, recordId: n.id }); const via = permit.ok ? permit.via : null;
     if (!b.result) throw invalid('Sonucu seç: doğrulandı ya da reddedildi.');
     if (notes.length < (b.result === 'accepted' ? 5 : 10)) throw invalid(b.result === 'accepted' ? 'Neyi kontrol ettiğini yaz.' : 'Neden reddettiğini yaz.');
     if (a.evidence_required !== 'none' && b.result === 'accepted') {
@@ -419,7 +425,7 @@ export async function updateAction(tx: Tx, p: Principal, companyId: string, id: 
         verified_by = NULL, verified_at = NULL, verification_mode = NULL, verified_via = NULL, performed_by = $4 WHERE id = $1`, [actionId, notes, p.userId, performedBy]);
     if (a.kind !== 'follow_up') {
       const performers = await actionPerformers(tx, { ...a, done_by: p.userId, performed_by: performedBy });
-      const managers = await verifierRecipients(tx, companyId, n.site_id, performers, !!n.risk_rationale.independentVerification);
+      const managers = await verifierRecipients(tx, companyId, n.site_id, performers, !!n.risk_rationale.independentVerification, n.id);
       await notify(tx, { companyId, siteId: n.site_id, userIds: managers, except: p.userId, kind: 'action_declared', entityType: 'nonconformity', entityId: id,
         dedupeKey: `action_declared:${actionId}:${new Date((await tx.query(`SELECT done_at FROM ncr_actions WHERE id = $1`, [actionId])).rows[0].done_at).toISOString()}`,
         title: 'Aksiyon "yapıldı" olarak bildirildi: doğrulaman bekleniyor', body: `${a.description} · ${notes}` });
@@ -453,7 +459,7 @@ export async function addActionEvidence(tx: Tx, p: Principal, companyId: string,
   if (!a) throw notFound('Aksiyon');
   if (n.status === 'closed') throw conflict('NCR_CLOSED', 'Kapalı kayıtta kanıt eklenemez.');
   if (a.status !== 'open') throw conflict('ACTION_NOT_OPEN', 'Kanıt, aksiyon "yapıldı" diye bildirilmeden önce eklenir.');
-  if (a.owner_id !== p.userId && !can(p, 'ncr.manage', { companyId, siteId: n.site_id }).ok) throw forbidden('Kanıtı aksiyonun sorumlusu ya da bir yönetici ekler.');
+  if (a.owner_id !== p.userId && !can(p, 'ncr.manage', { companyId, siteId: n.site_id, recordId: n.id }).ok) throw forbidden('Kanıtı aksiyonun sorumlusu ya da bir yönetici ekler.');
   if (!ALLOWED_MIME.includes(e.mime)) throw invalid(`Dosya türü kabul edilmiyor: ${e.mime}`);
   if (e.kind === 'photo' && !e.mime.startsWith('image/')) throw invalid('Fotoğraf kanıtı JPEG ya da PNG olmalı.');
   if (!/^[0-9a-f]{64}$/.test(e.sha256)) throw invalid('sha256 64 karakterlik onaltılık özet olmalı.');
@@ -488,7 +494,7 @@ export async function verify(tx: Tx, p: Principal, companyId: string, id: string
     if (b.notes.trim().length < SELF_VERIFY_MIN_REASON) throw invalid(`Öz doğrulama için gerekçe en az ${SELF_VERIFY_MIN_REASON} karakter olmalı.`);
     mode = 'self';
   }
-  const permit = can(p, 'ncr.verify_close', { companyId, siteId: n.site_id }); const via = permit.ok ? permit.via : null;
+  const permit = can(p, 'ncr.verify_close', { companyId, siteId: n.site_id, recordId: n.id }); const via = permit.ok ? permit.via : null;
   // A "done" that nobody has checked yet is not a result; the case cannot be closed on it.
   const f = flow(d.input);
   if (b.result === 'effective' && !f.readyForEffectiveness) throw new AppError(422, 'FLOW_INCOMPLETE', `Önce: ${f.blockers.join(' ')}`);
@@ -530,7 +536,7 @@ export async function listNonconformities(tx: Tx, p: Principal, companyId: strin
        FROM nonconformities n LEFT JOIN users u ON u.id = n.owner_id
       WHERE n.company_id = $1 AND ($2::text IS NULL OR ($2 = 'closed') = (n.status = 'closed')) ORDER BY n.detected_at DESC`,
     [companyId, status, p.userId])).rows;
-  return rows.filter(n => can(p, 'ncr.read', { companyId, siteId: n.site_id, assigneeId: n.owner_id === p.userId || n.my_action ? p.userId : n.owner_id }).ok)
+  return rows.filter(n => can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id, assigneeId: n.owner_id === p.userId || n.my_action ? p.userId : n.owner_id }).ok)
     .map(({ my_action, ...n }) => n);
 }
 

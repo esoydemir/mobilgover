@@ -16,7 +16,7 @@ export const DOC_STATUS: Record<string, [string, string, string]> = {
   file_pending: ['DOSYA YÜKLENMEDİ', C.warn, tint.warn(0.14)],
   unreviewed: ['İNCELENMEDİ', C.warn, tint.warn(0.14)],
   internally_reviewed: ['KURUM İÇİ İNCELENDİ', C.info, tint.info(0.14)],
-  issuer_verified: ['DÜZENLEYEN KURUMDAN DOĞRULANDI', C.lime, tint.lime(0.14)],
+  issuer_verified: ['KURUMDAN DOĞRULANDI · KİŞİ KAYDI', C.lime, tint.lime(0.14)],
   rejected: ['REDDEDİLDİ', C.crit, tint.crit(0.14)],
   expired: ['SÜRESİ DOLDU', C.crit, tint.crit(0.14)],
 };
@@ -26,7 +26,7 @@ export const STATUS_NOTE: Record<string, string> = {
   file_pending: 'Dosya sunucuya ulaşmadı; yeniden dene ya da yeni sürüm ekle.',
   unreviewed: 'Yüklendi ama kimse incelemedi. Yüklenmiş olması geçerli olduğu anlamına gelmez.',
   internally_reviewed: 'İşletmeden biri aslıyla karşılaştırdı. Bu, düzenleyen kurumun resmî doğrulaması değildir.',
-  issuer_verified: 'Düzenleyen kurumla nasıl doğrulandığı (yöntem ve referans) kayıtlı. Uygulama kurumu kendisi sorgulamaz.',
+  issuer_verified: 'Düzenleyen kurumla doğrulandığı bir kişi tarafından yöntem ve referansla kaydedildi. Uygulama kurumu kendisi sorgulamadı.',
   rejected: 'Son sürüm kabul edilmedi.',
   expired: 'İncelenen sürümün geçerlilik süresi bitti.',
 };
@@ -37,3 +37,8 @@ export const ISSUER_METHOD: Record<string, string> = {
 };
 
 export const fmtDay = (d: string | null) => (d ? d.split('-').reverse().join('.') : 'süresiz');
+
+export type IssuerCheck = { recordedBy: string | null; method: string; reference: string; recordedAt: string; queriedByApp: boolean } | null;
+/** Always shown next to "kurumdan doğrulandı": who recorded it, how, with which reference. */
+export const issuerLine = (c: NonNullable<IssuerCheck>) =>
+  `Uygulama sorgulamadı · ${c.recordedBy ?? 'bir yetkili'} kaydetti · ${ISSUER_METHOD[c.method] ?? c.method} · ref. ${c.reference} · ${c.recordedAt.slice(0, 10).split('-').reverse().join('.')}`;

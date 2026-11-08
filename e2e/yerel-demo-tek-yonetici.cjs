@@ -100,6 +100,9 @@ console.log(`Çalıştırma ${RUN} · tek yöneticili işletme ${CO} · doğrula
     (await p.locator('[data-testid^="action-self-verify-open-"]').count()) === 0 && t.includes('dış doğrulayıcı doğrulamalı') && (await p.locator('[data-testid^="action-invite-verifier-"]').count()) === 1);
   await shot('yuksek-risk-dis-dogrulayici-gerekli');
   await p.locator('[data-testid^="action-invite-verifier-"]').first().click(); await wait(2500);
+  // Opened from the case: "selected cases only" is preselected. This scenario needs all cases + document review.
+  check('Kayıttan açılan davet "Yalnız seçili kayıtlar" ile geliyor', (await body()).includes('Yalnız seçili kayıtlar') && (await p.getByTestId('verifier-documents').count()) === 0);
+  await id('verifier-scope-all').click(); await wait(300);
   await id('verifier-email').fill(E.verifier); await id('verifier-days-30').click(); await id('verifier-documents').click();
   await id('verifier-note').fill('Tek yöneticiliyiz; yüksek riskli kayıtları bağımsız doğrulaması için.');
   await shot('dis-dogrulayici-davet');
@@ -193,7 +196,7 @@ console.log(`Çalıştırma ${RUN} · tek yöneticili işletme ${CO} · doğrula
   await id('doc-issuer-open-1').click(); await wait(300);
   await id('doc-issuer-ref-1').fill('Barkod 4455-6677'); await id('doc-issuer-save-1').click(); await wait(3500);
   t = await body();
-  check('Kurum doğrulaması yöntem ve referansla kayıtlı: "DÜZENLEYEN KURUMDAN DOĞRULANDI"', t.includes('DÜZENLEYEN KURUMDAN DOĞRULANDI') && t.includes('ref. Barkod 4455-6677'));
+  check('Kurum doğrulaması kişi kaydı olarak: kaydeden, yöntem ve referans görünüyor', t.includes('KURUMDAN DOĞRULANDI · KİŞİ KAYDI') && t.includes('Uygulama sorgulamadı · Ahmet (işletme sahibi) kaydetti') && t.includes('ref. Barkod 4455-6677'));
   await shot('belge-kurumdan-dogrulandi');
 
   // ── F. Revoke: the verifier sees nothing any more ──

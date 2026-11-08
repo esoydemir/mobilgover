@@ -100,6 +100,16 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
 4. Çıkış yapıp `dogrulayici@demo.goverhub.test` ile gir: **Doğrulama bekleyenler** açılır; beyanı doğrula. Aksiyon ekleyemez, sorumlu atayamaz.
 5. Sahip olarak etkinlik kontrolünü kaydet; kapanışı sen yapamazsın, doğrulayıcı kapatır ("dış doğrulayıcı" etiketi). **Daha → Dış doğrulayıcılar**'dan izni kaldırabilirsin.
 
+**Eğitim → uygulama → etkinlik doğrulaması (5. teslim):**
+1. `mudur@` ile bir sorun bildir (konu: Sıcaklık / soğuk zincir), sorumluyu `personel@` yap, ilk değerlendirmede **Bilgi eksikliği** seç.
+2. Önerilerde **Kişiye eğitim ata** → "BU KONUYLA İLGİLİ" örnek eğitimi, kişiyi ve termini seç → **Eğitimi ata**. Kayıtta **EĞİTİM** kartı açılır.
+3. Aynı kayda `personel@` sorumlu ve fotoğraf kanıtlı bir aksiyon ekle (sahada uygulama kanıtı olacak).
+4. `personel@` ile zildeki "Sana bir eğitim atandı" bildirimini aç → **Okudum / izledim** → soruları cevapla → **Eğitimi tamamladım**. Sonra kayıttaki aksiyona fotoğraf ekleyip **"Yapıldı" bildir**.
+5. `mudur@` ile "Eğitim tamamlandı" bildiriminden aç → aksiyonu uygulama kanıtı seç → gözlemini yaz → **Kaydet**. Uygunsuzluk açık kalır; kendi doğrulamasıyla kapanır.
+6. İçerik: **Daha → Eğitimler → İçerikler → Yeni eğitim içeriği** (`mudur@` yazar ve incelemeye gönderir; `sahip@` yayımlar).
+
+**Kayda özel dış doğrulayıcı (5. teslim):** kayıttaki **Dış doğrulayıcı davet et** düğmesi "Yalnız seçili kayıtlar" kapsamıyla açılır; doğrulayıcı yalnız o kaydı ve kanıtlarını görür.
+
 **Belge kasası (3.–4. teslim):**
 1. `mudur@` ile **Daha fazla → Belge kasası → Belge ekle**: tür "Kalibrasyon sertifikası", **Ekipman** → buzdolabı. **Belgeyi oluştur**.
 2. **Yeni sürüm / dosya ekle**: bir PDF ya da fotoğraf seç, geçerlilik sonunu ör. 10 gün sonrası yaz (YYYY-AA-GG), **Yükle ve incelemeye gönder**. Durum: "İNCELEME BEKLİYOR · GEÇERLİ SAYILMAZ"; yükleyen inceleyemez.
@@ -147,7 +157,7 @@ Güncellemeden sonra kayıtların yerinde olduğunu `durum.cmd` ve uygulamadaki 
 
 3. teslim notu: güncellemeden önce yeni uygunsuzluk akışında "tamamlandı" denmiş aksiyonlar artık **"yapıldı" beyanı · doğrulama bekliyor** olarak görünür; bir yönetici doğrulayana kadar sonuç sayılmaz. Kayıt silinmez.
 
-**Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs`, `e2e/yerel-demo-yeni.cjs` ve `e2e/yerel-demo-tek-yonetici.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
+**Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs`, `e2e/yerel-demo-yeni.cjs`, `e2e/yerel-demo-tek-yonetici.cjs` ve `e2e/yerel-demo-egitim.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
 
 ## 7. Nasıl çalışıyor
 

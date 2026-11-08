@@ -25,6 +25,8 @@ export type NcrDetail = {
   verifications: { iteration: number; result: 'effective' | 'not_effective' | 'reopened'; notes: string; verified_by_name: string; verified_at: string;
     verification_mode: 'independent' | 'self' | null; verified_via: 'membership' | 'grant' | null }[];
   verificationPolicy: string;
+  trainings: import('./parts').TrainingRow[];
+  relatedTraining: { id: string; title: string; summary: string; is_example: boolean }[];
   services: { id: string; title: string; status: string; category_code: string; job_status: string | null }[];
   history: { event_type: string; payload: any; occurred_at: string; actor_name: string | null }[];
   cause: { initial: NcrDetail['causes'][number] | null; verified: NcrDetail['causes'][number] | null };
@@ -72,6 +74,8 @@ export function historyLine(h: NcrDetail['history'][number]): string {
     case 'nonconformity.action_cancel': return `Aksiyon iptal edildi${p.notes ? `: ${p.notes}` : ''}`;
     case 'nonconformity.action_reassign': return 'Aksiyon yeniden atandı';
     case 'nonconformity.verification_failed': return `Doğrulama başarısız: ${p.notes}`;
+    case 'nonconformity.training_assigned': return `Eğitim atandı: ${p.title}`;
+    case 'nonconformity.training_field_verified': return `Eğitimin sahadaki etkinliği kaydedildi (${p.userName}): ${p.result === 'effective' ? 'etkili' : 'yetersiz'}`;
     case 'nonconformity.closed': return `Doğrulandı ve kapatıldı${p.mode === 'self' ? ' (öz doğrulama)' : p.via === 'grant' ? ' (dış doğrulayıcı)' : ''}`;
     case 'nonconformity.reopened': return `Yeniden açıldı: ${p.reason}`;
     default: return h.event_type;

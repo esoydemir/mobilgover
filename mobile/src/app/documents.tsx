@@ -5,11 +5,11 @@ import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Loading } from '../components/states';
 import { Chevron, Pill, PrimaryButton, Tap } from '../components/ui';
-import { DOC_STATUS, DOC_TYPE, fmtDay } from '../features/documents';
+import { DOC_STATUS, DOC_TYPE, fmtDay, issuerLine, type IssuerCheck } from '../features/documents';
 import { C, type } from '../theme';
 
 type Doc = { id: string; docType: string; title: string; siteName: string | null; equipmentName: string | null; status: string; validUntil: string | null; versionCount: number;
-  pendingReview: boolean; expiring: boolean; sharedReadOnly: boolean };
+  pendingReview: boolean; expiring: boolean; sharedReadOnly: boolean; issuerCheck: IssuerCheck };
 
 /** Document vault: licences, certificates, reports. An upload is valid only after someone else reviewed it. */
 export default function DocumentsRoute() {
@@ -42,6 +42,7 @@ export default function DocumentsRoute() {
               {DOC_TYPE[d.docType] ?? d.docType} · {d.equipmentName ?? d.siteName ?? 'İşletme geneli'}
               {d.status === 'internally_reviewed' || d.status === 'issuer_verified' || d.status === 'expired' ? ` · geçerlilik sonu ${fmtDay(d.validUntil)}` : ''}
             </Text>
+            {d.issuerCheck ? <Text testID={`doc-issuer-line-${d.id}`} style={type(11, 400, { color: C.t3, lh: 1.4 })}>{issuerLine(d.issuerCheck)}</Text> : null}
           </Tap>
         );
       })}

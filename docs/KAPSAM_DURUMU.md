@@ -1,4 +1,4 @@
-# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1.–4. teslim işlendi)
+# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1.–5A teslim işlendi)
 
 **Kaynaklar:**
 - Tasarım prototipi ve sohbeti: `project/`, `chats/chat1.md`
@@ -87,7 +87,7 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Etkinlik kontrolü → doğrulama; etkili değilse kayıt açık kalır ve yeni tur başlar; gerekçeli yeniden açma | ✅ (2. teslim) | |
 | Risk ve işlem türüne göre doğrulama | ✅ (4. teslim) | **Yüksek/kritik:** işte payı olan hiç kimse (aksiyon sorumlusu, işi yapan, beyan eden, kanıt veren, kayda hizmet veren uzman) doğrulayamaz. **Orta:** düzeltme, takip ve kapanışta gerekçeli öz doğrulama; düzeltici faaliyet bağımsız. **Düşük:** gerekçeli (≥20 karakter) ve açıkça işaretlenmiş öz doğrulama. Öz doğrulama kayıtta, ekranda ve geçmişte "ÖZ DOĞRULAMA" olarak etiketlenir |
 | Rol ayrımı: aksiyon sorumlusu, işi yapan, beyan eden, kanıt yükleyen, doğrulayan | ✅ (4. teslim) | Ayrı alanlar ve ekranda ayrı satır. Önceki raporlardaki "owner" = **aksiyon sorumlusu**; işletme sahibi rolü tek başına kimseyi doğrulamadan men etmez |
-| Dış doğrulayıcı (tek yöneticili işletme) | ✅ (4. teslim) | Daha → Dış doğrulayıcılar. Sahip/merkez yöneticisi e-postayla davet eder: yalnız uygunsuzlukları okuma + beyan/kapanış doğrulama (isteğe bağlı belge incelemesi), tek şube ya da tümü, 7/30/90 gün, geri alınabilir. Aksiyon ekleyemez, atayamaz, görev/ekip verisini göremez; kendi katkısını ya da verdiği hizmeti doğrulayamaz. Girişte "Doğrulama bekleyenler" listesi açılır |
+| Dış doğrulayıcı (tek yöneticili işletme) | ✅ (4. teslim) | Daha → Dış doğrulayıcılar. Sahip/merkez yöneticisi e-postayla davet eder: yalnız uygunsuzlukları okuma + beyan/kapanış doğrulama (isteğe bağlı belge incelemesi), tek şube ya da tümü, 7/30/90 gün, geri alınabilir. Aksiyon ekleyemez, atayamaz, görev/ekip verisini göremez; kendi katkısını ya da verdiği hizmeti doğrulayamaz. Girişte "Doğrulama bekleyenler" listesi açılır. **5. teslim:** "Yalnız seçili kayıtlar" kapsamı (en fazla 20): yalnız o kayıtları ve onların kanıtlarını görür, belge kasasına erişemez; süre dolumu ve izin kaldırma her istekte sunucuda kontrol edilir |
 | Hizmet teslim kabulü uygunsuzluğu kapatmaz | ✅ | Testle sabitlendi |
 | Eski (v1) kayıtlar | ✅ (4. teslim) | Doğrulama şartından önce "tamamlandı" denmiş aksiyonlar **açık** kayıtta "ESKİ KAYIT · DOĞRULANMADI" görünür ve doğrulanmadan etkinlik kontrolü/kapanış yapılamaz. Kapanmış kayıtların geçmişi değiştirilmedi. Yerel demoda: 1 açık kayıtta 1 eski aksiyon doğrulama bekliyor; 1 kapalı kayıt (2 eski aksiyon) olduğu gibi duruyor |
 | Pasifleştirilen sorumlunun açık işleri → yöneticinin yeniden atama listesi | ✅ (2. teslim) | Uygunsuzluk, aksiyon ve görevler |
@@ -98,7 +98,7 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Özellik | Durum | Not |
 |---|---|---|
 | Belge kasası: belge türü, işletme / şube / ekipman bağlantısı, sürümler | ✅ (3. teslim) | Daha → Belge kasası. Türler örnek listedir (ruhsat, kayıt belgesi, kalibrasyon, bakım raporu, eğitim, sağlık raporu, sigorta, sözleşme, diğer) |
-| Belge durumları ayrı | ✅ (4. teslim) | İncelenmedi · kurum içi incelendi · düzenleyen kurumdan doğrulandı · reddedildi · süresi doldu (+ "süresi yaklaşıyor" uyarısı). Yükleme ve kurum içi inceleme resmî doğrulama olarak gösterilmez. "Kurumdan doğrulandı" için yöntem (barkod sorgusu, kurum sistemi, yazılı teyit) ve referans kaydedilir; uygulama kurumu kendisi sorgulamaz |
+| Belge durumları ayrı | ✅ (4. teslim) | İncelenmedi · kurum içi incelendi · düzenleyen kurumdan doğrulandı · reddedildi · süresi doldu (+ "süresi yaklaşıyor" uyarısı). Yükleme ve kurum içi inceleme resmî doğrulama olarak gösterilmez. "Kurumdan doğrulandı" için yöntem (barkod sorgusu, kurum sistemi, yazılı teyit) ve referans kaydedilir; uygulama kurumu kendisi sorgulamaz. **5. teslim:** etiket "KURUMDAN DOĞRULANDI · KİŞİ KAYDI"; listede ve ayrıntıda "Uygulama sorgulamadı · <kişi> kaydetti · yöntem · ref. · tarih" satırı her zaman görünür |
 | İşletme geneli belgeyi şubelere açma | ✅ (4. teslim) | Belge başına şube seçimi; şube yöneticisi yalnız okur ve dosyayı açar, değiştiremez/inceleyemez; paylaşım kaldırılabilir, geçmişte kalır |
 | Geçerlilik ve süre hatırlatmaları | ✅ (3. teslim) | Bitişe 30 gün kala (örnek süre) ve bitince yöneticilere uygulama içi bildirim; her sürüm için bir kez |
 | Telefonda belge seçme, yükleme, açma, indirme | ◐ (4. teslim) | Telefonda sistem dosya seçici (PDF, JPEG, PNG), tür ve boyut sınırı önceden yazılır, hata açık gösterilir, yarım kalan yükleme aynı dosyayla yeniden denenir; açma/kaydetme sistem paylaşım ekranıyla. **Web'de tarayıcı testiyle doğrulandı; gerçek telefonda (Expo Go / derleme) henüz denenmedi** |
@@ -108,9 +108,14 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 
 | Özellik | Durum | Not |
 |---|---|---|
-| Eğitim içerikleri, katılım, değerlendirme | ✗ | Prototipte vardı, kaldırıldı |
-| "GoverHub katılım belgesi" ile "yetkili kurum sertifikası" ayrımı | ⏳ | Tasarım kararı var; içerik ve sağlayıcı yok |
-| Onaylı içerik / uzman yorumu akışı | ✗ | Kapsam belirsiz |
+| Sürümlü eğitim içeriği: taslak → incelemede → yayımlandı → arşivlendi | ✅ (5. teslim) | Daha → Eğitimler → İçerikler. Yayımlanan sürüm değişmez; değişiklik yeni sürümle yapılır, önceki sürüm arşive geçer (silinmez) |
+| İçerik yazma ve yayımlama ayrı yetkiler | ✅ (5. teslim) | Şube yöneticisi yazar ve incelemeye gönderir; yayımlamayı sahip/merkez yöneticisi yapar. Başka yayımlayıcı varsa yazan kişi kendi içeriğini yayımlayamaz (tek yöneticide yapabilir) |
+| Eğitimi görev, yükümlülük ve uygunsuzlukla ilişkilendirme | ✅ (5. teslim) | Konu (tehlike türü), kontrol (görev şablonu) ve yükümlülük (kural) bağlantısı; uygunsuzluk ve yükümlülük ekranında ilgili eğitimler; atama uygunsuzluğa bağlanabilir. Görev ekranında henüz gösterilmiyor |
+| Kişiye eğitim atama; okuma/izleme; kısa değerlendirme | ✅ (5. teslim) | Okundu, tamamlandı, sınavı geçti ve sahada etkinliği doğrulandı ayrı kayıtlar. Cevap anahtarı öğrenene gönderilmez; yanlış sorular gösterilir |
+| Sahada etkinlik doğrulaması | ✅ (5. teslim) | Eğitimi alan dışında bir yönetici; isteğe bağlı olarak öğrenenin bağlı kayıtta yaptığı aksiyonu uygulama kanıtı seçer. Eğitim tamamlanması ve etkinlik doğrulaması uygunsuzluğu kapatmaz |
+| Örnek içerik etiketi; katılım kaydı ≠ sertifika | ✅ (5. teslim) | 2 ÖRNEK eğitim (soğutucu kapısı, eldiven) açıkça etiketli; ekranlarda "GoverHub katılım kaydıdır; resmî sertifika değildir" |
+| Video oynatma, dosya ekli içerik | ◐ | Video yalnız bağlantı olarak gösterilir; içerik metindir |
+| Onaylı uzman içeriği / platform içerik ekibi | ✗ | Kapsam kararı bekliyor; örnek içerikler platform kaynaklı, mevzuat ya da onaylı görüş değildir |
 
 ## 8. Uzman profilleri ve kategori bazlı hizmet onayı
 
@@ -203,7 +208,7 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 14. Kural yazma ekranı.
 15. Saklama ekranı.
 16. PDF denetim dosyası.
-17. Eğitim modülü (içerik kaynağı kararı gerekiyor).
+17. ✅ Eğitim → uygulama → etkinlik doğrulaması (5. teslim); onaylı içerik kaynağı kararı bekliyor.
 18. Dinamik form motoru.
 
 ## Senin kararını bekleyenler (şimdilik engellemiyor)

@@ -20,6 +20,7 @@ import { loadPrincipal } from '../services/principal';
 import * as mk from '../services/marketplace';
 import * as docs from '../services/documents';
 import * as verifiers from '../services/verifiers';
+import * as training from '../services/training';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
@@ -578,7 +579,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   app.post('/companies/:companyId/verifiers', async (req, reply) => {
     const companyId = company(req);
-    const b = z.object({ email: z.string().max(200), siteId: uuid.nullable().default(null), days: z.number().int(), note: z.string().max(500), documents: z.boolean().default(false) }).parse(req.body);
+    const b = z.object({ email: z.string().max(200), siteId: uuid.nullable().default(null), days: z.number().int(), note: z.string().max(500), documents: z.boolean().default(false),
+      ncrIds: z.array(uuid).max(20).nullable().default(null) }).parse(req.body);
     return mutate(req, reply, companyId, tx => verifiers.inviteVerifier(tx, req.principal, companyId, b), 201);
   });
   app.post('/companies/:companyId/verifiers/:grantId/revoke', async (req, reply) => {
@@ -752,6 +754,76 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ quality: star, timeliness: star, communication: star, comment: z.string().max(1000).nullable().default(null),
       showOnProfile: z.boolean().default(false) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.reviewJob(tx, req.principal, companyId, id, b), 201);
+  });
+
+  // ── Training ──
+  const quizQ = z.object({ q: z.string().max(300), options: z.array(z.string().max(200)).max(5), answer: z.number().int() });
+  const courseBody = z.object({ title: z.string().max(200), summary: z.string().max(500).default(''), body: z.string().max(20000), videoUrl: z.string().max(500).nullable().default(null),
+    quiz: z.array(quizQ).max(10).default([]), passScore: z.number().int().min(1).max(100).default(80), minutes: z.number().int().min(1).max(600).nullable().default(null),
+    links: z.array(z.object({ kind: z.enum(['task_template', 'rule', 'hazard']), ref: z.string().max(100) })).max(20).default([]) });
+  app.get('/companies/:companyId/training/courses', async req => {
+    const companyId = company(req);
+    return db.tenant(companyId, tx => training.listCourses(tx, req.principal, companyId));
+  });
+  app.post('/companies/:companyId/training/courses', async (req, reply) => {
+    const companyId = company(req);
+    const b = courseBody.parse(req.body);
+    return mutate(req, reply, companyId, tx => training.createCourse(tx, req.principal, companyId, b), 201);
+  });
+  app.get('/companies/:companyId/training/courses/:id', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => training.getCourse(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/training/courses/:id/new-version', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, tx => training.newVersion(tx, req.principal, companyId, id), 201);
+  });
+  app.post('/companies/:companyId/training/courses/:id/archive', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, async tx => { await training.archiveCourse(tx, req.principal, companyId, id); return { ok: true }; });
+  });
+  app.post('/companies/:companyId/training/versions/:id', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = courseBody.parse(req.body);
+    return mutate(req, reply, companyId, async tx => { await training.updateDraft(tx, req.principal, companyId, id, b); return { ok: true }; });
+  });
+  app.post('/companies/:companyId/training/versions/:id/:op', async (req, reply) => {
+    const companyId = company(req);
+    const { id, op } = z.object({ id: uuid, op: z.enum(['submit', 'reject', 'publish']) }).parse(req.params);
+    const b = z.object({ notes: z.string().max(2000).nullable().default(null) }).parse(req.body ?? {});
+    return mutate(req, reply, companyId, async tx => { await training.changeStatus(tx, req.principal, companyId, id, op, b.notes); return { ok: true }; });
+  });
+  app.get('/companies/:companyId/training/assignments', async req => {
+    const companyId = company(req);
+    const q = z.object({ scope: z.enum(['mine', 'managed']).default('mine'), ncrId: uuid.optional() }).parse(req.query);
+    return db.tenant(companyId, tx => training.listAssignments(tx, req.principal, companyId, q.scope, q.ncrId ?? null));
+  });
+  app.post('/companies/:companyId/training/assignments', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ courseId: uuid, userId: uuid, siteId: uuid, dueAt: z.iso.datetime({ offset: true }).nullable().default(null), reason: z.string().max(1000),
+      ncrId: uuid.nullable().default(null), actionId: uuid.nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => training.assign(tx, req.principal, companyId, b), 201);
+  });
+  app.get('/companies/:companyId/training/assignments/:id', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => training.getAssignment(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/training/assignments/:id/:step', async (req, reply) => {
+    const companyId = company(req);
+    const { id, step } = z.object({ id: uuid, step: z.enum(['read', 'complete', 'attempt', 'field-verify', 'cancel']) }).parse(req.params);
+    return mutate(req, reply, companyId, async tx => {
+      if (step === 'read' || step === 'complete') return training.learnerStep(tx, req.principal, companyId, id, step);
+      if (step === 'attempt') return training.attempt(tx, req.principal, companyId, id, z.object({ answers: z.array(z.number().int()).max(10) }).parse(req.body).answers);
+      if (step === 'field-verify') return training.fieldVerify(tx, req.principal, companyId, id,
+        z.object({ result: z.enum(['effective', 'not_effective']), notes: z.string().max(2000), actionId: uuid.nullable().default(null) }).parse(req.body));
+      await training.cancelAssignment(tx, req.principal, companyId, id, z.object({ reason: z.string().max(1000) }).parse(req.body).reason);
+      return { ok: true };
+    });
   });
 
   // ── Document vault ──

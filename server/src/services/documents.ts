@@ -41,6 +41,12 @@ const addDays = (d: string, n: number) => day(new Date(new Date(`${d}T00:00:00Z`
  * The document's state. Validity comes only from the newest VERIFIED version; a newer version
  * waiting for review is shown separately and does not make the document valid by itself.
  */
+/** Who recorded a check with the issuer, how and with what reference. The app itself never queries an authority. */
+export function issuerCheckOf(v: any) {
+  return v?.issuer_check_method ? { recordedBy: v.issuer_checked_by_name as string | null, method: v.issuer_check_method as string, reference: v.issuer_check_ref as string,
+    recordedAt: v.issuer_checked_at as string, queriedByApp: false } : null;
+}
+
 export function documentStatus(versions: VersionRow[], today: string): { status: DocStatus; current: VersionRow | null; pending: VersionRow | null;
   expiring: boolean; notYetValid: boolean } {
   const sorted = [...versions].sort((a, b) => b.version - a.version);
@@ -102,7 +108,8 @@ async function listOut(tx: Tx, p: Principal, companyId: string, docs: any[]) {
     return { id: d.id, docType: d.doc_type, title: d.title, issuer: d.issuer, documentNo: d.document_no, siteId: d.site_id, siteName: d.site_name,
       equipmentId: d.equipment_id, equipmentName: d.equipment_name, status: st.status, expiring: st.expiring, notYetValid: st.notYetValid,
       sharedReadOnly: !can(p, 'document.read', { companyId, siteId: d.site_id }).ok,
-      validUntil: st.current?.valid_until ?? null, validFrom: st.current?.valid_from ?? null, versionCount: vs.length, pendingReview: !!st.pending || st.status === 'unreviewed' };
+      validUntil: st.current?.valid_until ?? null, validFrom: st.current?.valid_from ?? null, versionCount: vs.length, pendingReview: !!st.pending || st.status === 'unreviewed',
+      issuerCheck: issuerCheckOf(st.current) };
   });
 }
 
@@ -147,6 +154,7 @@ export async function getDocument(tx: Tx, p: Principal, companyId: string, id: s
     id: d.id, docType: d.doc_type, title: d.title, issuer: d.issuer, documentNo: d.document_no, siteId: d.site_id, siteName: d.site_name,
     equipmentId: d.equipment_id, equipmentName: d.equipment_name, createdAt: d.created_at,
     status: st.status, expiring: st.expiring, notYetValid: st.notYetValid,
+    issuerCheck: issuerCheckOf(st.current),
     currentVersionId: st.current?.id ?? null, validFrom: st.current?.valid_from ?? null, validUntil: st.current?.valid_until ?? null,
     shares, maxUploadBytes: MAX_UPLOAD_BYTES.value,
     expiryWarningDays: EXPIRY_WARNING_DAYS,

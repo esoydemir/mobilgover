@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useQueue } from '../../api/queue';
 import { useSession } from '../../api/session';
@@ -10,7 +10,7 @@ import { ErrorBox, Field, Loading, StaleNote } from '../../components/states';
 import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { SEVERITY_LABEL } from '../../features/labels';
-import { ActionsCard, AssignmentCard, CauseCard, FlowStepper, HistoryCard, SupportCard, VerificationCard } from '../../features/ncr/parts';
+import { ActionsCard, AssignmentCard, CauseCard, FlowStepper, HistoryCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
 import { HAZARDS, type NcrDetail } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -27,6 +27,9 @@ export default function NcrRoute() {
   const { showToast } = useUi();
   const base = `/companies/${company?.id}/nonconformities/${id}`;
   const q = useApi<NcrDetail>(company ? base : null);
+  // Coming back from training assignment or the service form: show the latest state.
+  const first = useRef(true);
+  useFocusEffect(useCallback(() => { if (first.current) { first.current = false; return; } void q.reload(); }, [q.reload]));
   const [formKind, setFormKind] = useState<string | null>(null);
   const [assignNudge, setAssignNudge] = useState(0);
   const n = q.data;
@@ -89,6 +92,7 @@ export default function NcrRoute() {
       <AssignmentCard key={`a${assignNudge}-${n.owner?.id}-${n.due_at}`} n={n} base={base} reload={q.reload} initialOpen={assignNudge > 0} />
       <CauseCard n={n} base={base} reload={q.reload} />
       <SupportCard n={n} onFollowUp={() => setFormKind('follow_up')} onAssign={() => setAssignNudge(x => x + 1)} />
+      <TrainingCard n={n} />
       <ActionsCard n={n} base={base} reload={q.reload} me={me?.userId ?? null} formKind={formKind} setFormKind={setFormKind} />
 
       {n.status === 'open' ? (

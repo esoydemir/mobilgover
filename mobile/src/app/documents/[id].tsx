@@ -9,7 +9,7 @@ import { ErrorBox, Field, Loading } from '../../components/states';
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
-import { DOC_STATUS, DOC_TYPE, ISSUER_METHOD, STATUS_NOTE, fmtDay } from '../../features/documents';
+import { DOC_STATUS, DOC_TYPE, ISSUER_METHOD, STATUS_NOTE, fmtDay, issuerLine, type IssuerCheck } from '../../features/documents';
 import { ACCEPTED, TYPE_LABEL, fileMeta, fmtSize, openEvidence, pickFile, uploadBytes, type Picked } from '../../features/files';
 import { C, tint, type } from '../../theme';
 
@@ -19,7 +19,7 @@ type Version = { id: string; version: number; valid_from: string | null; valid_u
   evidence_id: string | null; file_status: string | null; mime: string | null; size_bytes: number | null; declared_sha256: string | null; file_rejection: string | null;
   canReview: boolean; reviewBlockedReason: string | null; canRecordIssuerCheck: boolean; canRetryUpload: boolean };
 type DocDetail = { id: string; docType: string; title: string; issuer: string | null; documentNo: string | null; siteId: string | null; siteName: string | null; equipmentName: string | null;
-  status: string; expiring: boolean; notYetValid: boolean; currentVersionId: string | null; validFrom: string | null; validUntil: string | null; expiryWarningDays: number;
+  issuerCheck: IssuerCheck; status: string; expiring: boolean; notYetValid: boolean; currentVersionId: string | null; validFrom: string | null; validUntil: string | null; expiryWarningDays: number;
   maxUploadBytes: number; shares: { id: string; site_id: string; site_name: string }[]; versions: Version[];
   permissions: { write: boolean; review: boolean; share: boolean } };
 
@@ -57,6 +57,7 @@ export default function DocumentRoute() {
           <Card style={{ gap: 6 }}>
             <Eyebrow>DURUM VE GEÇERLİLİK</Eyebrow>
             <Text testID="doc-status-note" style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{STATUS_NOTE[d.status]}</Text>
+            {d.issuerCheck ? <Text testID="doc-issuer-line" style={type(12, 600, { color: C.t1, lh: 1.45 })}>{issuerLine(d.issuerCheck)}</Text> : null}
             {d.currentVersionId ? (
               <Text style={type(13, 500, { lh: 1.5 })}>İncelenen sürüme göre {fmtDay(d.validFrom)} – {fmtDay(d.validUntil)}. Bitişe {d.expiryWarningDays} gün kala ve bitince yöneticilere hatırlatma gider.</Text>
             ) : null}
@@ -213,8 +214,8 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
       {v.file_rejection ? <Text style={type(12, 400, { color: C.crit })}>Dosya reddedildi: {v.file_rejection}</Text> : null}
       {v.review_notes ? <Text style={type(12, 400, { color: v.review_status === 'rejected' ? C.crit : C.t2, lh: 1.45 })}>Kurum içi inceleme: {v.review_notes} · {v.reviewed_by_name}</Text> : null}
       {v.issuer_check_method ? (
-        <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Düzenleyen kurumla doğrulama: {ISSUER_METHOD[v.issuer_check_method]} · ref. {v.issuer_check_ref}
-          {v.issuer_check_notes ? ` · ${v.issuer_check_notes}` : ''} · kaydeden {v.issuer_checked_by_name}</Text>
+        <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Düzenleyen kurumla doğrulama (uygulama sorgulamadı): kaydeden {v.issuer_checked_by_name} · {ISSUER_METHOD[v.issuer_check_method]} · ref. {v.issuer_check_ref}
+          {v.issuer_check_notes ? ` · ${v.issuer_check_notes}` : ''}{v.issuer_checked_at ? ` · ${fmtDateTime(v.issuer_checked_at)}` : ''}</Text>
       ) : null}
       {v.reviewBlockedReason ? <Text style={type(11.5, 400, { color: C.t3 })}>{v.reviewBlockedReason}</Text> : null}
       <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap', marginTop: 3 }}>

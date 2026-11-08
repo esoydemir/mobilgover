@@ -84,11 +84,12 @@ export async function listNotifications(tx: Tx, p: Principal, companyId: string,
     if (r.entity_type === 'nonconformity') {
       if (!r.ncr_site) return false;
       const involved = r.ncr_owner === p.userId || r.ncr_action_owner;
-      return can(p, 'ncr.read', { companyId, siteId: r.ncr_site, assigneeId: involved ? p.userId : r.ncr_owner }).ok;
+      return can(p, 'ncr.read', { companyId, siteId: r.ncr_site, recordId: r.entity_id, assigneeId: involved ? p.userId : r.ncr_owner }).ok;
     }
     if (r.entity_type === 'obligation') return can(p, 'obligation.read', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'pro_request' || r.entity_type === 'pro_job') return false; // provider inbox only
-    if (r.entity_type === 'access_grant') return can(p, 'ncr.read', { companyId, siteId: r.site_id }).ok;
+    if (r.entity_type === 'training_assignment' || r.entity_type === 'training_course') return true; // re-checked when opened
+    if (r.entity_type === 'access_grant') return p.grants.some(g => g.companyId === companyId);
     if (r.entity_type === 'task') return can(p, 'task.read', { companyId, siteId: r.site_id, assigneeId: p.userId }).ok;
     if (r.entity_type === 'site_tasks') return can(p, 'task.assign', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'service_request') return can(p, 'service.request', { companyId, siteId: r.site_id }).ok;

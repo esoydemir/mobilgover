@@ -121,7 +121,7 @@ describe('cause assessment and support', () => {
     const kinds = d.suggestions.map((s: any) => s.kind);
     expect(kinds).toEqual(expect.arrayContaining(['service_request', 'equipment', 'training', 'explanation']));
     expect(d.suggestions.find((s: any) => s.kind === 'service_request').serviceCategory).toBe('refrigeration_service');
-    expect(d.suggestions.find((s: any) => s.kind === 'training').available).toBe(false); // no training module yet
+    expect(d.suggestions.find((s: any) => s.kind === 'training').available).toBe(true); // training can be assigned; it never closes the case
     expect((await env.ownerDb.query(`SELECT count(*)::int AS n FROM service_requests`)).rows[0].n).toBe(before);
   });
 });

@@ -56,7 +56,7 @@ console.log(`Çalıştırma ${RUN} · işletme ${CO}`);
   await id('cause-notes').fill('Conta yırtık; kapının kontrol edileceğini bilmiyordum.'); await id('cause-save').click(); await wait(3000);
   t = await body();
   check('İlk değerlendirme çoklu neden; "kesin kök neden değildir" ve öneriler görünüyor',
-    t.includes('İLK DEĞERLENDİRME') && t.includes('Ekipman eksikliği · Bilgi eksikliği') && t.includes('ÖNERİLEN DESTEK') && t.includes('HENÜZ YOK'));
+    t.includes('İLK DEĞERLENDİRME') && t.includes('Ekipman eksikliği · Bilgi eksikliği') && t.includes('ÖNERİLEN DESTEK') && t.includes('Kişiye eğitim ata'));
   await p.getByTestId('support-service_request').first().scrollIntoViewIfNeeded();
   await shot('destek-onerileri');
   await id('action-add-open').click(); await id('action-desc').fill('Contayı geçici bantla kapat, servisi bekle.');

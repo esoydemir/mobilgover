@@ -72,7 +72,7 @@ export function DuePicker({ value, onChange }: { value: string | null; onChange:
   );
 }
 
-function PersonChips({ siteId, value, onChange }: { siteId: string; value: string | null; onChange: (id: string) => void }) {
+export function PersonChips({ siteId, value, onChange }: { siteId: string; value: string | null; onChange: (id: string) => void }) {
   const { company } = useSession();
   const people = useApi<Assignee[]>(company ? `/companies/${company.id}/sites/${siteId}/assignees` : null);
   if (people.error) return <ErrorBox message={people.error} onRetry={people.reload} />;
@@ -80,7 +80,7 @@ function PersonChips({ siteId, value, onChange }: { siteId: string; value: strin
   if (!people.data.length) return <Text style={type(12.5, 400, { color: C.t2 })}>Bu şubede iş verilebilecek etkin kimse yok.</Text>;
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-      {people.data.map(p => <FilterChip key={p.id} label={`${p.display_name} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={value === p.id} onPress={() => onChange(p.id)} />)}
+      {people.data.map(p => <FilterChip key={p.id} testID={`person-${p.id}`} label={`${p.display_name} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={value === p.id} onPress={() => onChange(p.id)} />)}
     </View>
   );
 }
@@ -209,8 +209,9 @@ export function SupportCard({ n, onFollowUp, onAssign }: { n: NcrDetail; onFollo
     else if (kind === 'team') router.push('/team');
     else if (kind === 'follow_up') onFollowUp();
     else if (kind === 'assign') onAssign();
+    else if (kind === 'training') router.push(`/training/assign?ncrId=${n.id}`);
   };
-  const label: Record<string, string> = { explanation: 'Açıklamayı aç', service_request: 'Talep formunu aç', equipment: 'Ekipmanlar', team: 'Ekip', follow_up: 'Takip aksiyonu ekle', assign: 'Sorumluyu değiştir' };
+  const label: Record<string, string> = { explanation: 'Açıklamayı aç', service_request: 'Talep formunu aç', equipment: 'Ekipmanlar', team: 'Ekip', follow_up: 'Takip aksiyonu ekle', assign: 'Sorumluyu değiştir', training: 'Eğitim ata' };
   return (
     <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <Eyebrow color={C.lime}>ÖNERİLEN DESTEK</Eyebrow>
@@ -220,7 +221,7 @@ export function SupportCard({ n, onFollowUp, onAssign }: { n: NcrDetail; onFollo
           <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{CAUSE_LABEL[s.category][0].toUpperCase()}</Text>
           <Text style={type(13.5, 600)}>{s.title}</Text>
           <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{s.body}</Text>
-          {s.available && label[s.kind] && (s.kind !== 'service_request' || n.permissions.serviceRequest) && (s.kind !== 'assign' || n.permissions.manage) ? (
+          {s.available && label[s.kind] && (s.kind !== 'service_request' || n.permissions.serviceRequest) && (s.kind !== 'assign' || n.permissions.manage) && (s.kind !== 'training' || n.permissions.manage) ? (
             <GhostButton testID={`support-go-${s.kind}`} label={label[s.kind]!} height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => go(s.kind, s.serviceCategory)} />
           ) : !s.available ? <Pill label={s.kind === 'training' ? 'HENÜZ YOK' : 'BU KAYITTA YOK'} fg={C.t3} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
             : <Text style={type(11.5, 500, { color: C.t3 })}>{s.kind === 'service_request' ? 'Talebi işletme sahibi ya da yönetici açar; onlara bildirebilirsin.' : 'Bu adımı yönetici yapar.'}</Text>}
@@ -366,7 +367,7 @@ function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]
       ) : null}
       {a.verify_blocked_reason ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{a.verify_blocked_reason}</Text> : null}
       {a.verify_blocked_reason && !a.can_self_verify && n.permissions.inviteVerifier ? (
-        <GhostButton testID={`action-invite-verifier-${a.id}`} label="Dış doğrulayıcı davet et" height={34} size={11.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push('/verifiers')} />
+        <GhostButton testID={`action-invite-verifier-${a.id}`} label="Dış doğrulayıcı davet et" height={34} size={11.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/verifiers?ncrId=${n.id}`)} />
       ) : null}
       {mode === null && (editable || a.can_verify || a.can_self_verify) ? (
         <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap', marginTop: 4 }}>
@@ -456,7 +457,7 @@ export function VerificationCard({ n, base, reload }: { n: NcrDetail; base: stri
       <Text testID="ncr-verification-policy" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{n.verificationPolicy}</Text>
       {n.permissions.verifyBlockedReason ? <Callout tone="warn" body={n.permissions.verifyBlockedReason} /> : null}
       {!n.permissions.verify && !n.permissions.selfVerify && n.permissions.verifyBlockedReason && n.permissions.inviteVerifier ? (
-        <GhostButton testID="ncr-invite-verifier" label="Dış doğrulayıcı davet et" height={40} size={12.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push('/verifiers')} />
+        <GhostButton testID="ncr-invite-verifier" label="Dış doğrulayıcı davet et" height={40} size={12.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/verifiers?ncrId=${n.id}`)} />
       ) : null}
       {n.permissions.verify || n.permissions.selfVerify ? (
         <>
@@ -492,6 +493,39 @@ export function HistoryCard({ n }: { n: NcrDetail }) {
         </View>
       ))}
       {n.history.length > 6 ? <GhostButton label={all ? 'Son kayıtlar' : `Tümü (${n.history.length})`} height={34} size={11.5} style={{ alignSelf: 'flex-start' }} onPress={() => setAll(v => !v)} /> : null}
+    </Card>
+  );
+}
+
+const TSTATE = (st: TrainingRow['state']) => st.cancelled ? ['İPTAL', C.t3] : st.fieldVerified === 'effective' ? ['SAHADA ETKİLİ', C.lime]
+  : st.fieldVerified === 'not_effective' ? ['SAHADA YETERSİZ', C.crit] : st.completed ? ['TAMAMLANDI · SAHA DOĞRULAMASI BEKLİYOR', C.warn]
+  : st.passed ? ['SINAVI GEÇTİ', C.info] : st.read ? ['OKUNDU', C.info] : st.overdue ? ['GECİKMİŞ', C.crit] : ['ATANDI', C.t2];
+export type TrainingRow = { id: string; title: string; userName: string; dueAt: string | null; reason: string; isExample: boolean; bestScore: number | null; questions: number;
+  state: { read: boolean; completed: boolean; passed: boolean | null; fieldVerified: 'effective' | 'not_effective' | null; cancelled: boolean; overdue: boolean } };
+export const trainingStateLabel = TSTATE;
+
+/** Training for this case: each fact separate; none of them closes the case. */
+export function TrainingCard({ n }: { n: NcrDetail }) {
+  if (!n.trainings.length && !(n.permissions.manage && n.relatedTraining.length && n.status !== 'closed')) return null;
+  return (
+    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 9 }}>
+      <Eyebrow>EĞİTİM</Eyebrow>
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Okundu, tamamlandı, sınavı geçti ve sahada etkinliği doğrulandı ayrı kaydedilir. Eğitimin tamamlanması bu kaydı kapatmaz.</Text>
+      {n.trainings.map(t => {
+        const [label, color] = TSTATE(t.state);
+        return (
+          <Tap key={t.id} testID={`ncr-training-${t.id}`} onPress={() => router.push(`/training/a/${t.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, padding: 12, gap: 4 }}>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Text style={[type(13, 600), { flex: 1 }]}>{t.title}</Text>
+              <Text style={type(10, 700, { ls: 0.08, color: color as string })}>{label}</Text>
+            </View>
+            <Text style={type(11.5, 400, { color: C.t3 })}>{t.userName}{t.dueAt ? ` · termin ${fmtDateTime(t.dueAt)}` : ''}{t.isExample ? ' · ÖRNEK İÇERİK' : ''}</Text>
+          </Tap>
+        );
+      })}
+      {n.permissions.manage && n.status !== 'closed' ? (
+        <GhostButton testID="ncr-training-assign" label="Eğitim ata" height={38} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/training/assign?ncrId=${n.id}`)} />
+      ) : null}
     </Card>
   );
 }
