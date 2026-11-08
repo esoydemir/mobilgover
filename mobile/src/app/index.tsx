@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -23,8 +23,15 @@ const STATUS_TEXT: Record<Indicators['status'], [string, string]> = {
   on_track: ['Yolunda', C.lime],
 };
 
-/** Command center: today's checks, the one thing that matters most, and the score with its caveats. */
+/** An invited outside verifier has no business role: their start page is the verification list. */
 export default function HomeRoute() {
+  const { company, role } = useSession();
+  if (company && !role && company.grants?.some(g => g.scopes.includes('ncr_verify'))) return <Redirect href="/verify-queue" />;
+  return <HomeScreen />;
+}
+
+/** Command center: today's checks, the one thing that matters most, and the score with its caveats. */
+function HomeScreen() {
   const { company, siteId, role } = useSession();
   const base = company ? `/companies/${company.id}` : null;
   const today = startOfDay();

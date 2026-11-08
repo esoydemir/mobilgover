@@ -93,10 +93,19 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
 1. `sahip@` ile Soğuk muhafaza yükümlülüğünde **Uygulanmaz de** seçeneğini kullan. Kuralın hangi koşulunun sizde farklı olduğunu seç (ör. "Soğuk depolama: Hayır") ve dayanağı yaz. Önerdiğin bilgilerle kural hâlâ uyuyorsa istek gönderilemez.
 2. `danisman@` ile zildeki bildirimden aç. Onay, bilgileri doğrulanmış olarak profile işler; kararı kural motoru verir. Bilgiler kurala hâlâ uyuyorsa onay reddedilir ve yükümlülük sürer.
 
-**Belge kasası (3. teslim):**
+**Tek yöneticili işletme ve dış doğrulayıcı (4. teslim):**
+1. Kendi tek yöneticili test işletmeni kurmak için yeni bir demo adresiyle gir (ör. `ben@demo.goverhub.test`) ve işletmeyi kur; yalnız sen yöneticisin.
+2. **Düşük riskli** bir sorun bildir (önem: Düşük), kendine aksiyon ekle, **"Yapıldı" bildir**. **Öz doğrulama yap** → gerekçe (en az 20 karakter) + "payım var" işareti → kayıt "DOĞRULANDI · ÖZ DOĞRULAMA" olur. Kapanış da aynı şekilde etiketlenir.
+3. **Kritik** bir sorun bildir ve aksiyonu "yapıldı" bildir: öz doğrulama sunulmaz. **Dış doğrulayıcı davet et** → e-posta (ör. `dogrulayici@demo.goverhub.test`), şube, süre, gerekirse "belge inceleme" → **Davet et**.
+4. Çıkış yapıp `dogrulayici@demo.goverhub.test` ile gir: **Doğrulama bekleyenler** açılır; beyanı doğrula. Aksiyon ekleyemez, sorumlu atayamaz.
+5. Sahip olarak etkinlik kontrolünü kaydet; kapanışı sen yapamazsın, doğrulayıcı kapatır ("dış doğrulayıcı" etiketi). **Daha → Dış doğrulayıcılar**'dan izni kaldırabilirsin.
+
+**Belge kasası (3.–4. teslim):**
 1. `mudur@` ile **Daha fazla → Belge kasası → Belge ekle**: tür "Kalibrasyon sertifikası", **Ekipman** → buzdolabı. **Belgeyi oluştur**.
 2. **Yeni sürüm / dosya ekle**: bir PDF ya da fotoğraf seç, geçerlilik sonunu ör. 10 gün sonrası yaz (YYYY-AA-GG), **Yükle ve incelemeye gönder**. Durum: "İNCELEME BEKLİYOR · GEÇERLİ SAYILMAZ"; yükleyen inceleyemez.
-3. `sahip@` ile zildeki "Yeni belge sürümü incelemeni bekliyor" bildiriminden aç → **İncele** → not yaz → **Doğrula**. Durum "SÜRESİ YAKLAŞIYOR" olur; süre hatırlatması saatlik taramada (ve uygulama yeniden başlayınca) bildirim olarak gelir.
+3. `sahip@` ile zildeki "Yeni belge sürümü incelemeni bekliyor" bildiriminden aç → **Kurum içi incele** → not yaz → **İncelendi**. Durum "KURUM İÇİ İNCELENDİ" olur (resmî doğrulama değildir) ve "SÜRESİ YAKLAŞIYOR" uyarısı görünür.
+4. Belgeyi kurumla doğruladıysan **Kurum doğrulamasını kaydet** → yöntem + referans (ör. barkod no) → "DÜZENLEYEN KURUMDAN DOĞRULANDI".
+5. **Aç** / **İndir** ile dosyayı görebilirsin. İşletme geneli belgede **Şubelerle paylaşım** ile şube yöneticisine yalnız okuma izni ver.
 
 **Hizmet değerlendirmesi (3. teslim):**
 1. Yukarıdaki uzman hizmeti akışında teklif gelince ve rapor teslim edilince `sahip@` zile bildirim düşer.
@@ -138,7 +147,7 @@ Güncellemeden sonra kayıtların yerinde olduğunu `durum.cmd` ve uygulamadaki 
 
 3. teslim notu: güncellemeden önce yeni uygunsuzluk akışında "tamamlandı" denmiş aksiyonlar artık **"yapıldı" beyanı · doğrulama bekliyor** olarak görünür; bir yönetici doğrulayana kadar sonuç sayılmaz. Kayıt silinmez.
 
-**Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs` ve `e2e/yerel-demo-yeni.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
+**Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs`, `e2e/yerel-demo-yeni.cjs` ve `e2e/yerel-demo-tek-yonetici.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
 
 ## 7. Nasıl çalışıyor
 

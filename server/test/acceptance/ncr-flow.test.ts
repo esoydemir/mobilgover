@@ -172,7 +172,8 @@ describe('actions, deadlines and notifications', () => {
     expect(d.flow.blockers.join(' ')).toContain('Kök neden');
     expect((await manager().post(`${N}/causes`, { stage: 'verified', categories: ['equipment', 'process'], notes: 'Conta aşınmış; açılış kontrolünde kapı yoktu.' })).status).toBe(201);
     expect((await staff().post(`${N}/steps`, { step: 'effectiveness_check', notes: 'İki gün boyunca kapı kapalı, ölçümler 3 °C.' })).status).toBe(201);
-    expect((await notes(demo.users.manager.id, 'ncr_verification_requested')).length).toBe(1);
+    // The manager did this round's corrective action, so is not asked to verify it; the owner is.
+    expect((await notes(demo.users.manager.id, 'ncr_verification_requested')).length).toBe(0);
     expect((await notes(demo.users.owner.id, 'ncr_verification_requested')).length).toBe(1);
   });
 });

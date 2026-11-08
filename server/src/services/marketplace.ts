@@ -3,7 +3,7 @@ import type { Tx } from '../db/pool';
 import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
-import { notify, siteManagers } from './notifications';
+import { notify, notifyUser, siteManagers } from './notifications';
 
 /*
  * Professional network and service marketplace.
@@ -192,6 +192,15 @@ export async function createRequest(tx: Tx, p: Principal, companyId: string, b: 
     [companyId, b.siteId, b.categoryCode, b.title, b.description, b.ncrId ?? null, b.city, p.userId, !!b.shareNcrSummary]);
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'service.requested', entityType: 'service_request', entityId: r.rows[0]!.id,
     payload: { category: b.categoryCode, ncrId: b.ncrId ?? null, sharedWithProviders: sharedFields(!!b.shareNcrSummary) } });
+  // Providers approved for this category hear about it (no business name: it is revealed only on award).
+  const pros = (await tx.query<{ user_id: string }>(`SELECT DISTINCT pp.user_id FROM service_authorizations a JOIN professional_profiles pp ON pp.id = a.profile_id
+     WHERE a.category_code = $1 AND pp.status = 'active' AND ${LIVE_AUTH('a', 2)}`, [b.categoryCode, today()])).rows;
+  const cat = (await tx.query<{ name: string }>(`SELECT name FROM service_categories WHERE code = $1`, [b.categoryCode])).rows[0]!.name;
+  for (const pr of pros) {
+    if (pr.user_id === p.userId) continue;
+    await notifyUser(tx, { companyId, siteId: null, userId: pr.user_id, kind: 'provider_new_request', entityType: 'pro_request', entityId: r.rows[0]!.id,
+      dedupeKey: `provider_new_request:${r.rows[0]!.id}`, title: 'Kategorinde yeni hizmet talebi', body: `${cat} · ${b.title} · ${b.city}` });
+  }
   return { id: r.rows[0]!.id };
 }
 
@@ -238,6 +247,16 @@ export async function acceptQuote(tx: Tx, p: Principal, companyId: string, quote
     `INSERT INTO service_jobs (request_id, quote_id, company_id, provider_profile_id, checkin_code) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
     [q.request_id, quoteId, companyId, q.provider_profile_id, code])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'service.quote_accepted', entityType: 'service_job', entityId: job.id, payload: { quoteId, priceNet: q.price_net, payment: 'not_in_scope' } });
+  const req = (await tx.query<{ title: string }>(`SELECT title FROM service_requests WHERE id = $1`, [q.request_id])).rows[0]!;
+  const winner = (await tx.query<{ user_id: string }>(`SELECT user_id FROM professional_profiles WHERE id = $1`, [q.provider_profile_id])).rows[0]!.user_id;
+  await notifyUser(tx, { companyId, siteId: null, userId: winner, kind: 'quote_accepted', entityType: 'pro_job', entityId: job.id,
+    dedupeKey: `quote_accepted:${quoteId}`, title: 'Teklifin kabul edildi', body: `${req.title} · işletme ve şube bilgisi iş ekranında. Ödeme uygulama dışında.` });
+  const losers = (await tx.query<{ id: string; user_id: string }>(`SELECT q.id, pp.user_id FROM quotes q JOIN professional_profiles pp ON pp.id = q.provider_profile_id
+     WHERE q.request_id = $1 AND q.id <> $2 AND q.status = 'rejected'`, [q.request_id, quoteId])).rows;
+  for (const l of losers) {
+    await notifyUser(tx, { companyId, siteId: null, userId: l.user_id, kind: 'quote_not_selected', entityType: 'pro_request', entityId: q.request_id,
+      dedupeKey: `quote_not_selected:${l.id}`, title: 'Teklifin seçilmedi', body: `${req.title} · işletme başka bir teklifi kabul etti.` });
+  }
   return { jobId: job.id, checkinCode: code, payment: 'Ödeme bu aşamada uygulama dışında yapılır; GoverHub ödeme almaz.' };
 }
 
@@ -252,6 +271,9 @@ export async function acceptJob(tx: Tx, p: Principal, companyId: string, jobId: 
   if (b.accept) await tx.query(`UPDATE service_requests SET status = 'completed' WHERE id = $1`, [j.request_id]);
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: b.accept ? 'service.accepted' : 'service.disputed', entityType: 'service_job', entityId: jobId,
     payload: { ncrId: j.ncr_id, note: b.note } });
+  const proUser = (await tx.query<{ user_id: string }>(`SELECT user_id FROM professional_profiles WHERE id = $1`, [j.provider_profile_id])).rows[0]!.user_id;
+  await notifyUser(tx, { companyId, siteId: null, userId: proUser, kind: b.accept ? 'job_accepted' : 'job_disputed', entityType: 'pro_job', entityId: jobId,
+    dedupeKey: `job_result:${jobId}`, title: b.accept ? 'Teslimin kabul edildi' : 'Teslimine itiraz edildi', body: b.note.trim() });
   return { status: b.accept ? 'accepted' : 'disputed', linkedNonconformity: j.ncr_id,
     reminder: j.ncr_id ? 'Uygunsuzluk kendiliğinden kapanmaz; düzeltme ve doğrulama adımlarını tamamla.' : null };
 }

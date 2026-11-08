@@ -11,7 +11,7 @@ export type Action =
   | 'obligation.read' | 'obligation.override'
   | 'equipment.read' | 'equipment.write'
   | 'task.read' | 'task.execute' | 'task.generate' | 'task.assign'
-  | 'ncr.read' | 'ncr.act' | 'ncr.verify_close' | 'ncr.report' | 'ncr.manage' | 'obligation.review'
+  | 'ncr.read' | 'ncr.act' | 'ncr.verify_close' | 'ncr.report' | 'ncr.manage' | 'ncr.verify' | 'obligation.review'
   | 'indicators.read' | 'audit.export' | 'audit.verify'
   | 'members.manage' | 'service.request'
   | 'document.read' | 'document.write' | 'document.review';
@@ -19,13 +19,13 @@ export type Action =
 /** What each company role may do. `site` = only within the member's site when the membership is site-scoped. */
 export const ROLE_MATRIX: Record<CompanyRole, Action[]> = {
   owner: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
+    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'ncr.verify', 'indicators.read', 'audit.export', 'audit.verify',
     'members.manage', 'service.request', 'document.read', 'document.write', 'document.review'],
   hq_manager: ['profile.read', 'profile.write', 'obligation.read', 'obligation.override', 'obligation.review', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'audit.verify',
+    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'ncr.verify', 'indicators.read', 'audit.export', 'audit.verify',
     'members.manage', 'service.request', 'document.read', 'document.write', 'document.review'],
   site_manager: ['profile.read', 'obligation.read', 'ncr.report', 'ncr.manage', 'equipment.read', 'equipment.write',
-    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'indicators.read', 'audit.export', 'service.request',
+    'task.read', 'task.execute', 'task.generate', 'task.assign', 'ncr.read', 'ncr.act', 'ncr.verify_close', 'ncr.verify', 'indicators.read', 'audit.export', 'service.request',
     'document.read', 'document.write', 'document.review'],
   // Staff see and do their own assigned work, including emergency instructions; no scores, penalties or other people's data.
   // Staff may report a problem they see (ncr.report); they then work on what is assigned to them.
@@ -49,6 +49,11 @@ export const GRANT_SCOPES: Record<string, Action[]> = {
   audit: ['audit.export', 'audit.verify'],
   // An outside expert may read the document vault; reviewing a document stays with the business.
   documents: ['document.read'],
+  // An outside verifier invited by the business: may read cases and verify claimed results and
+  // closures, nothing else (no actions, no assignment, no other data). Can be limited to one site.
+  ncr_verify: ['ncr.read', 'ncr.verify', 'ncr.verify_close'],
+  // Optional for an outside verifier: review uploaded documents (internal review; not an issuer check by the app).
+  documents_review: ['document.read', 'document.review'],
 };
 
 export type Principal = {
@@ -61,7 +66,7 @@ export type Principal = {
   mfaEnabled?: boolean;
   platformRoles: PlatformRole[];
   memberships: { companyId: string; siteId: string | null; role: CompanyRole }[];
-  grants: { companyId: string; kind: GrantKind; scopes: string[] }[];
+  grants: { companyId: string; kind: GrantKind; scopes: string[]; siteId?: string | null }[];
 };
 
 export type Target = { companyId: string; siteId?: string | null; assigneeId?: string | null };
@@ -79,6 +84,8 @@ export function can(p: Principal, action: Action, t: Target): Permit {
   }
   for (const g of p.grants) {
     if (g.companyId !== t.companyId) continue;
+    // A site-limited grant covers that site only (never company-wide records).
+    if (g.siteId && g.siteId !== t.siteId) continue;
     if (g.scopes.some(s => GRANT_SCOPES[s]?.includes(action))) return { ok: true, via: 'grant', siteScope: null };
   }
   return { ok: false };

@@ -36,6 +36,31 @@ export async function notify(tx: Tx, n: NotificationInput): Promise<number> {
   return created;
 }
 
+/**
+ * A personal notification for someone outside the business (a service provider): no membership
+ * check, still one per dedupe key. The company id keeps the row inside that business's data; the
+ * text must not name the business before a quote is accepted.
+ */
+export async function notifyUser(tx: Tx, n: Omit<NotificationInput, 'userIds' | 'except'> & { userId: string }): Promise<number> {
+  const r = await tx.query(
+    `INSERT INTO notifications (company_id, site_id, user_id, kind, entity_type, entity_id, title, body, dedupe_key)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (user_id, dedupe_key) DO NOTHING`,
+    [n.companyId, n.siteId, n.userId, n.kind, n.entityType, n.entityId, n.title, n.body, n.dedupeKey]);
+  return r.rowCount ?? 0;
+}
+
+/** Provider inbox (all businesses); only provider-side items, never the business name before award. */
+export async function providerNotifications(tx: Tx, p: Principal, limit = 50) {
+  const items = (await tx.query(`SELECT id, kind, entity_type, entity_id, title, body, created_at, read_at FROM notifications
+     WHERE user_id = $1 AND entity_type IN ('pro_request','pro_job') ORDER BY created_at DESC LIMIT $2`, [p.userId, limit])).rows;
+  return { items, unread: items.filter(i => !i.read_at).length };
+}
+export async function markProviderRead(tx: Tx, p: Principal, ids: string[] | 'all') {
+  const r = await tx.query(`UPDATE notifications SET read_at = now() WHERE user_id = $1 AND entity_type IN ('pro_request','pro_job') AND read_at IS NULL
+     AND ($2::uuid[] IS NULL OR id = ANY($2))`, [p.userId, ids === 'all' ? null : ids]);
+  return { marked: r.rowCount ?? 0 };
+}
+
 /** Active people who manage work at a site: owner and HQ manager (company-wide) and that site's manager. */
 export async function siteManagers(tx: Tx, companyId: string, siteId: string): Promise<string[]> {
   return (await tx.query<{ user_id: string }>(
@@ -62,6 +87,10 @@ export async function listNotifications(tx: Tx, p: Principal, companyId: string,
       return can(p, 'ncr.read', { companyId, siteId: r.ncr_site, assigneeId: involved ? p.userId : r.ncr_owner }).ok;
     }
     if (r.entity_type === 'obligation') return can(p, 'obligation.read', { companyId, siteId: r.site_id }).ok;
+    if (r.entity_type === 'pro_request' || r.entity_type === 'pro_job') return false; // provider inbox only
+    if (r.entity_type === 'access_grant') return can(p, 'ncr.read', { companyId, siteId: r.site_id }).ok;
+    if (r.entity_type === 'task') return can(p, 'task.read', { companyId, siteId: r.site_id, assigneeId: p.userId }).ok;
+    if (r.entity_type === 'site_tasks') return can(p, 'task.assign', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'service_request') return can(p, 'service.request', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'document') return can(p, 'document.read', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'membership') return can(p, 'ncr.manage', { companyId, siteId: r.site_id }).ok || can(p, 'members.manage', { companyId }).ok;
@@ -116,6 +145,24 @@ export async function scanDeadlines(db: Db, now = new Date()) {
           dedupeKey: `${overdue ? 'action_overdue' : 'action_due_soon'}:${a.id}:${due.toISOString()}`,
           title: overdue ? 'Aksiyon termini geçti' : 'Aksiyon termini yaklaşıyor', body: `${a.description} · termin ${fmt(due)}`,
         });
+      }
+      // Overdue checks: the person responsible is told once per task (recent ones only, so an old
+      // backlog does not flood the inbox); the site's managers get one summary per site per day.
+      const tasks = (await tx.query(
+        `SELECT t.id, t.site_id, t.assignee_id, t.due_at, tt.title FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
+          WHERE t.company_id = $1 AND t.status = 'open' AND t.due_at < $2::timestamptz AND t.due_at > $2::timestamptz - interval '48 hours'`,
+        [companyId, now.toISOString()])).rows;
+      for (const t of tasks) {
+        if (!t.assignee_id) continue;
+        c += await notify(tx, { companyId, siteId: t.site_id, userIds: [t.assignee_id], kind: 'task_overdue', entityType: 'task', entityId: t.id,
+          dedupeKey: `task_overdue:${t.id}`, title: 'Kontrolün gecikti', body: `${t.title} · son saat ${fmt(new Date(t.due_at))}` });
+      }
+      const day = now.toISOString().slice(0, 10);
+      const perSite = new Map<string, number>();
+      for (const t of tasks) perSite.set(t.site_id, (perSite.get(t.site_id) ?? 0) + 1);
+      for (const [siteId, count] of perSite) {
+        c += await notify(tx, { companyId, siteId, userIds: await siteManagers(tx, companyId, siteId), kind: 'tasks_overdue', entityType: 'site_tasks', entityId: siteId,
+          dedupeKey: `tasks_overdue:${siteId}:${day}`, title: 'Geciken kontroller var', body: `${count} kontrol son saatini geçti ve hâlâ açık.` });
       }
       return c;
     });

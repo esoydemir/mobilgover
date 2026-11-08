@@ -186,6 +186,7 @@ function MyProfessionalArea() {
         );
       })}
 
+      {me.data ? <ProNotifications onChange={() => inbox.reload()} /> : null}
       <SectionLabel>AÇIK TALEPLER (ONAYLI KATEGORİLERİNDE)</SectionLabel>
       {inbox.data?.requests.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Şu an açık talep yok. Talepler yalnızca onaylı olduğun kategorilerde görünür; işletme adı teklifin kabul edilince görünür.</Text> : null}
       {(inbox.data?.requests ?? []).map(r => <RequestCard key={r.id} r={r} onDone={() => inbox.reload()} />)}
@@ -262,6 +263,36 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
       ) : null}
       {j.business_note ? <Text style={type(12, 400, { color: C.t2 })}>İşletmenin notu: {j.business_note}</Text> : null}
       {error ? <ErrorBox message={error} /> : null}
+    </Card>
+  );
+}
+
+type ProNote = { id: string; kind: string; title: string; body: string; created_at: string; read_at: string | null };
+const PRO_TONE: Record<string, string> = { provider_new_request: C.info, quote_accepted: C.lime, quote_not_selected: C.t3, job_accepted: C.lime, job_disputed: C.crit };
+
+/** Provider-side notifications: new requests in approved categories, quote accepted / not selected, delivery result. */
+function ProNotifications({ onChange }: { onChange: () => void }) {
+  const { call } = useSession();
+  const q = useApi<{ items: ProNote[]; unread: number }>('/pro/notifications');
+  if (!q.data) return null;
+  const readAll = async () => { await call('POST', '/pro/notifications/read', { ids: 'all' }); await q.reload(); onChange(); };
+  return (
+    <Card style={{ gap: 9 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Eyebrow>BİLDİRİMLER{q.data.unread ? ` · ${q.data.unread} OKUNMAMIŞ` : ''}</Eyebrow>
+        <View style={{ flex: 1 }} />
+        {q.data.unread ? <GhostButton testID="pro-notes-read" label="Okundu say" height={30} size={11} onPress={readAll} /> : null}
+      </View>
+      {q.data.items.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Henüz bildirim yok. Yeni talep, teklif kabulü ve teslim sonucu burada görünür.</Text> : null}
+      {q.data.items.slice(0, 8).map(n => (
+        <View key={n.id} testID={`pro-note-${n.kind}`} style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 999, marginTop: 6, backgroundColor: n.read_at ? 'transparent' : (PRO_TONE[n.kind] ?? C.t2) }} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={type(13, n.read_at ? 500 : 700, { color: n.read_at ? C.t2 : C.t1 })}>{n.title}</Text>
+            <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{n.body} · {fmtDateTime(n.created_at)}</Text>
+          </View>
+        </View>
+      ))}
     </Card>
   );
 }

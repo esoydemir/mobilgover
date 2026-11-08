@@ -256,6 +256,7 @@ export function ActionsCard({ n, base, reload, me, formKind, setFormKind }: {
   return (
     <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <Eyebrow>AKSİYONLAR</Eyebrow>
+      <Text testID="actions-verification-policy" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{n.verificationPolicy}</Text>
       {n.actions.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz aksiyon yok. {n.depth === 'capa' ? 'Tam CAPA: en az bir düzeltme ve bir düzeltici faaliyet gerekir.' : 'En az bir düzeltme gerekir.'}</Text> : null}
       {rounds.map(r => (
         <View key={r} style={{ gap: 8 }}>
@@ -298,8 +299,8 @@ const EV_LABEL: Record<string, string> = { photo: 'fotoğraf', document: 'belge'
 function claimState(a: NcrDetail['actions'][number]): { label: string; color: string } {
   if (a.status === 'cancelled') return { label: 'İPTAL', color: C.t3 };
   if (a.status === 'done') {
-    if (a.verification_status === 'verified') return { label: 'DOĞRULANDI', color: C.lime };
-    if (a.verification_status === 'legacy') return { label: 'TAMAMLANDI', color: C.lime };
+    if (a.verification_status === 'verified') return { label: a.verification_mode === 'self' ? 'DOĞRULANDI · ÖZ DOĞRULAMA' : a.verified_via === 'grant' ? 'DOĞRULANDI · DIŞ DOĞRULAYICI' : 'DOĞRULANDI', color: a.verification_mode === 'self' ? C.warn : C.lime };
+    if (a.verification_status === 'legacy') return a.legacy_unverified ? { label: 'ESKİ KAYIT · DOĞRULANMADI', color: C.warn } : { label: 'TAMAMLANDI (ESKİ KAYIT)', color: C.lime };
     return { label: 'YAPILDI BEYANI · DOĞRULAMA BEKLİYOR', color: C.warn };
   }
   if (a.verification_status === 'rejected') return { label: 'BEYAN REDDEDİLDİ · AÇIK', color: C.crit };
@@ -310,8 +311,12 @@ function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]
   const [mode, setMode] = useState<'done' | 'cancel' | 'reassign' | 'verify' | null>(null);
   const [notes, setNotes] = useState('');
   const [owner, setOwner] = useState<string | null>(null);
+  const [doer, setDoer] = useState<string | null>(null);
+  const [selfConfirm, setSelfConfirm] = useState(false);
   const { token, company } = useSession();
-  const { busy, error, run, post, setError } = useRun(() => { setMode(null); setNotes(''); reload(); });
+  const { busy, error, run, post, setError } = useRun(() => { setMode(null); setNotes(''); setDoer(null); setSelfConfirm(false); reload(); });
+  const verifySelf = mode === 'verify' && !a.can_verify && a.can_self_verify;
+  const minNotes = verifySelf ? 20 : 5;
   const editable = a.status === 'open' && n.status === 'open';
   const st = claimState(a);
   const stored = a.evidence.filter(e => e.status === 'stored');
@@ -340,7 +345,13 @@ function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]
         {a.owner_name ?? 'Sorumlu yok'}{a.owner_inactive ? ' (pasif)' : ''}{a.due_at ? ` · termin ${fmtDateTime(a.due_at)}` : ''}
         {a.evidence_required !== 'none' ? ` · ${EV_LABEL[a.evidence_required]} kanıtı gerekli` : ''}
       </Text>
-      {a.result_notes ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{a.status === 'cancelled' ? 'İptal gerekçesi: ' : a.status === 'done' ? 'Beyan: ' : 'Önceki beyan: '}{a.result_notes}{a.done_by_name ? ` · ${a.done_by_name}` : ''}</Text> : null}
+      {a.result_notes ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{a.status === 'cancelled' ? 'İptal gerekçesi: ' : a.status === 'done' ? 'Beyan: ' : 'Önceki beyan: '}{a.result_notes}</Text> : null}
+      {a.status === 'done' ? (
+        <Text testID={`action-roles-${a.id}`} style={type(11, 400, { color: C.t3, lh: 1.5 })}>
+          Sorumlu: {a.owner_name ?? '—'} · İşi yapan: {a.performed_by_name ?? a.done_by_name ?? '—'} · Beyan eden: {a.done_by_name ?? '—'}
+          {a.evidence.length ? ` · Kanıt: ${a.evidence.length} dosya` : ''}{a.verified_by_name && a.verification_status === 'verified' ? ` · Doğrulayan: ${a.verified_by_name}` : ''}
+        </Text>
+      ) : null}
       {a.verification_notes && a.verification_status !== 'declared' ? (
         <Text style={type(12, 400, { color: a.verification_status === 'rejected' ? C.crit : C.t2, lh: 1.45 })}>
           {a.verification_status === 'rejected' ? 'Reddedildi: ' : 'Doğrulama: '}{a.verification_notes}{a.verified_by_name ? ` · ${a.verified_by_name}` : ''}
@@ -354,36 +365,55 @@ function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]
         </View>
       ) : null}
       {a.verify_blocked_reason ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{a.verify_blocked_reason}</Text> : null}
-      {mode === null && (editable || a.can_verify) ? (
+      {a.verify_blocked_reason && !a.can_self_verify && n.permissions.inviteVerifier ? (
+        <GhostButton testID={`action-invite-verifier-${a.id}`} label="Dış doğrulayıcı davet et" height={34} size={11.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push('/verifiers')} />
+      ) : null}
+      {mode === null && (editable || a.can_verify || a.can_self_verify) ? (
         <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap', marginTop: 4 }}>
           {editable && a.can_add_evidence && a.evidence_required !== 'none' ? <GhostButton testID={`action-evidence-add-${a.id}`} label={busy ? 'Yükleniyor…' : a.evidence_required === 'photo' ? 'Fotoğraf ekle' : 'Belge ekle'} height={34} size={11.5} disabled={busy} onPress={addEvidence} /> : null}
           {editable && (a.owner_id === me || n.permissions.manage) ? <GhostButton testID={`action-done-open-${a.id}`} label='"Yapıldı" bildir' height={34} size={11.5} disabled={needsEvidence} onPress={() => setMode('done')} /> : null}
           {editable && (n.permissions.manage || a.created_by === me) ? <GhostButton label="İptal et" height={34} size={11.5} color={C.crit} border={tint.crit(0.3)} onPress={() => setMode('cancel')} /> : null}
           {editable && n.permissions.manage ? <GhostButton label="Yeniden ata" height={34} size={11.5} onPress={() => setMode('reassign')} /> : null}
-          {a.can_verify ? <GhostButton testID={`action-verify-open-${a.id}`} label="Sonucu doğrula" height={34} size={11.5} color={C.lime} border={tint.lime(0.35)} onPress={() => setMode('verify')} /> : null}
+          {a.can_verify ? <GhostButton testID={`action-verify-open-${a.id}`} label={a.legacy_unverified ? 'Eski kaydı doğrula' : 'Sonucu doğrula'} height={34} size={11.5} color={C.lime} border={tint.lime(0.35)} onPress={() => setMode('verify')} /> : null}
+          {!a.can_verify && a.can_self_verify ? <GhostButton testID={`action-self-verify-open-${a.id}`} label="Öz doğrulama yap" height={34} size={11.5} color={C.warn} border={tint.warn(0.35)} onPress={() => setMode('verify')} /> : null}
         </View>
       ) : null}
       {editable && needsEvidence && mode === null ? <Text style={type(11, 400, { color: C.t3 })}>"Yapıldı" bildirmek için önce {EV_LABEL[a.evidence_required]} kanıtını ekle.</Text> : null}
       {mode ? (
         <View style={{ gap: 8, marginTop: 4 }}>
           {mode === 'reassign' ? <PersonChips siteId={n.site_id} value={owner} onChange={setOwner} /> : (
-            <Field label={mode === 'done' ? 'Ne yapıldı' : mode === 'verify' ? 'Neyi kontrol ettin' : 'İptal gerekçesi'} testID={`action-notes-${a.id}`} value={notes} onChangeText={setNotes} multiline />
+            <Field label={mode === 'done' ? 'Ne yapıldı' : mode === 'verify' ? (verifySelf ? 'Öz doğrulama gerekçesi (en az 20 karakter: neye baktın, neden başkası doğrulamıyor)' : 'Neyi kontrol ettin') : 'İptal gerekçesi'}
+              testID={`action-notes-${a.id}`} value={notes} onChangeText={setNotes} multiline />
           )}
-          {mode === 'done' ? <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Bu bir beyandır; başka bir yetkili doğrulayana kadar akışta sonuç sayılmaz.</Text> : null}
+          {mode === 'done' && n.permissions.manage ? (
+            <>
+              <Text style={type(12, 600, { color: C.t2 })}>İşi kim yaptı? (boş: sen)</Text>
+              <PersonChips siteId={n.site_id} value={doer} onChange={setDoer} />
+            </>
+          ) : null}
+          {mode === 'done' ? <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Bu bir beyandır; doğrulanana kadar akışta sonuç sayılmaz. Sorumlu, işi yapan, beyan eden ve kanıt veren ayrı kaydedilir.</Text> : null}
+          {verifySelf ? (
+            <Tap testID={`action-self-confirm-${a.id}`} onPress={() => setSelfConfirm(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: selfConfirm ? C.warn : C.t3, backgroundColor: selfConfirm ? C.warn : 'transparent' }} />
+              <Text style={[type(12, 500, { lh: 1.4 }), { flex: 1 }]}>Bu işte payım var; bunu öz doğrulama olarak kaydet (etiketlenir, geçmişte görünür).</Text>
+            </Tap>
+          ) : null}
           {error ? <ErrorBox message={error} /> : null}
           {mode === 'verify' ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <PrimaryButton testID={`action-verify-ok-${a.id}`} label={busy ? 'Kaydediliyor…' : 'Doğrulandı'} glow={false} height={40} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5}
-                onPress={() => run(() => post(`${base}/actions/${a.id}`, { op: 'verify', result: 'accepted', notes: notes.trim() }), 'Aksiyon sonucu doğrulandı')} />
+              <PrimaryButton testID={`action-verify-ok-${a.id}`} label={busy ? 'Kaydediliyor…' : verifySelf ? 'Öz doğrulama ile onayla' : 'Doğrulandı'} glow={false} height={40} size={12.5} style={{ flex: 1 }}
+                disabled={busy || notes.trim().length < minNotes || (verifySelf && !selfConfirm)}
+                onPress={() => run(() => post(`${base}/actions/${a.id}`, { op: 'verify', result: 'accepted', notes: notes.trim(), selfVerify: verifySelf }),
+                  verifySelf ? 'Öz doğrulama kaydedildi' : 'Aksiyon sonucu doğrulandı', verifySelf ? 'Etiketli: öz doğrulama.' : undefined)} />
               <GhostButton testID={`action-verify-reject-${a.id}`} label="Reddet" height={40} size={12.5} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 10}
-                onPress={() => run(() => post(`${base}/actions/${a.id}`, { op: 'verify', result: 'rejected', notes: notes.trim() }), 'Beyan reddedildi', 'Aksiyon yeniden açık; sorumluya bildirim gitti.')} />
+                onPress={() => run(() => post(`${base}/actions/${a.id}`, { op: 'verify', result: 'rejected', notes: notes.trim(), selfVerify: verifySelf }), 'Beyan reddedildi', 'Aksiyon yeniden açık; sorumluya bildirim gitti.')} />
               <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
             </View>
           ) : (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <PrimaryButton testID={`action-confirm-${a.id}`} label={busy ? 'Kaydediliyor…' : mode === 'done' ? '"Yapıldı" bildir' : mode === 'cancel' ? 'İptal et' : 'Ata'} glow={false} height={40} size={12.5} style={{ flex: 1 }}
                 disabled={busy || (mode === 'reassign' ? !owner : notes.trim().length < 5)}
-                onPress={() => run(() => post(`${base}/actions/${a.id}`, mode === 'reassign' ? { op: 'reassign', ownerId: owner } : { op: mode, notes: notes.trim() }),
+                onPress={() => run(() => post(`${base}/actions/${a.id}`, mode === 'reassign' ? { op: 'reassign', ownerId: owner } : mode === 'done' ? { op: 'done', notes: notes.trim(), performedBy: doer } : { op: mode, notes: notes.trim() }),
                   mode === 'done' ? '"Yapıldı" bildirildi' : mode === 'cancel' ? 'Aksiyon iptal edildi' : 'Aksiyon yeniden atandı', mode === 'done' ? 'Yetkili doğrulayınca sonuç sayılır.' : undefined)} />
               <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
             </View>
@@ -398,12 +428,15 @@ function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]
 export function VerificationCard({ n, base, reload }: { n: NcrDetail; base: string; reload: () => void }) {
   const [notes, setNotes] = useState('');
   const [reason, setReason] = useState('');
-  const { busy, error, run, post } = useRun(() => { setNotes(''); setReason(''); reload(); });
+  const [selfConfirm, setSelfConfirm] = useState(false);
+  const { busy, error, run, post } = useRun(() => { setNotes(''); setReason(''); setSelfConfirm(false); reload(); });
+  const last = [...n.verifications].reverse().find(v => v.result === 'effective');
   if (n.status === 'closed') {
     return (
       <Card border={tint.lime(0.3)} radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
         <Eyebrow color={C.lime}>KAPALI</Eyebrow>
-        <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>{n.closed_at ? `Doğrulanıp kapatıldı · ${fmtDateTime(n.closed_at)}` : 'Kapatıldı'}</Text>
+        <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>{n.closed_at ? `Doğrulanıp kapatıldı · ${fmtDateTime(n.closed_at)}` : 'Kapatıldı'}
+          {last ? ` · ${last.verified_by_name}${last.verification_mode === 'self' ? ' · ÖZ DOĞRULAMA' : last.verified_via === 'grant' ? ' · dış doğrulayıcı' : ''}` : ''}</Text>
         {n.permissions.reopen ? (
           <>
             <Field label="Yeniden açma gerekçesi" testID="ncr-reopen-reason" value={reason} onChangeText={setReason} multiline placeholder="ör. Sabah ölçümü yine limit dışı" />
@@ -420,13 +453,24 @@ export function VerificationCard({ n, base, reload }: { n: NcrDetail; base: stri
     <Card border={tint.lime(0.3)} radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow color={C.lime}>DOĞRULAMA</Eyebrow>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Etkinlik kontrolü kaydedildi. Yetkili, önlemin işe yarayıp yaramadığını doğrular. Etkili değilse kayıt açık kalır ve yeni bir tur başlar.</Text>
+      <Text testID="ncr-verification-policy" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{n.verificationPolicy}</Text>
       {n.permissions.verifyBlockedReason ? <Callout tone="warn" body={n.permissions.verifyBlockedReason} /> : null}
-      {n.permissions.verify ? (
+      {!n.permissions.verify && !n.permissions.selfVerify && n.permissions.verifyBlockedReason && n.permissions.inviteVerifier ? (
+        <GhostButton testID="ncr-invite-verifier" label="Dış doğrulayıcı davet et" height={40} size={12.5} style={{ alignSelf: 'flex-start' }} onPress={() => router.push('/verifiers')} />
+      ) : null}
+      {n.permissions.verify || n.permissions.selfVerify ? (
         <>
-          <Field label="Neyi kontrol ettin (ölçüm, belge, gözlem)" testID="ncr-verify-notes" value={notes} onChangeText={setNotes} multiline />
+          <Field label={n.permissions.selfVerify ? 'Öz doğrulama gerekçesi (en az 20 karakter)' : 'Neyi kontrol ettin (ölçüm, belge, gözlem)'} testID="ncr-verify-notes" value={notes} onChangeText={setNotes} multiline />
+          {n.permissions.selfVerify ? (
+            <Tap testID="ncr-self-confirm" onPress={() => setSelfConfirm(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: selfConfirm ? C.warn : C.t3, backgroundColor: selfConfirm ? C.warn : 'transparent' }} />
+              <Text style={[type(12, 500, { lh: 1.4 }), { flex: 1 }]}>Bu turun düzeltmesinde payım var; kapanışı öz doğrulama olarak kaydet.</Text>
+            </Tap>
+          ) : null}
           {error ? <ErrorBox message={error} /> : null}
-          <PrimaryButton testID="ncr-verify-ok" label={busy ? 'Kaydediliyor…' : 'Etkili · doğrula ve kapat'} height={46} size={13.5} disabled={busy || notes.trim().length < 5}
-            onPress={() => run(() => post(base + '/verify', { result: 'effective', notes: notes.trim() }), 'Doğrulandı ve kapatıldı')} />
+          <PrimaryButton testID="ncr-verify-ok" label={busy ? 'Kaydediliyor…' : n.permissions.selfVerify ? 'Etkili · öz doğrulama ile kapat' : 'Etkili · doğrula ve kapat'} height={46} size={13.5}
+            disabled={busy || notes.trim().length < (n.permissions.selfVerify ? 20 : 5) || (n.permissions.selfVerify && !selfConfirm)}
+            onPress={() => run(() => post(base + '/verify', { result: 'effective', notes: notes.trim(), selfVerify: n.permissions.selfVerify }), 'Doğrulandı ve kapatıldı', n.permissions.selfVerify ? 'Etiketli: öz doğrulama.' : undefined)} />
           <GhostButton testID="ncr-verify-fail" label="Etkili değil · açık kalsın" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 10}
             onPress={() => run(() => post(base + '/verify', { result: 'not_effective', notes: notes.trim() }), 'Kayıt açık kaldı', 'Sorumluya bildirildi; yeni aksiyon gerekiyor.')} />
         </>

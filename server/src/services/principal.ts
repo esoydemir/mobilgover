@@ -27,12 +27,12 @@ export async function loadPrincipal(db: Db, token: string): Promise<Principal | 
     const roles = await tx.query(`SELECT role FROM platform_roles WHERE user_id = $1`, [userId]);
     // Only active memberships give access. Suspension takes effect on the very next request.
     const members = await tx.query(`SELECT company_id, site_id, role FROM memberships WHERE user_id = $1 AND status = 'active'`, [userId]);
-    const grants = await tx.query(`SELECT company_id, kind, scopes FROM access_grants WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`, [userId]);
+    const grants = await tx.query(`SELECT company_id, kind, scopes, site_id FROM access_grants WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()`, [userId]);
     return {
       userId, sessionId: row.session_id, email: row.email, displayName: row.display_name, mfaSatisfied: row.mfa_satisfied, mfaEnabled: !!row.mfa_enabled,
       platformRoles: roles.rows.map(r => r.role),
       memberships: members.rows.map(m => ({ companyId: m.company_id, siteId: m.site_id, role: m.role })),
-      grants: grants.rows.map(g => ({ companyId: g.company_id, kind: g.kind, scopes: g.scopes })),
+      grants: grants.rows.map(g => ({ companyId: g.company_id, kind: g.kind, scopes: g.scopes, siteId: g.site_id })),
     };
   });
 }

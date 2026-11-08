@@ -67,12 +67,12 @@ describe('document vault', () => {
     expect((await manager().get(`${C()}/documents/${calib}`)).body.status).toBe('file_pending');
     expect((await manager().put(`${C()}/evidence/${v1.evidenceId}/content`, f, 'application/pdf')).status).toBe(200);
     const d = (await owner().get(`${C()}/documents/${calib}`)).body;
-    expect(d).toMatchObject({ status: 'awaiting_review', validUntil: null, currentVersionId: null });
+    expect(d).toMatchObject({ status: 'unreviewed', validUntil: null, currentVersionId: null });
     expect(d.versions[0]).toMatchObject({ version: 1, review_status: 'unreviewed', file_status: 'stored', canReview: true });
     expect((await notes(demo.users.owner.id, 'doc_review_needed')).length).toBe(1);
     expect((await notes(demo.users.manager.id, 'doc_review_needed')).length).toBe(0); // the uploader
     const list = (await owner().get(`${C()}/documents`)).body as any[];
-    expect(list.find(x => x.id === calib)).toMatchObject({ status: 'awaiting_review', pendingReview: true });
+    expect(list.find(x => x.id === calib)).toMatchObject({ status: 'unreviewed', pendingReview: true });
   });
 
   it('the uploader cannot review their own upload; a review needs notes; the reviewer confirms the dates', async () => {
@@ -84,7 +84,7 @@ describe('document vault', () => {
     expect((await owner().post(R, { decision: 'verified', notes: 'Belgedeki tarih ve cihaz seri no kayıtla aynı.' })).status).toBe(200);
     expect((await owner().post(R, { decision: 'verified', notes: 'İkinci kez.' })).body.error.code).toBe('ALREADY_REVIEWED');
     const d = (await owner().get(`${C()}/documents/${calib}`)).body;
-    expect(d).toMatchObject({ status: 'expiring', validUntil: day(10), currentVersionId: v1.versionId });
+    expect(d).toMatchObject({ status: 'internally_reviewed', expiring: true, validUntil: day(10), currentVersionId: v1.versionId });
     expect((await notes(demo.users.manager.id, 'doc_verified')).length).toBe(1);
   });
 
@@ -106,17 +106,17 @@ describe('document vault', () => {
     const v2 = (await manager().post(`${C()}/documents/${calib}/versions`, { validFrom: day(0), validUntil: day(365), file: fileOf(f2) })).body;
     await manager().put(`${C()}/evidence/${v2.evidenceId}/content`, f2, 'application/pdf');
     let d = (await owner().get(`${C()}/documents/${calib}`)).body;
-    expect(d).toMatchObject({ status: 'expiring', currentVersionId: v1.versionId }); // still the old one
+    expect(d).toMatchObject({ status: 'internally_reviewed', expiring: true, currentVersionId: v1.versionId }); // still the old one
     // The reviewer reads a different end date on the document and corrects it.
     expect((await owner().post(`${C()}/documents/${calib}/versions/${v2.versionId}/review`, { decision: 'verified', notes: 'Bitiş tarihi belgede farklı yazıyor, düzelttim.', validUntil: day(200) })).status).toBe(200);
     d = (await owner().get(`${C()}/documents/${calib}`)).body;
-    expect(d).toMatchObject({ status: 'valid', currentVersionId: v2.versionId, validUntil: day(200) });
+    expect(d).toMatchObject({ status: 'internally_reviewed', expiring: false, currentVersionId: v2.versionId, validUntil: day(200) });
     const f3 = pdf('yanlis-belge');
     const v3 = (await manager().post(`${C()}/documents/${calib}/versions`, { validFrom: null, validUntil: day(900), file: fileOf(f3) })).body;
     await manager().put(`${C()}/evidence/${v3.evidenceId}/content`, f3, 'application/pdf');
     expect((await owner().post(`${C()}/documents/${calib}/versions/${v3.versionId}/review`, { decision: 'rejected', notes: 'Bu belge başka bir cihaza ait.' })).status).toBe(200);
     d = (await owner().get(`${C()}/documents/${calib}`)).body;
-    expect(d).toMatchObject({ status: 'valid', currentVersionId: v2.versionId });
+    expect(d).toMatchObject({ status: 'internally_reviewed', currentVersionId: v2.versionId });
     expect(d.versions.map((v: any) => v.review_status)).toEqual(['rejected', 'verified', 'verified']);
     const audit = (await env.ownerDb.query(`SELECT event_type FROM audit_events WHERE entity_type = 'document' AND entity_id = $1 ORDER BY seq`, [calib])).rows.map(r => r.event_type);
     expect(audit).toEqual(['document.created', 'document.version_added', 'document.version_verified', 'document.version_added', 'document.version_verified', 'document.version_added', 'document.version_rejected']);
@@ -130,7 +130,7 @@ describe('document vault', () => {
     const v2 = (await owner().post(`${C()}/documents/${license}/versions`, { validFrom: day(-1000), validUntil: null, file: fileOf(f) })).body;
     expect((await owner().put(`${C()}/evidence/${v2.evidenceId}/content`, f, 'application/pdf')).status).toBe(200);
     expect((await manager().post(`${C()}/documents/${license}/versions/${v2.versionId}/review`, { decision: 'verified', notes: 'Ruhsat aslı görüldü, süresiz.' })).status).toBe(200);
-    expect((await owner().get(`${C()}/documents/${license}`)).body).toMatchObject({ status: 'valid', validUntil: null });
+    expect((await owner().get(`${C()}/documents/${license}`)).body).toMatchObject({ status: 'internally_reviewed', validUntil: null });
     const get = (token: string) => env.app.inject({ method: 'GET', url: `${C()}/evidence/${v2.evidenceId}/content`, headers: { authorization: `Bearer ${token}` } });
     expect((await get(demo.users.manager.token)).statusCode).toBe(200);
     expect((await get(otherManager.token)).statusCode).toBe(404);

@@ -3,6 +3,7 @@ import { AppError, conflict, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { contentMatchesMime, sha256Hex, type EvidenceStore } from '../storage/local';
 import { appendAudit } from './audit';
+import { canReadDoc } from './documents';
 
 /**
  * Second half of an upload. The bytes are hashed on the server; only a match
@@ -90,7 +91,10 @@ export async function readContent(db: Db, store: EvidenceStore, p: Principal, co
     else if (r.ncr_id) {
       const holds = (await tx.query(`SELECT 1 FROM ncr_actions WHERE ncr_id = $1 AND owner_id = $2 LIMIT 1`, [r.ncr_id, p.userId])).rowCount;
       ok = can(p, 'ncr.read', { companyId, siteId: r.ncr_site, assigneeId: r.ncr_owner === p.userId || holds ? p.userId : r.ncr_owner }).ok;
-    } else if (r.document_version_id) ok = can(p, 'document.read', { companyId, siteId: r.doc_site }).ok;
+    } else if (r.document_version_id) {
+      const d = (await tx.query(`SELECT d.id, d.site_id FROM documents d JOIN document_versions v ON v.document_id = d.id WHERE v.id = $1`, [r.document_version_id])).rows[0];
+      ok = !!d && await canReadDoc(tx, p, companyId, d);
+    }
     if (!ok) throw notFound('Kanıt');
     return r;
   });

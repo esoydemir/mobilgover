@@ -8,18 +8,19 @@ import { Chevron, Pill, PrimaryButton, Tap } from '../components/ui';
 import { DOC_STATUS, DOC_TYPE, fmtDay } from '../features/documents';
 import { C, type } from '../theme';
 
-type Doc = { id: string; docType: string; title: string; siteName: string | null; equipmentName: string | null; status: string; validUntil: string | null; versionCount: number; pendingReview: boolean };
+type Doc = { id: string; docType: string; title: string; siteName: string | null; equipmentName: string | null; status: string; validUntil: string | null; versionCount: number;
+  pendingReview: boolean; expiring: boolean; sharedReadOnly: boolean };
 
 /** Document vault: licences, certificates, reports. An upload is valid only after someone else reviewed it. */
 export default function DocumentsRoute() {
   const { company } = useSession();
   const q = useApi<Doc[]>(company ? `/companies/${company.id}/documents` : null);
-  const order = ['expired', 'expiring', 'awaiting_review', 'rejected', 'file_pending', 'no_file', 'not_yet_valid', 'valid'];
-  const docs = [...(q.data ?? [])].sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
+  const order = ['expired', 'unreviewed', 'rejected', 'file_pending', 'no_file', 'internally_reviewed', 'issuer_verified'];
+  const docs = [...(q.data ?? [])].sort((a, b) => (order.indexOf(a.status) - (a.expiring ? 0.5 : 0)) - (order.indexOf(b.status) - (b.expiring ? 0.5 : 0)));
   return (
     <Screen title="Belge kasası" titleEn="Document vault" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       <PrimaryButton testID="doc-new" label="Belge ekle" onPress={() => router.push('/documents/new')} />
-      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Yüklenen dosya, yükleyenden başka bir yetkili inceleyip tarihlerini onaylayana kadar geçerli sayılmaz. GoverHub belgeyi düzenleyen kurumla doğrulamaz.</Text>
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Durumlar ayrı tutulur: incelenmedi, kurum içi incelendi, düzenleyen kurumdan doğrulandı, reddedildi, süresi doldu. Yükleme ya da kurum içi inceleme resmî geçerlilik doğrulaması değildir; GoverHub kurumu kendisi sorgulamaz.</Text>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
       {q.data?.length === 0 ? <Empty title="Henüz belge yok" /> : null}
@@ -29,7 +30,9 @@ export default function DocumentsRoute() {
           <Tap key={d.id} testID={`doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Pill label={st[0]} fg={st[1]} bg={st[2]} />
-              {d.pendingReview && d.status !== 'awaiting_review' ? <Pill label="YENİ SÜRÜM İNCELEMEDE" fg={C.warn} bg={C.chip} /> : null}
+              {d.expiring ? <Pill label="SÜRESİ YAKLAŞIYOR" fg={C.warn} bg={C.chip} /> : null}
+              {d.pendingReview && d.status !== 'unreviewed' ? <Pill label="YENİ SÜRÜM İNCELEMEDE" fg={C.warn} bg={C.chip} /> : null}
+              {d.sharedReadOnly ? <Pill label="PAYLAŞILDI · YALNIZ OKUMA" fg={C.t2} bg={C.chip} /> : null}
             </View>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
               <Text style={[type(14, 600), { flex: 1 }]}>{d.title}</Text>
@@ -37,7 +40,7 @@ export default function DocumentsRoute() {
             </View>
             <Text style={type(11.5, 400, { color: C.t3 })}>
               {DOC_TYPE[d.docType] ?? d.docType} · {d.equipmentName ?? d.siteName ?? 'İşletme geneli'}
-              {d.status === 'valid' || d.status === 'expiring' || d.status === 'expired' ? ` · geçerlilik sonu ${fmtDay(d.validUntil)}` : ''}
+              {d.status === 'internally_reviewed' || d.status === 'issuer_verified' || d.status === 'expired' ? ` · geçerlilik sonu ${fmtDay(d.validUntil)}` : ''}
             </Text>
           </Tap>
         );

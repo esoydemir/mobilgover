@@ -136,7 +136,7 @@ async function apiLogin(email) {
   await id('doc-valid-until').fill(until);
   await id('doc-version-save').click(); await wait(4000);
   t = await body();
-  check('Yüklenen belge "inceleme bekliyor · geçerli sayılmaz"; yükleyen inceleyemiyor', t.includes('İNCELEME BEKLİYOR · GEÇERLİ SAYILMAZ') && t.includes('geçerli sayılmaz') && t.includes('Belgeyi sen yükledin'));
+  check('Yüklenen belge "incelenmedi" (geçerli sayılmaz); yükleyen inceleyemiyor', t.includes('İNCELENMEDİ') && t.includes('geçerli olduğu anlamına gelmez') && t.includes('Belgeyi sen yükledin'));
   await shot('belge-inceleme-bekliyor');
   const docUrl = p.url();
   await logout();
@@ -150,7 +150,7 @@ async function apiLogin(email) {
   await id('doc-review-notes-1').fill('Seri no ve bitiş tarihi belgeyle aynı.');
   await id('doc-review-ok-1').click(); await wait(3500);
   t = await body();
-  check('İncelendikten sonra geçerlilik hesaplanıyor: süresi yaklaşıyor', t.includes('SÜRESİ YAKLAŞIYOR') && t.includes('İncelenmiş sürüme göre'));
+  check('Kurum içi incelendikten sonra geçerlilik hesaplanıyor: süresi yaklaşıyor (resmî doğrulama değil)', t.includes('KURUM İÇİ İNCELENDİ') && t.includes('SÜRESİ YAKLAŞIYOR') && t.includes('İncelenen sürüme göre'));
   await shot('belge-suresi-yaklasiyor');
   // The hourly scan also runs at API start; restart to trigger it now.
   dc('restart app'); await wait(20000);

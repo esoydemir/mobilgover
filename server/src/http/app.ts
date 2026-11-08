@@ -11,7 +11,7 @@ import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
 import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
-import { listNotifications, markRead } from '../services/notifications';
+import { listNotifications, markProviderRead, markRead, providerNotifications } from '../services/notifications';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
 import { confirmTotpSetup, listSessions, logout, revokeOtherSessions, revokeSession, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
 import { acceptInvitation, addMember, createCompany, listMyCompanies, listMyInvitations, setMemberStatus } from '../services/companies';
@@ -19,6 +19,7 @@ import type { Mailer } from '../services/mail';
 import { loadPrincipal } from '../services/principal';
 import * as mk from '../services/marketplace';
 import * as docs from '../services/documents';
+import * as verifiers from '../services/verifiers';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
@@ -51,6 +52,7 @@ export type LogSink = (line: Record<string, unknown>) => void;
 const PUBLIC = new Set(['/health', '/env', '/auth/email/start', '/auth/email/verify', '/auth/mfa/verify', '/dev/outbox/latest']);
 
 export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; config: AppConfig; log?: LogSink }) {
+  docs.MAX_UPLOAD_BYTES.value = deps.config.maxUploadBytes;
   const { db, store, mailer, config } = deps;
   const log: LogSink = deps.log ?? (() => {});
   const app = Fastify({ logger: false, bodyLimit: 1024 * 1024, trustProxy: config.trustProxy?.length ? config.trustProxy : false });
@@ -159,6 +161,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     mode: config.demoMode ? 'demo' : 'pilot',
     ...(config.demoMode && config.demoLoginDomain ? { demoLoginDomain: config.demoLoginDomain } : {}),
     exampleRulesAllowed: config.allowExampleRules,
+    // Shown before a file is picked; the server enforces it too.
+    upload: { maxBytes: config.maxUploadBytes, types: ALLOWED_MIME },
     mailTransport: mailer.kind,
     // True only after a person confirmed a real delivery through the chosen provider.
     mailProductionReady: mailer.kind === 'smtp' && config.mailProductionReady === true,
@@ -538,7 +542,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const companyId = company(req);
     const { id, actionId } = z.object({ id: uuid, actionId: uuid }).parse(req.params);
     const b = z.object({ op: z.enum(['done', 'cancel', 'reassign', 'verify']), notes: z.string().max(4000).optional(), ownerId: uuid.optional(),
-      dueAt: z.iso.datetime({ offset: true }).nullable().optional(), result: z.enum(['accepted', 'rejected']).optional() }).parse(req.body);
+      dueAt: z.iso.datetime({ offset: true }).nullable().optional(), result: z.enum(['accepted', 'rejected']).optional(),
+      performedBy: uuid.nullable().optional(), selfVerify: z.boolean().optional() }).parse(req.body);
     return mutate(req, reply, companyId, async tx => { await updateAction(tx, req.principal, companyId, id, actionId, b); return { ok: true }; });
   });
   app.post('/companies/:companyId/nonconformities/:id/actions/:actionId/evidence', async (req, reply) => {
@@ -550,7 +555,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/nonconformities/:id/verify', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const b = z.object({ result: z.enum(['effective', 'not_effective']), notes: z.string().max(4000) }).parse(req.body);
+    const b = z.object({ result: z.enum(['effective', 'not_effective']), notes: z.string().max(4000), selfVerify: z.boolean().optional() }).parse(req.body);
     return mutate(req, reply, companyId, tx => verify(tx, req.principal, companyId, id, b));
   });
   // Older app versions: "verify and close".
@@ -565,6 +570,25 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ reason: z.string().max(4000) }).parse(req.body);
     return mutate(req, reply, companyId, async tx => { await reopen(tx, req.principal, companyId, id, b.reason); return { ok: true }; });
+  });
+  // ── Outside verifiers (limited, time-boxed, revocable) and what is waiting for verification ──
+  app.get('/companies/:companyId/verifiers', async req => {
+    const companyId = company(req);
+    return db.tenant(companyId, tx => verifiers.listVerifiers(tx, req.principal, companyId));
+  });
+  app.post('/companies/:companyId/verifiers', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ email: z.string().max(200), siteId: uuid.nullable().default(null), days: z.number().int(), note: z.string().max(500), documents: z.boolean().default(false) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => verifiers.inviteVerifier(tx, req.principal, companyId, b), 201);
+  });
+  app.post('/companies/:companyId/verifiers/:grantId/revoke', async (req, reply) => {
+    const companyId = company(req);
+    const { grantId } = z.object({ grantId: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, tx => verifiers.revokeVerifier(tx, req.principal, companyId, grantId));
+  });
+  app.get('/companies/:companyId/verification-queue', async req => {
+    const companyId = company(req);
+    return db.tenant(companyId, tx => verifiers.verificationQueue(tx, req.principal, companyId));
   });
   app.get('/companies/:companyId/reassignment-queue', async req => {
     const companyId = company(req);
@@ -632,6 +656,11 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const pr = (await tx.query(`SELECT id FROM professional_profiles WHERE user_id = $1`, [req.principal.userId])).rows[0];
     return pr ? mk.profileView(tx, pr.id) : null;
   }));
+  app.get('/pro/notifications', async req => db.system(tx => providerNotifications(tx, req.principal)));
+  app.post('/pro/notifications/read', async req => {
+    const b = z.object({ ids: z.union([z.literal('all'), z.array(uuid).max(200)]) }).parse(req.body);
+    return db.system(tx => markProviderRead(tx, req.principal, b.ids));
+  });
   app.post('/pro/profile', async req => {
     const b = z.object({ kind: z.enum(['individual', 'company']), displayName: z.string().trim().min(2).max(120), headline: z.string().max(200).default(''),
       city: z.string().trim().min(2).max(60), district: z.string().max(60).nullable().optional(), bio: z.string().max(2000).default('') }).parse(req.body);
@@ -749,6 +778,18 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ validFrom: isoDate.default(null), validUntil: isoDate.default(null), notes: z.string().max(2000).nullable().default(null),
       file: z.object({ mime: z.string(), sha256: z.string(), sizeBytes: z.number().int().positive().max(config.maxUploadBytes) }) }).parse(req.body);
     return mutate(req, reply, companyId, tx => docs.addVersion(tx, req.principal, companyId, id, b), 201);
+  });
+  app.post('/companies/:companyId/documents/:id/versions/:versionId/issuer-check', async (req, reply) => {
+    const companyId = company(req);
+    const { id, versionId } = z.object({ id: uuid, versionId: uuid }).parse(req.params);
+    const b = z.object({ method: z.enum(docs.ISSUER_METHODS), reference: z.string().max(200), notes: z.string().max(1000).nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.recordIssuerCheck(tx, req.principal, companyId, id, versionId, b));
+  });
+  app.post('/companies/:companyId/documents/:id/shares', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ siteId: uuid, share: z.boolean() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.shareDocument(tx, req.principal, companyId, id, b));
   });
   app.post('/companies/:companyId/documents/:id/versions/:versionId/review', async (req, reply) => {
     const companyId = company(req);

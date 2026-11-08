@@ -61,7 +61,9 @@ describe('nonconformity flow', () => {
     expect(ready('declared').blockers.join(' ')).toContain('doğrulanmayı bekliyor');
     expect(ready('rejected', 'open').readyForEffectiveness).toBe(false);
     expect(ready('verified').readyForEffectiveness).toBe(true);
-    expect(ready('legacy').readyForEffectiveness).toBe(true);
+    // Older "completed" (before claims needed verification) does not carry an OPEN case to closure.
+    expect(ready('legacy').readyForEffectiveness).toBe(false);
+    expect(ready('legacy').blockers.join(' ')).toContain('eski aksiyon');
   });
 
   it('round performers are owners, doers and evidence givers of this round\'s fixes', () => {

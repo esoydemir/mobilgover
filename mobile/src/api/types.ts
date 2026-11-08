@@ -11,6 +11,7 @@ export type Company = {
   id: string; name: string; is_demo: boolean;
   sites: { id: string; name: string; timezone: string }[];
   roles: { role: Me['memberships'][number]['role']; siteId: string | null }[];
+  grants?: { kind: string; scopes: string[] }[];
 };
 
 export type TaskRow = {

@@ -16,6 +16,8 @@ import { seedDemoCompany } from './demo';
 const config = loadConfig();
 if (!config.demoMode) throw new Error('Test işletmesi yalnızca DEMO_MODE=true iken oluşturulur.');
 const run = (process.argv[2] ?? '').toLowerCase();
+// --single: a business with ONE manager (the owner) and staff; no site or HQ manager.
+const single = process.argv.includes('--single');
 if (!/^[a-z0-9-]{3,32}$/.test(run)) throw new Error('Çalıştırma kimliği 3–32 karakter: a-z, 0-9, -');
 const domain = config.demoLoginDomain ?? 'demo.goverhub.test';
 const db = Db.connect(config.databaseUrl);
@@ -29,13 +31,21 @@ try {
     for (const k of ['owner', 'manager', 'staff', 'expert'] as const) {
       await tx.query(`UPDATE users SET email = $2 WHERE id = $1`, [demo.users[k].id, emails[k]]);
     }
-    // A second company-wide manager: someone who did none of the work and can verify it independently.
-    const hq = (await tx.query<{ id: string }>(`INSERT INTO users (display_name, email) VALUES ('Deniz (merkez yöneticisi)', $1) RETURNING id`, [emails.hq])).rows[0]!.id;
-    await tx.query(`INSERT INTO memberships (user_id, company_id, site_id, role, status, activated_at) VALUES ($1,$2,NULL,'hq_manager','active',now())`, [hq, demo.companyId]);
+    if (single) {
+      // The site manager left: only the owner manages (suspension kept with its reason, nothing deleted).
+      await tx.query(`UPDATE memberships SET status = 'suspended', suspended_at = now(), suspended_by = $3, suspend_reason = 'Tek yöneticili test işletmesi'
+         WHERE user_id = $1 AND company_id = $2`, [demo.users.manager.id, demo.companyId, demo.users.owner.id]);
+      // The demo expert grant is not used here; the owner invites an outside verifier in the app.
+      await tx.query(`UPDATE access_grants SET revoked_at = now() WHERE company_id = $1`, [demo.companyId]);
+    } else {
+      // A second company-wide manager: someone who did none of the work and can verify it independently.
+      const hq = (await tx.query<{ id: string }>(`INSERT INTO users (display_name, email) VALUES ('Deniz (merkez yöneticisi)', $1) RETURNING id`, [emails.hq])).rows[0]!.id;
+      await tx.query(`INSERT INTO memberships (user_id, company_id, site_id, role, status, activated_at) VALUES ($1,$2,NULL,'hq_manager','active',now())`, [hq, demo.companyId]);
+    }
     // Same starting point as the demo business: the daily glove check is the staff member's.
     await tx.query(`INSERT INTO task_assignment_defaults (company_id, site_id, template_code, equipment_id, user_id, set_by) VALUES ($1,$2,'glove_daily',NULL,$3,$4)`,
       [demo.companyId, demo.siteId, demo.users.staff.id, demo.users.owner.id]);
   });
   await topUpAllSites(db, 30); // adds only missing tasks; never changes existing ones
-  console.log(JSON.stringify({ companyId: demo.companyId, siteId: demo.siteId, emails }));
+  console.log(JSON.stringify({ companyId: demo.companyId, siteId: demo.siteId, single, emails: { ...emails, verifier: `dogrulayici.${run}@${domain}` } }));
 } finally { await db.close(); }

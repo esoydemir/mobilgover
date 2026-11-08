@@ -19,13 +19,17 @@ export type NcrDetail = {
     evidence_required: 'none' | 'photo' | 'document'; verification_status: 'not_declared' | 'declared' | 'verified' | 'rejected' | 'legacy';
     verified_by_name: string | null; verified_at: string | null; verification_notes: string | null;
     evidence: { id: string; kind: string; status: 'pending_upload' | 'stored' | 'rejected'; mime: string | null; created_by: string; created_at: string; rejection_reason: string | null }[];
-    can_verify: boolean; verify_blocked_reason: string | null; can_add_evidence: boolean }[];
-  verifications: { iteration: number; result: 'effective' | 'not_effective' | 'reopened'; notes: string; verified_by_name: string; verified_at: string }[];
+    can_verify: boolean; verify_blocked_reason: string | null; can_add_evidence: boolean;
+    can_self_verify: boolean; legacy_unverified: boolean; performed_by: string | null; performed_by_name: string | null; done_by: string | null;
+    verification_mode: 'independent' | 'self' | null; verified_via: 'membership' | 'grant' | null }[];
+  verifications: { iteration: number; result: 'effective' | 'not_effective' | 'reopened'; notes: string; verified_by_name: string; verified_at: string;
+    verification_mode: 'independent' | 'self' | null; verified_via: 'membership' | 'grant' | null }[];
+  verificationPolicy: string;
   services: { id: string; title: string; status: string; category_code: string; job_status: string | null }[];
   history: { event_type: string; payload: any; occurred_at: string; actor_name: string | null }[];
   cause: { initial: NcrDetail['causes'][number] | null; verified: NcrDetail['causes'][number] | null };
   suggestions: { category: Cause; kind: string; title: string; body: string; available: boolean; serviceCategory: string | null }[];
-  permissions: { act: boolean; manage: boolean; verify: boolean; verifyBlockedReason: string | null; reopen: boolean; serviceRequest: boolean };
+  permissions: { act: boolean; manage: boolean; verify: boolean; selfVerify: boolean; verifyBlockedReason: string | null; reopen: boolean; serviceRequest: boolean; inviteVerifier: boolean };
 };
 
 export const CAUSE_LABEL: Record<Cause, [string, string]> = {
@@ -63,12 +67,12 @@ export function historyLine(h: NcrDetail['history'][number]): string {
     case 'nonconformity.cause_assessed': return `${p.stage === 'verified' ? 'Kök neden doğrulandı' : 'İlk değerlendirme'}: ${(p.categories ?? []).map((c: Cause) => CAUSE_LABEL[c]?.[0] ?? c).join(', ')}`;
     case 'nonconformity.action_added': return `${ACTION_KIND[p.kind] ?? 'Aksiyon'} eklendi: ${p.description}`;
     case 'nonconformity.action_done': return `Aksiyon "yapıldı" olarak bildirildi${p.notes ? `: ${p.notes}` : ''} (doğrulama bekliyor)`;
-    case 'nonconformity.action_verified': return `Aksiyon sonucu doğrulandı${p.notes ? `: ${p.notes}` : ''}`;
+    case 'nonconformity.action_verified': return `Aksiyon sonucu doğrulandı${p.mode === 'self' ? ' (öz doğrulama)' : p.via === 'grant' ? ' (dış doğrulayıcı)' : ''}${p.legacy ? ' · eski kayıt' : ''}${p.notes ? `: ${p.notes}` : ''}`;
     case 'nonconformity.action_rejected': return `Aksiyon sonucu kabul edilmedi${p.notes ? `: ${p.notes}` : ''}`;
     case 'nonconformity.action_cancel': return `Aksiyon iptal edildi${p.notes ? `: ${p.notes}` : ''}`;
     case 'nonconformity.action_reassign': return 'Aksiyon yeniden atandı';
     case 'nonconformity.verification_failed': return `Doğrulama başarısız: ${p.notes}`;
-    case 'nonconformity.closed': return 'Doğrulandı ve kapatıldı';
+    case 'nonconformity.closed': return `Doğrulandı ve kapatıldı${p.mode === 'self' ? ' (öz doğrulama)' : p.via === 'grant' ? ' (dış doğrulayıcı)' : ''}`;
     case 'nonconformity.reopened': return `Yeniden açıldı: ${p.reason}`;
     default: return h.event_type;
   }

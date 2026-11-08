@@ -117,7 +117,7 @@ console.log(`Çalıştırma ${RUN} · işletme ${CO}`);
   await p.locator('[data-testid^="action-done-open-"]').last().click(); await wait(300);
   await p.locator('[data-testid^="action-notes-"]').last().fill('Açılış listesine eklendi.'); await p.locator('[data-testid^="action-confirm-"]').last().click(); await wait(3000);
   t = await body();
-  const ownClaimBlocked = t.includes('DOĞRULANDI') && t.includes('sonucu başka bir yetkili doğrular') && (await p.locator('[data-testid^="action-verify-open-"]').count()) === 0;
+  const ownClaimBlocked = t.includes('DOĞRULANDI') && t.includes('payın var') && (await p.locator('[data-testid^="action-verify-open-"]').count()) === 0;
   await id('cause-verified-open').click(); await id('cause-process').click();
   await id('cause-notes').fill('Conta aşınmış; açılış kontrolünde kapı maddesi yoktu.'); await id('cause-save').click(); await wait(3000);
   t = await body();

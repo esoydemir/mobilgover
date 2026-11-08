@@ -9,16 +9,19 @@ import { C, tint, type } from '../theme';
 type Item = { icon: string; label: string; sub: string; href: Href; badge?: number; show?: boolean };
 
 export default function MoreRoute() {
-  const { role, me, companies } = useSession();
+  const { role, me, companies, company } = useSession();
   const { ops } = useQueue();
   const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
+  const verifier = !!company?.grants?.some(g => g.scopes.includes('ncr_verify'));
   const items: Item[] = [
     { icon: '📋', label: 'Yükümlülükler', sub: 'Neden uygulandığı, kaynak ve kural sürümü', href: '/obligations', show: manager },
     { icon: '🔔', label: 'Bildirimler', sub: 'Atama, termin, gecikme ve doğrulama istekleri', href: '/notifications' },
+    { icon: '✅', label: 'Doğrulama bekleyenler', sub: '"Yapıldı" beyanları ve kapanışlar', href: '/verify-queue', show: manager || verifier },
     { icon: '⚠️', label: 'Uygunsuzluklar', sub: 'Sorun bildir, sorumlu ve termin, neden, aksiyon, doğrulama', href: '/ncrs' },
     { icon: '🗂️', label: 'Belge kasası', sub: 'Ruhsat, sertifika, rapor; sürüm, inceleme ve süre hatırlatması', href: '/documents', show: manager },
     { icon: '🧑‍🔧', label: 'Hizmet talepleri', sub: 'Uzman bul, teklif karşılaştır, teslim kabul', href: '/services', show: manager },
     { icon: '🏢', label: 'İşletme profili', sub: 'Yükümlülükleri belirleyen yanıtlar', href: '/profile', show: role === 'owner' || role === 'hq_manager' },
+    { icon: '🧭', label: 'Dış doğrulayıcılar', sub: 'Sınırlı ve süreli bağımsız doğrulama izni', href: '/verifiers', show: role === 'owner' || role === 'hq_manager' },
     { icon: '👥', label: 'Ekip', sub: 'Şube yöneticisi ve personel ekle', href: '/team', show: role === 'owner' || role === 'hq_manager' },
     { icon: '🧊', label: 'Ekipmanlar', sub: 'Soğutucular ve ölçüm cihazları', href: '/equipment', show: manager },
     { icon: '🔄', label: 'Eşitleme', sub: 'Cihazda bekleyen kayıtlar', href: '/sync', badge: ops.length },

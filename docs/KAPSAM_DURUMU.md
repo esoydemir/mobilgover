@@ -1,4 +1,4 @@
-# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1., 2. ve 3. teslim işlendi)
+# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1.–4. teslim işlendi)
 
 **Kaynaklar:**
 - Tasarım prototipi ve sohbeti: `project/`, `chats/chat1.md`
@@ -85,8 +85,11 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Nedene göre destek önerisi (açıklama, hizmet talebi formu, ekipman, ekip, takip aksiyonu) | ✅ (2. teslim) | Öneri yalnızca yol gösterir; talep, sipariş ya da kapanış kendiliğinden olmaz. Eğitim modülü yok ("henüz yok" olarak gösterilir) |
 | Tekrarlanabilir aksiyonlar (düzeltme, düzeltici faaliyet, takip) sorumlu ve terminle | ✅ (2. teslim) | |
 | Etkinlik kontrolü → doğrulama; etkili değilse kayıt açık kalır ve yeni tur başlar; gerekçeli yeniden açma | ✅ (2. teslim) | |
-| Yüksek riskte bağımsız doğrulama | ✅ (3. teslim) | Bu turdaki düzeltme ve düzeltici faaliyetlerin sorumlusu, "yapıldı" diyen ve kanıt veren kişilerin hiçbiri kaydı doğrulayamaz (yalnız son düğmeye basan değil) |
+| Risk ve işlem türüne göre doğrulama | ✅ (4. teslim) | **Yüksek/kritik:** işte payı olan hiç kimse (aksiyon sorumlusu, işi yapan, beyan eden, kanıt veren, kayda hizmet veren uzman) doğrulayamaz. **Orta:** düzeltme, takip ve kapanışta gerekçeli öz doğrulama; düzeltici faaliyet bağımsız. **Düşük:** gerekçeli (≥20 karakter) ve açıkça işaretlenmiş öz doğrulama. Öz doğrulama kayıtta, ekranda ve geçmişte "ÖZ DOĞRULAMA" olarak etiketlenir |
+| Rol ayrımı: aksiyon sorumlusu, işi yapan, beyan eden, kanıt yükleyen, doğrulayan | ✅ (4. teslim) | Ayrı alanlar ve ekranda ayrı satır. Önceki raporlardaki "owner" = **aksiyon sorumlusu**; işletme sahibi rolü tek başına kimseyi doğrulamadan men etmez |
+| Dış doğrulayıcı (tek yöneticili işletme) | ✅ (4. teslim) | Daha → Dış doğrulayıcılar. Sahip/merkez yöneticisi e-postayla davet eder: yalnız uygunsuzlukları okuma + beyan/kapanış doğrulama (isteğe bağlı belge incelemesi), tek şube ya da tümü, 7/30/90 gün, geri alınabilir. Aksiyon ekleyemez, atayamaz, görev/ekip verisini göremez; kendi katkısını ya da verdiği hizmeti doğrulayamaz. Girişte "Doğrulama bekleyenler" listesi açılır |
 | Hizmet teslim kabulü uygunsuzluğu kapatmaz | ✅ | Testle sabitlendi |
+| Eski (v1) kayıtlar | ✅ (4. teslim) | Doğrulama şartından önce "tamamlandı" denmiş aksiyonlar **açık** kayıtta "ESKİ KAYIT · DOĞRULANMADI" görünür ve doğrulanmadan etkinlik kontrolü/kapanış yapılamaz. Kapanmış kayıtların geçmişi değiştirilmedi. Yerel demoda: 1 açık kayıtta 1 eski aksiyon doğrulama bekliyor; 1 kapalı kayıt (2 eski aksiyon) olduğu gibi duruyor |
 | Pasifleştirilen sorumlunun açık işleri → yöneticinin yeniden atama listesi | ✅ (2. teslim) | Uygunsuzluk, aksiyon ve görevler |
 | "Yapıldı" beyanı → kanıt → doğrulama (aksiyonun doğrulama durumu) | ✅ (3. teslim) | Aksiyon açılırken istenecek kanıt seçilir (yok / fotoğraf / belge). "Yapıldı" bir beyandır: gerekli kanıt yüklenmeden verilemez; başka bir yönetici (sorumlu, beyan eden ve kanıt veren dışında) doğrulayana kadar akışta sonuç sayılmaz. Reddedilen beyan aksiyonu yeniden açar. Güncellemeden önce yeni akışta "tamamlandı" denmiş aksiyonlar "doğrulama bekliyor"a geçti; ilk akıştan (v1) kalanlar olduğu gibi sayılır |
 
@@ -95,10 +98,10 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Özellik | Durum | Not |
 |---|---|---|
 | Belge kasası: belge türü, işletme / şube / ekipman bağlantısı, sürümler | ✅ (3. teslim) | Daha → Belge kasası. Türler örnek listedir (ruhsat, kayıt belgesi, kalibrasyon, bakım raporu, eğitim, sağlık raporu, sigorta, sözleşme, diğer) |
-| İnceleme durumu: yüklenen dosya geçerli sayılmaz | ✅ (3. teslim) | Yükleyenden başka bir yetkili inceleyip tarihleri onaylamadan (ya da düzeltmeden) belge "geçerli" olmaz. Yenileme incelenene kadar eski incelenmiş sürüm geçerli kalır. Belge, düzenleyen kurumla doğrulanmaz |
+| Belge durumları ayrı | ✅ (4. teslim) | İncelenmedi · kurum içi incelendi · düzenleyen kurumdan doğrulandı · reddedildi · süresi doldu (+ "süresi yaklaşıyor" uyarısı). Yükleme ve kurum içi inceleme resmî doğrulama olarak gösterilmez. "Kurumdan doğrulandı" için yöntem (barkod sorgusu, kurum sistemi, yazılı teyit) ve referans kaydedilir; uygulama kurumu kendisi sorgulamaz |
+| İşletme geneli belgeyi şubelere açma | ✅ (4. teslim) | Belge başına şube seçimi; şube yöneticisi yalnız okur ve dosyayı açar, değiştiremez/inceleyemez; paylaşım kaldırılabilir, geçmişte kalır |
 | Geçerlilik ve süre hatırlatmaları | ✅ (3. teslim) | Bitişe 30 gün kala (örnek süre) ve bitince yöneticilere uygulama içi bildirim; her sürüm için bir kez |
-| Şube yöneticisinin işletme geneli belgeleri görmesi | ✗ | İşletme geneli belgeler yalnız sahip ve merkez yöneticisinde |
-| Telefon uygulamasında PDF seçme | ◐ | Web'de PDF/JPEG/PNG seçiliyor; telefonda şimdilik kamera/galeri (fotoğraf). Dosya açma şimdilik web'de |
+| Telefonda belge seçme, yükleme, açma, indirme | ◐ (4. teslim) | Telefonda sistem dosya seçici (PDF, JPEG, PNG), tür ve boyut sınırı önceden yazılır, hata açık gösterilir, yarım kalan yükleme aynı dosyayla yeniden denenir; açma/kaydetme sistem paylaşım ekranıyla. **Web'de tarayıcı testiyle doğrulandı; gerçek telefonda (Expo Go / derleme) henüz denenmedi** |
 | Göreve belge kanıtı | ◐ | Kanıt türü olarak var; belge kasasına bağlanmıyor |
 
 ## 7. Eğitim, içerik, değerlendirme
@@ -149,7 +152,7 @@ Bağlantı, takip ve paylaşım için kapsam kararı gerekiyor (§ sonu).
 
 | Özellik | Durum | Not |
 |---|---|---|
-| Uygulama içi bildirim merkezi | ◐ (2.–3. teslim) | Uygunsuzluk akışı (atama, termin, gecikme, doğrulama, "yapıldı" beyanı ve sonucu, yeniden açma, yeniden atama), "uygulanmaz" incelemesi, yeni teklif, hizmet raporu teslimi, belge incelemesi ve belge süresi. Yinelenmez; rol ve şube sınırlı. Uzman tarafına (teklifin kabul edilmesi vb.) ve görev gecikmesine bildirim yok |
+| Uygulama içi bildirim merkezi | ✅ (2.–4. teslim) | İşletme: uygunsuzluk akışı, doğrulama istekleri (payı olanlara gitmez; tek yöneticide dış doğrulayıcıya), "uygulanmaz" incelemesi, teklif, rapor teslimi, belge, **geciken kontrol** (sorumluya görev başına bir kez; yöneticilere şube başına günde bir özet). Uzman: **yeni talep, doğrulayıcı daveti, teklif kabulü/seçilmemesi, teslim sonucu** (Uzman alanı → Bildirimler; işletme adı teklif kabulünden önce yazmaz). Hepsi tekrar üretilmez |
 | Anlık bildirim (push) ve e-posta bildirimi | ⏳ | Mağaza derlemesi ve SMTP |
 | Görev filtreleri | ✅ | |
 | Uygunsuzluk filtreleri | ✅ | Açık / kapalı |
