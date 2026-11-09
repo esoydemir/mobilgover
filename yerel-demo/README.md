@@ -137,6 +137,18 @@ E-posta gönderilmez. Yalnızca `@demo.goverhub.test` uzantılı adresler kabul 
 1. Yukarıdaki uzman hizmeti akışında teklif gelince ve rapor teslim edilince `sahip@` zile bildirim düşer.
 2. Teslimi kabul ettikten sonra iş ekranında **Hizmeti değerlendir** formu açılır (kalite, zamanlama, iletişim; isteğe bağlı yorum). "Uzman profilinde gösterilmesine izin ver" işaretlenirse iş, işletme adı olmadan uzmanın profilinde **Doğrulanmış hizmet geçmişi** altında görünür. Teslim alınmamış iş değerlendirilemez; bir iş bir kez değerlendirilir.
 
+**6. aşama — vakadan kalıcı çözüme, yönetici ekranı, doğru uzman, belge/eğitim/PDF, kural yazma.** Hepsi örnek veridir; adım adım deneme listesi ve hangi testin neyi doğruladığı: `docs/ASAMA6_DENEME_PAKETI.md`.
+
+1. **Kritik kayıtta ilk adım (6A):** `personel@` ile **Daha → Uygunsuzluklar → Sorun bildir**, önem **Kritik**, ekipman buzdolabı. Kayıtta üstte **ÖNCE BUNLAR** kutusu çıkar; destek önerileri ilk işlem yapılana kadar bekler. `mudur@` ile **Sorumlu ve termin ata** → öneriler açılır. Birden fazla neden seçersen birden fazla öneri gelir; **Bu öneri uymuyor · gerekçeyle değiştir** ile değiştirebilirsin.
+2. **İlgili kayıtlar ve etkinlik (6A):** kayıt ekranındaki **İLGİLİ KAYITLAR**dan ekipman geçmişine, belgeye, hizmet talebine gidip geri dön. Etkinlik kontrolünde yeni ölçüm yaz (ör. 9 °C): limit dışıysa etkili sayılmaz, yeni tur açılır ve önceki tur görünür kalır.
+3. **Yönetici ekranı (6B):** `sahip@` ya da `mudur@` ile **Daha → Bugün · yönetici ekranı**. Her sayıya bas: arkasındaki kayıtlar açılır. Şube/tarih/konu/ekipman/sorumlu filtreleri; **Tekrarlayan sorunlar**da neden önerildiği yazar → **Aynı sorun · ilişkilendir** ya da **İlgisiz**. `personel@` aynı menüde yalnız **Bana atananlar**ı görür. İkinci şube: **Daha → Ekip → Şube ekle**.
+4. **Doğru uzman (6C):** **Daha → Mesleki ağ → Uzman ara** → "dolabım soğutmuyor" yaz → "Soğutma teknik servisi" önerisi. Sonuç yoksa hangi filtrenin kaldırılabileceği yazar. Kayıttan hizmet iste: gönderilmeden önce **uzmanın göreceği önizleme** (özel fotoğraf, personel, belgeler kapalı). Teklifler aynı sırayla karşılaştırılır (kapsam, hariç, fiyat, süre, teslim edilecek çıktı). Teslimde **Teslim kabul et** ya da **Gerekçeyle revizyon iste**.
+5. **Vaka paylaşımı geri çekme (6C):** gönderi yayımlandıktan sonra metni değiştirirsen ağdan kalkar ve yeniden izin ister. **Uygunsuzluk → İşletmenin vaka paylaşımları → Ağdan geri çek**. **Mesleki ağ → Şikâyetlerim**: şikâyet durumu ve itiraz.
+6. **Belge ve eğitim (6D):** **Belge kasası** üstündeki filtreler (süresi yaklaşan, dolmuş, inceleme bekleyen, reddedilen); belgede **NE İÇİN KULLANILIYOR**. **Eğitimler → içerik → KİŞİLER**: atandı / tamamladı / geçti / sahada doğrulandı ayrı.
+7. **PDF denetim dosyası (6D):** ana sayfadaki uyum göstergesine bas → **PDF DENETİM DOSYASI** → şube ve tarih aralığı → **PDF indir**. Şube yöneticisi yalnız kendi şubesini alır.
+8. **Kural yazma (6E):** `yazar@` ile **Daha → Yönetim → Yeni kural taslağı yaz** → kaydet → **örnek profillerde önizleme** → incelemeye gönder. `alan-uzmani@` ve `onay@` onaylar, `yonetici@` yayımlar. Geçmiş görevler eski kural sürümünde kalır.
+9. **Kurum görünümü (6E):** **Daha → Kurum görünümü (sentetik demo)**. Gerçek veri değildir; küçük gruplar gizlenir, az veride yorum yapılmaz.
+
 Kendi işletmeni de kurabilirsin: yeni bir demo adresiyle gir, örneğin `ben@demo.goverhub.test`. Kurulum ekranı açılır; burada açılan işletmeler de demo olarak işaretlenir.
 
 ## 5. Telefon testi: geçici HTTPS tüneli
@@ -171,9 +183,11 @@ Kayıtlar klasörde değil, Docker'ın `goverhub-demo` adlı birimlerinde durur.
 
 Güncellemeden sonra kayıtların yerinde olduğunu `durum.cmd` ve uygulamadaki listelerden görebilirsin. Hiçbir güncelleme `SIFIRLA-tum-demo-verisi.cmd` dosyasını çalıştırmaz.
 
+6. aşama notu: güncellemede 012–016 numaralı veritabanı değişiklikleri eklenir. Eski kayıtlar olduğu gibi açılır; bu, 5B sürümüyle yazılmış veriyle ayrı birimlerde denendi (`e2e/yukseltme-6.cjs`: uygunsuzluk, fotoğraf, belge dosyası, ağ gönderisi, kayıt sayıları ve denetim geçmişi aynı kaldı).
+
 3. teslim notu: güncellemeden önce yeni uygunsuzluk akışında "tamamlandı" denmiş aksiyonlar artık **"yapıldı" beyanı · doğrulama bekliyor** olarak görünür; bir yönetici doğrulayana kadar sonuç sayılmaz. Kayıt silinmez.
 
-**Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs`, `e2e/yerel-demo-yeni.cjs`, `e2e/yerel-demo-tek-yonetici.cjs` ve `e2e/yerel-demo-egitim.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
+**Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs`, `e2e/yerel-demo-yeni.cjs`, `e2e/yerel-demo-tek-yonetici.cjs`, `e2e/yerel-demo-egitim.cjs`, `e2e/yerel-demo-ag.cjs`, `e2e/yerel-demo-6-sogutucu.cjs` ve `e2e/yerel-demo-6-diger.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
 
 ## 7. Nasıl çalışıyor
 

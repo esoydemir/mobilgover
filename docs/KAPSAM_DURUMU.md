@@ -1,4 +1,4 @@
-# Kapsam durumu — modül bazında (inceleme: 08.11.2026 · 1.–5B teslim işlendi)
+# Kapsam durumu — modül bazında (inceleme: 09.11.2026 · 1.–6. aşama işlendi)
 
 **Kaynaklar:**
 - Tasarım prototipi ve sohbeti: `project/`, `chats/chat1.md`
@@ -18,8 +18,8 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | ⏳ Haricî / karar | Dış hizmet ya da senin kararını bekliyor |
 
 **Doğrulama dayanağı:**
-- **Sunucu testleri:** gerçek PostgreSQL ile; CI'da 152 test.
-- **Uçtan uca arayüz akışı:** `e2e/pilot-walkthrough.js`, 26 adım, yerel Docker demosunda.
+- **Sunucu testleri:** gerçek PostgreSQL ile; 27 dosya, 280 test (6. aşama sonu, yerelde ve CI'da).
+- **Uçtan uca arayüz akışı:** `e2e/yerel-demo-*.cjs` (tarayıcı öykünmesi, yerel Docker demosu), `e2e/sunucu-6.cjs` (sunucuya doğrudan), `e2e/yukseltme-6.cjs` (eski sürüm verisiyle güncelleme). Ayrıntı: `docs/ASAMA6_DENEME_PAKETI.md`.
 - **Rol sınırları:** `server/test/acceptance/{slice,members,marketplace}.test.ts`.
 
 ## 1. İşletme ve şube profili, ekipmanlar
@@ -30,7 +30,7 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Profil soruları (bilgi kaynağı, "bilmiyorum" = bilgi eksik, geçmiş) | ✅ | Kurulum adım 2, Daha → İşletme profili |
 | Ekipman ekleme (soğutucu, dondurucu, termometre + kalibrasyon tarihi) | ✅ | |
 | Ekipman düzenleme, kalibrasyon yenileme, kullanımdan kaldırma | ✅ (1.–2. teslim) | Kaldırmadan önce önizleme: saati gelmemiş kontroller iptal, saati geçmiş olanlar gecikmiş olarak kalır, bugünkü kontrolün durumu yazılır. Yeniden etkinleştirmede iptal edilenler geri açılır; aynı gün için ikinci görev oluşmaz |
-| İkinci şube açma, şube seçme (çok şubeli / genel merkez) | ✗ | API yalnızca ilk şubeyi açıyor; uygulama her zaman ilk şubeyi kullanıyor |
+| İkinci şube açma, şube seçme (çok şubeli / genel merkez) | ✅ (6B) | Daha → Ekip → Şube ekle (sahip / merkez yöneticisi). Daha'da şube seçici; yönetici ekranı şube filtresi ve şube karşılaştırması. Şube yöneticisi yalnız kendi şubesini görür (sunucu) |
 | Açılış günleri, kapalı günler | ◐ | Veri modeli ve görev takvimi destekliyor; düzenleme ekranı ve API yok |
 | OCR ile belgeden bilgi okuma | ⏳ | OCR hizmeti yok; prototipte vardı, kaldırıldı |
 
@@ -55,8 +55,8 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Bilgi eksik → soru; uzman incelemesi gerekir durumu | ✅ | |
 | Elle "uygulanmaz" kararı (gerekçeli, rol sınırlı) ve geri alma | ✅ (1.–3. teslim) | İyi uygulama önerisinde hemen uygulanır. **Zorunlu yükümlülükte** istek, kuralın hangi koşulunun (işletme bilgisinin) sağlanmadığını, doğru değeri ve dayanağı belirtmek zorunda; önerilen bilgilerle kural hâlâ uyuyorsa istek açılmaz. İnceleyen (başka bir sahip/merkez yöneticisi ya da inceleme yetkili uzman) onaylarsa bilgiler doğrulanmış olarak profile işlenir ve **kararı kural motoru verir**; bilgiler kurala hâlâ uyuyorsa onay reddedilir ve yükümlülük sürer (3. teslim). Saati geçmiş kontroller "kaçırıldı" olarak kalır, silinmez |
 | Kural sürümü onayı, alan uzmanı onayı, yayın | ✅ | Daha → Yönetim (platform rolleri) |
-| Yeni kural / yeni sürüm yazma ekranı | ✗ | Yalnızca API ile. Ekrandan yazılamıyor |
-| Yayın öncesi etki simülasyonu | ◐ | API var; ekranda gösterilmiyor |
+| Yeni kural / yeni sürüm yazma ekranı | ✅ (6E) | Yönetim → Yeni kural taslağı yaz: kapsam koşulları, dayanak ve madde, sürüm, yürürlük, görev sıklığı, ölçü birimi, kanıt türü, inceleme durumu. Yalnız taslak ve yalnız yazarı düzenler. Doğrulanmamış dayanaklı kural örnek/taslak kalır |
+| Yayın öncesi etki simülasyonu | ✅ (6E) | Kural ekranında örnek işletme profillerinde hangi görevlerin oluşacağı. Yeni sürüm, geçmiş görevlerin hangi kural sürümünden üretildiğini değiştirmez |
 | Kural değişince işletmeye bildirim | ✗ | Yükümlülük yeniden hesaplanıyor ama kullanıcıya bir şey söylenmiyor |
 | Gerçek mevzuat içeriği | ⏳ | Tüm kurallar örnek. P-01…P-05 doğrulanmamış taslak |
 
@@ -82,7 +82,10 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Elle uygunsuzluk açma (her rol, kendi şubesinde); konu, önem, ekipman, ilk müdahale | ✅ (2. teslim) | Uygunsuzluklar → "Sorun bildir" |
 | Sorumlu ve termin; sonradan termin değişikliğinde gerekçe; değişiklik geçmişi; gecikme işareti | ✅ (2. teslim) | |
 | Neden değerlendirmesi: bilgi / ekipman / kaynak / süreç, çoklu seçim; ilk değerlendirme ile doğrulanmış kök neden ayrı | ✅ (2. teslim) | Doğrulanmış kök nedeni yalnız yönetici kaydeder |
-| Nedene göre destek önerisi (açıklama, hizmet talebi formu, ekipman, ekip, takip aksiyonu) | ✅ (2. teslim) | Öneri yalnızca yol gösterir; talep, sipariş ya da kapanış kendiliğinden olmaz. Eğitim modülü yok ("henüz yok" olarak gösterilir) |
+| Aşama özeti: aşama, sırada kim ne yapacak, kapanış için eksikler | ✅ (6A) | Kayıt ekranının başında. Kritik/yüksek kayıtta önce "ÖNCE BUNLAR" kutusu; ilk işlem yapılmadan destek önerileri gösterilmez |
+| İlgili kayıtlar kayıt içinden: eğitim, görev, belge, ekipman geçmişi, hizmet talebi, kanıt | ✅ (6A) | Dış doğrulayıcı başka kayda, belgeye ya da fotoğrafa doğrudan bağlantıyla ulaşamaz (sunucu testi) |
+| Etkinlikte yeni ölçüm; limit dışıysa etkili sayılmaz | ✅ (6A) | Hizmet teslimi ≠ teknik etkinlik. Olumsuz sonuç yeni tur açar; önceki turun kişileri, kararları ve kanıtları görünür kalır |
+| Nedene göre destek önerisi (eğitim, ekipman geçmişi + hizmet kategorisi, sorumlu + takip aksiyonu) | ✅ (2. teslim, 6A) | Birden fazla neden birden fazla öneri verir; kullanıcı öneriyi gerekçeyle değiştirebilir ya da geri alabilir. Öneri hiçbir şeyi kendiliğinden yapmaz |
 | Tekrarlanabilir aksiyonlar (düzeltme, düzeltici faaliyet, takip) sorumlu ve terminle | ✅ (2. teslim) | |
 | Etkinlik kontrolü → doğrulama; etkili değilse kayıt açık kalır ve yeni tur başlar; gerekçeli yeniden açma | ✅ (2. teslim) | |
 | Risk ve işlem türüne göre doğrulama | ✅ (4. teslim) | **Yüksek/kritik:** işte payı olan hiç kimse (aksiyon sorumlusu, işi yapan, beyan eden, kanıt veren, kayda hizmet veren uzman) doğrulayamaz. **Orta:** düzeltme, takip ve kapanışta gerekçeli öz doğrulama; düzeltici faaliyet bağımsız. **Düşük:** gerekçeli (≥20 karakter) ve açıkça işaretlenmiş öz doğrulama. Öz doğrulama kayıtta, ekranda ve geçmişte "ÖZ DOĞRULAMA" olarak etiketlenir |
@@ -102,7 +105,8 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | İşletme geneli belgeyi şubelere açma | ✅ (4. teslim) | Belge başına şube seçimi; şube yöneticisi yalnız okur ve dosyayı açar, değiştiremez/inceleyemez; paylaşım kaldırılabilir, geçmişte kalır |
 | Geçerlilik ve süre hatırlatmaları | ✅ (3. teslim) | Bitişe 30 gün kala (örnek süre) ve bitince yöneticilere uygulama içi bildirim; her sürüm için bir kez |
 | Telefonda belge seçme, yükleme, açma, indirme | ◐ (4. teslim) | Telefonda sistem dosya seçici (PDF, JPEG, PNG), tür ve boyut sınırı önceden yazılır, hata açık gösterilir, yarım kalan yükleme aynı dosyayla yeniden denenir; açma/kaydetme sistem paylaşım ekranıyla. **Web'de tarayıcı testiyle doğrulandı; gerçek telefonda (Expo Go / derleme) henüz denenmedi** |
-| Göreve belge kanıtı | ◐ | Kanıt türü olarak var; belge kasasına bağlanmıyor |
+| Belgenin kullanım amacı (görev, ekipman, yükümlülük) | ✅ (6D) | Belgede "Ne için kullanılıyor"; görev ekranında ilgili belgeler. Kurum içi inceleme ile kişinin kurumla teyit kaydı ayrı |
+| Kasa filtreleri: süresi yaklaşan, dolmuş, inceleme bekleyen, reddedilen | ✅ (6D) | Yeni sürüm önceki sürümün inceleme durumunu taşımaz; eski sürüm geçmişte kalır |
 
 ## 7. Eğitim, içerik, değerlendirme
 
@@ -138,15 +142,16 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Ağ profili: fotoğraf, unvan, tanıtım, bölge, uzmanlık, deneyim, hizmet kategorileri | ✅ (5B) | Daha → Mesleki ağ. Fotoğraf JPEG/PNG ≤ 2 MB, yalnız giriş yapmış ağ kullanıcılarına |
 | Kişisel beyan / kontrol edilmiş belge / hizmet onayı / doğrulanmış hizmet geçmişi ayrı | ✅ (5B) | Dört ayrı bölüm. Ağ üyeliği hizmet verme onayı değildir (profilde yazılı) |
 | İletişim ve belge gizliliği | ✅ (5B) | E-posta ve telefon kişi açmadıkça gizli; belge dosyaları ağda hiç gösterilmez (yalnız neyin nasıl kontrol edildiği) |
-| Uzman arama: metin, uzmanlık, kategori, bölge, "yalnız onaylılar" | ✅ (5B) | Onaysız profil bulunur ama onay gerektiren kategoride teklif veremez (sunucu). Sıralama ölçütleri ekranda açıklanır; takipçi sayısı yalnız eşitlikte; her sonuçta "neden üstte" |
+| Uzman arama: metin, uzmanlık, kategori, bölge, "yalnız onaylılar" | ✅ (5B, 6C) | 6C: düz dille arama ("dolabım soğutmuyor" → Soğutma teknik servisi önerisi), gerekirse bölge/hizmet türü sorusu, sonuç yoksa kaldırılabilecek filtreler. Beyan edilen deneyim platform iş geçmişinden ayrı. | Onaysız profil bulunur ama onay gerektiren kategoride teklif veremez (sunucu). Sıralama ölçütleri ekranda açıklanır; takipçi sayısı yalnız eşitlikte; her sonuçta "neden üstte" |
 | Takip, engelleme | ✅ (5B) | Engelleme iki yönlü gizler (akış, profil, arama, fotoğraf) ve takipleri kaldırır |
 | Paylaşım ve yorum: taslak, düzenleme, silme | ✅ (5B) | Yalnız giriş yapmış, profili olan kullanıcılara. Her gönderide "Kullanıcı paylaşımı · doğrulanmış mevzuat ya da platform onaylı içerik değildir" |
-| Vaka paylaşımı | ✅ (5B) | Uygunsuzluk ekranından; sahip/merkez yöneticisinin açık izni, alan seçimi, önizleme ve kişisel/ticari bilgi kontrolü (ad, şube, kişi, telefon, e-posta, TC, IBAN, adres, fiyat, seri no). Önce taslak; düzenlemede kontrol yeniden çalışır. İşletme kayıtları otomatik paylaşılmaz |
+| Vaka paylaşımı | ✅ (5B, 6C) | 6C: izin önizlenen içerik sürümüne bağlı; yayından sonra metin değişirse gönderi ağdan kalkar ve sahip/merkez yöneticisinin yeniden izni gerekir. Yetkili kişi geri çekince gönderi ve yorumlarına ağdan erişim kapanır (Uygunsuzluk → İşletmenin vaka paylaşımları). | Uygunsuzluk ekranından; sahip/merkez yöneticisinin açık izni, alan seçimi, önizleme ve kişisel/ticari bilgi kontrolü (ad, şube, kişi, telefon, e-posta, TC, IBAN, adres, fiyat, seri no). Önce taslak; düzenlemede kontrol yeniden çalışır. İşletme kayıtları otomatik paylaşılmaz |
 | Şikâyet ve moderasyon | ✅ (5B) | Gönderi, yorum, profil; moderasyon kuyruğu (ağ moderatörü rolü); gizle / askıya al / reddet kararı gerekçe ister ve denetim kaydına yazılır |
 | Profilden hizmet talebine geçiş | ✅ (5B) | Yalnız uzmanın onaylı kategorileri; talep yalnız o uzmana gider; formu açmak kayıt, sipariş ya da ücret oluşturmaz; kategori onayı sunucuda yeniden kontrol edilir |
 | Doğrulanmış hizmet geçmişi (teslim kabul edilmiş işler) | ✅ (3. teslim) | İşletme adı görünmez |
 | Özel mesajlaşma, reklam, gelişmiş öneri algoritması | ✗ | Bu teslimde bilerek eklenmedi |
-| Moderatör atama ekranı, itiraz akışı, otomatik içerik taraması | ✗ | Moderatör rolü şimdilik veritabanından verilir; demo: moderator@demo.goverhub.test |
+| Şikâyet durumu, gerekçeli karar, itiraz | ✅ (6C) | Mesleki ağ → Şikâyetlerim: şikâyet eden durumu görür; hakkında karar verilen itiraz eder. İtirazı ilk kararı veren moderatör karara bağlayamaz; moderatör kendi şikâyetine karar veremez; moderatör yalnız şikâyet edilen ağ içeriğini görür |
+| Moderatör atama ekranı, otomatik içerik taraması | ✗ | Moderatör rolü şimdilik veritabanından verilir; demo: moderator@demo.goverhub.test |
 
 ## 10. Hizmet talebi, teklif, yürütme, değerlendirme
 
@@ -154,7 +159,9 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 |---|---|---|
 | Talep açma (kategori, uygunsuzluğa bağlı) | ✅ | |
 | Yalnızca onaylı uzmanın teklif vermesi, süre dolumu | ✅ | |
-| Teklif karşılaştırma, kabul | ✅ | |
+| Teklif karşılaştırma, kabul | ✅ (6C) | Aynı sırayla: kapsam, hariç tutulanlar, fiyat, süre, teslim edilecek çıktı. Doğrudan (tek uzman) ve çok teklifli talep ayrı gösterilir; sahte teklif üretilmez. Kategori onayı teklif ve kabulde sunucuda kontrol edilir; sonradan düşen onay talepte görünür |
+| Talep önizlemesi | ✅ (6C) | Uzmanın tam olarak ne göreceği; özel fotoğraf, personel bilgisi ve işletme belgeleri varsayılan kapalı |
+| Revizyon ve iptal geçmişi | ✅ (6C) | Teslimde kabul ya da gerekçeli revizyon; değerlendirme yalnız kabul edilen işe. İptal, revizyon ve kabul geçmişi izlenebilir |
 | İş giriş kodu, uzman raporu, teslim kabulü veya itiraz | ✅ | |
 | İşe giriş kodu yerine QR | ◐ | 8 haneli kod var; QR yok |
 | Hizmet değerlendirmesi (kalite, zamanlama, iletişim; yorum) | ✅ (3. teslim) | Yalnız teslim kabul edilmiş işe, iş başına bir kez. Profilde gösterim varsayılan olarak kapalı |
@@ -168,10 +175,12 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 | Anlık bildirim (push) ve e-posta bildirimi | ⏳ | Mağaza derlemesi ve SMTP |
 | Görev filtreleri | ✅ | |
 | Uygunsuzluk filtreleri | ✅ | Açık / kapalı |
+| Yönetici ekranı (bugün yapılacaklar) | ✅ (6B) | Daha → Bugün · yönetici ekranı: kritik riskler, geciken aksiyonlar, doğrulama bekleyenler, süresi dolan belgeler, tekrarlayan sorunlar; her sayı kayıtlara açılır. Filtre: şube, tarih, konu, ekipman, sorumlu. Personel yalnız kendi işini görür |
+| Tekrar adayları ve ilk göstergeler | ✅ (6B) | Neden tekrar önerildiği yazılır; yönetici bağlar ya da ilgisiz işaretler, kendiliğinden birleştirme yok. Göstergelerde payda, tarih aralığı ve eksik veri yazılır; ceza puanı yok |
 | Genel arama | ✗ | |
 | Uyum göstergesi (sürümlü formül, kritik risk sınırı) | ✅ | |
 | Denetim dosyası (JSON) | ✅ | |
-| Denetim dosyası (PDF) | ✗ | |
+| Denetim dosyası (PDF) | ✅ (6D) | Raporlar → PDF denetim dosyası: şube ve tarih aralığı; kaynak ve kural sürümü, örnek veri etiketi, oluşturma zamanı ve isteyen rol. Kullanıcının erişemediği kayıt ve ekler girmez. **Gerçek telefonda indirme denenmedi** |
 
 ## 12. Çevrimdışı kullanım ve eşitleme
 
@@ -187,7 +196,8 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 |---|---|---|
 | Kural onayı ve yayın ekranı | ✅ | |
 | Pazar yeri doğrulama ve yetki inceleme ekranı | ✅ | |
-| Kural yazma ekranı | ✗ | Bkz. §3 |
+| Kural yazma ekranı | ✅ (6E) | Bkz. §3 |
+| Kurum görünümü (sentetik) | ◇ (6E) | Yalnız sentetik demo verisi: bölge ve işletme türüne göre tekrarlar, doğrulanmış neden dağılımı, destek sonrası tekrar oranı. Az veride yorum yok; küçük gruplar gizlenir. Gerçek kurum erişimi ayrı aşama |
 | Saklama süreleri öner ve onayla | ◐ | API var; ekran yok |
 | Süreli erişim izinleri (destek / uzman) | ◐ | Veri modeli ve yetki var; verme ekranı yok |
 | Kaynaklı asistan | ✗ | Kaynaksız cevap üretmemesi şartıyla tasarlandı (`MIMARI.md` §11) |
@@ -211,15 +221,15 @@ Belgelerde tanımlanmayan ayrıntılar gereksinim sayılmadı. Tasarım prototip
 10. ✅ Uzman arama (5B).
 11. ✅ Yapılandırılmış deneyim (5B, ağ profilinde).
 12. ✅ Takip ve paylaşım, ilk sürüm (5B); mesajlaşma ve öneri yok.
-13. Çok şubeli işletme.
-14. Kural yazma ekranı.
+13. ✅ Çok şubeli işletme (6B, yönetici ekranı için yeterli kısım).
+14. ✅ Kural yazma ekranı (6E).
 15. Saklama ekranı.
-16. PDF denetim dosyası.
+16. ✅ PDF denetim dosyası (6D).
 17. ✅ Eğitim → uygulama → etkinlik doğrulaması (5. teslim); onaylı içerik kaynağı kararı bekliyor.
 18. Dinamik form motoru.
 
 ## Senin kararını bekleyenler (şimdilik engellemiyor)
 
-- **Mesleki ağ (5B'de varsayılanlar uygulandı):** gönderiler yalnız giriş yapmış ve profili olan kullanıcılara; işletme hesapları da takip edebilir; denetim platformun ağ moderatörü rolünde. Moderatörün kim olacağı ve şikâyet itiraz süreci senin kararın.
+- **Mesleki ağ (5B'de varsayılanlar uygulandı):** gönderiler yalnız giriş yapmış ve profili olan kullanıcılara; işletme hesapları da takip edebilir; denetim platformun ağ moderatörü rolünde. Moderatörün kim olacağı senin kararın; itiraz akışı 6C'de varsayılanla kuruldu (ilk karar veren moderatör itirazı karara bağlayamaz).
 - **Eğitim içeriği:** Kim üretecek ve onaylayacak? Katılım belgesi verilecek mi?
 - **Ödeme ve gerçek bildirim kanalları:** SMS, push, e-posta.

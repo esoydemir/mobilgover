@@ -55,10 +55,12 @@ console.log(`Çalıştırma ${RUN} · işletme ${CO}`);
   await id('cause-initial-open').click(); await id('cause-equipment').click(); await id('cause-knowledge').click();
   await id('cause-notes').fill('Conta yırtık; kapının kontrol edileceğini bilmiyordum.'); await id('cause-save').click(); await wait(3000);
   t = await body();
-  check('İlk değerlendirme çoklu neden; "kesin kök neden değildir" ve öneriler görünüyor',
-    t.includes('İLK DEĞERLENDİRME') && t.includes('Ekipman eksikliği · Bilgi eksikliği') && t.includes('ÖNERİLEN DESTEK') && t.includes('Kişiye eğitim ata'));
-  await p.getByTestId('support-service_request').first().scrollIntoViewIfNeeded();
-  await shot('destek-onerileri');
+  // 6A: on a critical case the manager's first step comes first; support suggestions wait until it is done.
+  check('İlk değerlendirme çoklu neden; kritik kayıtta önce ilk işlem, öneriler bekliyor',
+    t.includes('İLK DEĞERLENDİRME') && t.includes('Ekipman eksikliği · Bilgi eksikliği') && t.includes('ÖNCE BUNLAR')
+    && t.includes('ÖNERİLEN DESTEK') && !t.includes('Kişiye eğitim ata') && await p.getByTestId('support-waiting').count() === 1);
+  await p.getByTestId('support-waiting').first().scrollIntoViewIfNeeded();
+  await shot('destek-onerileri-bekliyor');
   await id('action-add-open').click(); await id('action-desc').fill('Contayı geçici bantla kapat, servisi bekle.');
   await text('4 saat').click(); await id('action-save').click(); await wait(3000);
   check('Personel kendine düzeltme aksiyonu ekledi', (await body()).includes('Contayı geçici bantla kapat'));
@@ -85,6 +87,7 @@ console.log(`Çalıştırma ${RUN} · işletme ${CO}`);
   await p.reload(); await wait(3000);
   t = await body();
   check('Sorumlu ve termin kalıcı; geçmişte gerekçe görünüyor', t.includes('Elif (personel)') && t.includes('gerekçe: Yedek conta cuma geliyor.'));
+  check('Sorumlu atanınca destek önerileri açıldı', t.includes('Kişiye eğitim ata') && await p.getByTestId('support-waiting').count() === 0);
   const before = sql(`SELECT count(*) FROM service_requests WHERE company_id = '${CO}'`);
   await id('support-go-service_request').click(); await wait(2500);
   t = await body();
