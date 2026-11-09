@@ -204,7 +204,7 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (v: string) => setF(x => ({ ...x, [k]: v }));
   return (
-    <Card style={{ gap: 8 }}>
+    <View testID={`pro-req-${r.id}`}><Card style={{ gap: 8 }}>
       <Text style={type(11, 600, { ls: 0.08, color: C.t3 })}>{r.category_name.toUpperCase()} · {r.city} · {fmtDateTime(r.created_at)}</Text>
       <Text style={type(14.5, 600)}>{r.title}</Text>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{r.description}</Text>
@@ -234,7 +234,7 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
             }} />
         </View>
       )}
-    </Card>
+    </Card></View>
   );
 }
 
@@ -245,7 +245,7 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
   const [error, setError] = useState<string | null>(null);
   const run = async (fn: () => Promise<unknown>) => { setError(null); try { await fn(); onDone(); } catch (e) { setError(errorText(e)); } };
   return (
-    <Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
+    <View testID={`pro-job-${j.id}`}><Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
       <Text style={type(14.5, 600)}>{j.title}</Text>
       <Text style={type(12, 400, { color: C.t2 })}>{j.company_name} · {j.site_name}</Text>
       <Text testID="pro-job-status" style={type(12, 600, { color: j.status === 'accepted' ? C.lime : C.warn })}>{({ scheduled: 'Planlandı', checked_in: 'Giriş yapıldı', report_submitted: 'Rapor gönderildi, teslim kabulü bekleniyor', accepted: 'İşletme teslim kabul etti', disputed: 'İşletme itiraz etti', revision_requested: 'İşletme revizyon istedi: yeni rapor gönder', cancelled: 'İşletme işi iptal etti' } as Record<string, string>)[j.status] ?? j.status}</Text>
@@ -265,7 +265,7 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
       {j.business_note ? <Text style={type(12, 400, { color: C.t2 })}>İşletmenin notu: {j.business_note}</Text> : null}
       {j.cancel_reason ? <Text style={type(12, 500, { color: C.crit })}>İptal gerekçesi: {j.cancel_reason}</Text> : null}
       {error ? <ErrorBox message={error} /> : null}
-    </Card>
+    </Card></View>
   );
 }
 

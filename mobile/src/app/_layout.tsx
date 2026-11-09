@@ -59,7 +59,10 @@ function Gate({ children }: { children: ReactNode }) {
   const { ready, token, companies, me } = useSession();
   const path = usePathname();
   // Without a business: the provider area, the professional network and moderation stay reachable.
-  const providerOnly = !!me && companies.length === 0 && (path.startsWith('/pro') || path.startsWith('/network') || path.startsWith('/moderation'));
+  const platform = (me?.platformRoles.length ?? 0) > 0;
+  // People without a business: specialists, network users and platform staff (rules, review, institution demo).
+  const providerOnly = !!me && companies.length === 0 && (path.startsWith('/pro') || path.startsWith('/network') || path.startsWith('/moderation')
+    || (platform && (path.startsWith('/admin') || path.startsWith('/rule') || path.startsWith('/institution') || path === '/more')));
   useEffect(() => {
     if (!ready) return;
     if (!token && !OPEN_ROUTES.includes(path)) router.replace('/login');

@@ -56,6 +56,7 @@ export default function BoardRoute() {
   return (
     <Screen title="Bugün" titleEn="Manager board" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       {q.stale ? <StaleNote /> : null}
+      {q.error ? <ErrorBox message={`${q.error} Aşağıdaki sayılar seçtiğin filtreye ait değil olabilir.`} onRetry={q.reload} /> : null}
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{b.note}</Text>
       <View style={{ gap: 7 }}>
         {b.choices.sites.length > 1 ? <ChipRow label="Şube" items={[[null, 'Tümü'], ...b.choices.sites.map(s => [s.id, s.name] as [string, string])]} value={siteId} onChange={setSiteId} id="board-site" /> : null}

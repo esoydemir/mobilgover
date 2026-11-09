@@ -124,9 +124,10 @@ export default function RuleEditorRoute() {
           </View>
           <Eyebrow>KAYNAK VE MADDE</Eyebrow>
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-            {(provisions.data ?? []).map(p => <FilterChip key={p.id} testID={`rule-prov-${p.id}`} label={`${p.title} · ${p.ref}${p.is_example ? ' (örnek)' : ''}`} px={11} active={prov.includes(p.id)}
+            {(provisions.data ?? []).map(p => <FilterChip key={p.id} testID={`rule-prov-${p.id}`} label={`${p.ref}${p.is_example ? ' · örnek' : ''}`} px={11} active={prov.includes(p.id)}
               onPress={() => setProv(prov.includes(p.id) ? prov.filter(x => x !== p.id) : [...prov, p.id])} />)}
           </View>
+          {(provisions.data ?? []).filter(p => prov.includes(p.id)).map(p => <Text key={p.id} style={type(11.5, 400, { color: C.t2, lh: 1.4 })}>Seçili: {p.title} · {p.ref}</Text>)}
           <Eyebrow>KAPSAM KOŞULLARI</Eyebrow>
           {rows.map((r, i) => {
             const fd = factOf(r.fact);
@@ -141,7 +142,7 @@ export default function RuleEditorRoute() {
                     <FilterChip key={op} label={{ eq: '=', neq: '≠', gte: '≥', lte: '≤', contains: 'içerir' }[op]} px={10} active={r.op === op} onPress={() => setRows(rs => rs.map((y, j) => (j === i ? { ...y, op } : y)))} />)}
                   {fd?.type === 'boolean' ? (['true', 'false'] as const).map(v => <FilterChip key={v} testID={`rule-val-${i}-${v}`} label={v === 'true' ? 'Evet' : 'Hayır'} px={10} active={r.value === v}
                     onPress={() => setRows(rs => rs.map((y, j) => (j === i ? { ...y, value: v } : y)))} />)
-                    : <View style={{ flex: 1, minWidth: 120 }}><Field value={r.value} onChangeText={v => setRows(rs => rs.map((y, j) => (j === i ? { ...y, value: v } : y)))} /></View>}
+                    : <View style={{ flex: 1, minWidth: 120 }}><Field testID={`rule-val-input-${i}`} value={r.value} onChangeText={v => setRows(rs => rs.map((y, j) => (j === i ? { ...y, value: v } : y)))} /></View>}
                   {rows.length > 1 ? <Text onPress={() => setRows(rs => rs.filter((_, j) => j !== i))} style={type(12, 600, { color: C.crit })}>Kaldır</Text> : null}
                 </View>
               </View>
