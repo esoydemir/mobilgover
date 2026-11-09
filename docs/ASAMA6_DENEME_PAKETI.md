@@ -70,7 +70,24 @@ Sınıflar:
 - **Otomatik sunucu testi:** gerçek PostgreSQL ile.
 - **Denenmedi:** aşağıda ayrıca yazılı.
 
-SONUÇ_TABLOSU
+Son çalıştırma: 09.11.2026, son sürüm, yerel Docker demosu (güncellenmiş eski birimler üzerinde).
+
+| Doğrulama | Sınıf | Sonuç |
+|---|---|---|
+| Sunucu birim ve kabul testleri (27 dosya) | Otomatik sunucu testi | 280/280 |
+| CI: sunucu testleri, mobil tür kontrolü + web derlemesi, yerel Docker demosu | Otomatik (GitHub Actions) | 3/3 iş başarılı |
+| Senaryo 1 — buzdolabı: sapma → vaka → uzman arama → talep → teklif → teslim → yeni ölçüm → bağımsız kapanış → aynı ekipmanda tekrar → yönetici ekranı; bağlantı kesilmesi | Tarayıcı öykünmesi (`e2e/yerel-demo-6-sogutucu.cjs`) | 27/27 |
+| Senaryo 2–4 — bilgi eksikliği ve yeniden eğitim; belge yenileme, PDF ve yetkisiz şubenin ek bağlantısı; kural değişikliği ve eski görevlerin eski sürümde kalması; dar ekran, boş sonuç, erişim reddi, başarısız yükleme | Tarayıcı öykünmesi (`e2e/yerel-demo-6-diger.cjs`) | 23/23 |
+| Senaryo 5 — onaysız uzman, değişen vaka taslağı, geri çekilen gönderi, izni kaldırılan doğrulayıcı, yetkisiz moderatör | Sunucuya doğrudan HTTP (`e2e/sunucu-6.cjs`) | 12/12 |
+| Senaryo 6 — 5B sürümüyle (`1f66b5f`) ayrı birimlere yazılan veri, yeni klasörden aynı birimlerle açıldı: göçler 11 → 16; uygunsuzluk, fotoğraf, belge dosyası, ağ gönderisi, kayıt sayıları ve denetim geçmişi aynı | Docker + HTTP (`e2e/yukseltme-6.cjs`) | 4/4 yazma, 8/8 okuma |
+| Önceki akışlar: uygunsuzluk + hizmet (`akis`) | Tarayıcı öykünmesi | 34/34 (kritik kayıtta "önce ilk işlem" davranışına göre güncellendi) |
+| Önceki akışlar: doğrulama + belge (`yeni`) | Tarayıcı öykünmesi | 21/21 |
+| Önceki akışlar: tek yönetici + dış doğrulayıcı (`tek-yonetici`) | Tarayıcı öykünmesi | 25/25 |
+| Önceki akışlar: eğitim (`egitim`, 5A) | Tarayıcı öykünmesi | 23/23 |
+| Önceki akışlar: mesleki ağ (`ag`, 5B) | Tarayıcı öykünmesi | 50/50 |
+| PDF: Türkçe karakter, uzun metin, sayfa sonu | Otomatik sunucu testi + `pdftotext` | Geçti; telefonda indirme **denenmedi** |
+| Gerçek telefon | — | **Denenmedi** |
+
 
 ## 5. Denenmeyenler ve açık konular
 
