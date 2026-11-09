@@ -17,7 +17,9 @@ const STATUS = (m: Member) => m.status === 'active' ? '' : m.status === 'suspend
 
 /** People in the business. New members sign in with their own e-mail; no passwords are set here. */
 export default function TeamRoute() {
-  const { company, siteId, call, me } = useSession();
+  const { company, siteId, sites, call, me, refresh } = useSession();
+  const [inviteSite, setInviteSite] = useState<string | null>(null);
+  const [newSite, setNewSite] = useState('');
   const { showToast } = useUi();
   const q = useApi<Member[]>(company ? `/companies/${company.id}/members` : null);
   const [email, setEmail] = useState('');
@@ -54,11 +56,31 @@ export default function TeamRoute() {
           <FilterChip label="Şube yöneticisi" active={role === 'site_manager'} onPress={() => setRole('site_manager')} />
           <FilterChip label="Personel" active={role === 'staff'} onPress={() => setRole('staff')} />
         </View>
+        {sites.length > 1 ? (
+          <View style={{ gap: 6 }}>
+            <Text style={type(12, 600, { color: C.t2 })}>Şube</Text>
+            <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
+              {sites.map(st => <FilterChip key={st.id} testID={`team-site-${st.id}`} label={st.name} active={(inviteSite ?? siteId) === st.id} onPress={() => setInviteSite(st.id)} />)}
+            </View>
+          </View>
+        ) : null}
         <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Personel yalnızca kendisine atanan görevleri görür. Şube yöneticisi uygunsuzlukları yürütebilir ve kapanışı doğrulayabilir.</Text>
         <PrimaryButton testID="team-add" label="Davet et" height={44} size={13} disabled={!email.includes('@')}
           onPress={async () => {
             setError(null);
-            try { await call('POST', `/companies/${company!.id}/members`, { email: email.trim(), role, siteId }); setEmail(''); showToast('Davet gönderildi', 'Kendi e-postasıyla giriş yapıp kabul edince erişimi açılır (7 gün geçerli).'); await q.reload(); }
+            try { await call('POST', `/companies/${company!.id}/members`, { email: email.trim(), role, siteId: inviteSite ?? siteId }); setEmail(''); showToast('Davet gönderildi', 'Kendi e-postasıyla giriş yapıp kabul edince erişimi açılır (7 gün geçerli).'); await q.reload(); }
+            catch (e) { setError(errorText(e)); }
+          }} />
+      </Card>
+      <Card style={{ gap: 10 }}>
+        <Eyebrow>ŞUBELER ({company?.sites.length ?? 0})</Eyebrow>
+        {(company?.sites ?? []).map(st => <Text key={st.id} style={type(13, 500)}>{st.name}</Text>)}
+        <Field label="Yeni şube adı" testID="site-name" value={newSite} onChangeText={setNewSite} placeholder="ör. Beşiktaş Çarşı" />
+        <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Yeni şubenin profili, ekipmanı ve ekibi ayrıca tanımlanır. Şube yöneticisi yalnız kendi şubesini görür; işletme sahibi ve merkez yöneticisi bütün şubeleri.</Text>
+        <GhostButton testID="site-add" label="Şube ekle" height={42} size={12.5} disabled={newSite.trim().length < 2}
+          onPress={async () => {
+            setError(null);
+            try { await call('POST', `/companies/${company!.id}/sites`, { name: newSite.trim() }); setNewSite(''); await refresh(); showToast('Şube eklendi'); }
             catch (e) { setError(errorText(e)); }
           }} />
       </Card>

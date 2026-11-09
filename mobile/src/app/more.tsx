@@ -9,12 +9,14 @@ import { C, tint, type } from '../theme';
 type Item = { icon: string; label: string; sub: string; href: Href; badge?: number; show?: boolean };
 
 export default function MoreRoute() {
-  const { role, me, companies, company } = useSession();
+  const { role, me, companies, company, sites, siteId, selectSite } = useSession();
   const { ops } = useQueue();
   const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
   const verifier = !!company?.grants?.some(g => g.scopes.includes('ncr_verify'));
   const items: Item[] = [
     { icon: '📋', label: 'Yükümlülükler', sub: 'Neden uygulandığı, kaynak ve kural sürümü', href: '/obligations', show: manager },
+    { icon: '🧭', label: 'Bugün · yönetici ekranı', sub: 'Kritik riskler, gecikmeler, doğrulama, belge süreleri, tekrarlar', href: '/board', show: manager },
+    { icon: '📌', label: 'Bana atananlar', sub: 'Açık aksiyonların, geciken kontrollerin, sorumlusu olduğun kayıtlar', href: '/board', show: role === 'staff' },
     { icon: '🔔', label: 'Bildirimler', sub: 'Atama, termin, gecikme ve doğrulama istekleri', href: '/notifications' },
     { icon: '✅', label: 'Doğrulama bekleyenler', sub: '"Yapıldı" beyanları ve kapanışlar', href: '/verify-queue', show: manager || verifier },
     { icon: '🎓', label: 'Eğitimler', sub: 'Atanan eğitimler, içerikler, sahada etkinlik', href: '/trainings', show: !!role },
@@ -34,6 +36,19 @@ export default function MoreRoute() {
   ];
   return (
     <Screen title="Daha" titleEn="More" gap={11}>
+      {sites.length > 1 ? (
+        <View style={{ gap: 6 }}>
+          <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>ÇALIŞILAN ŞUBE</Text>
+          <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
+            {sites.map(st => (
+              <Tap key={st.id} testID={`site-pick-${st.id}`} onPress={() => selectSite(st.id)}
+                style={{ paddingHorizontal: 13, height: 34, borderRadius: 999, justifyContent: 'center', borderWidth: 1, borderColor: st.id === siteId ? tint.lime(0.5) : C.bd, backgroundColor: st.id === siteId ? tint.lime(0.1) : 'transparent' }}>
+                <Text style={type(12, 600, { color: st.id === siteId ? C.lime : C.t2 })}>{st.name}</Text>
+              </Tap>
+            ))}
+          </View>
+        </View>
+      ) : null}
       {companies.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Bir işletmeye bağlı değilsin.</Text> : null}
       {items.filter(i => i.show !== false).map(m => (
         <Tap key={m.label} testID={`more-${String(m.href).slice(1)}`} onPress={() => router.push(m.href)} style={[s.row, { gap: 13, borderRadius: 22, paddingVertical: 15, paddingHorizontal: 16 }]}>

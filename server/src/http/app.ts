@@ -10,6 +10,7 @@ import { canonical, sha256 } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
+import { addSite, board, relate } from '../services/board';
 import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, decideSuggestion, equipmentHistory, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
 import { listNotifications, markProviderRead, markRead, providerNotifications } from '../services/notifications';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
@@ -524,6 +525,23 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ key: z.string().max(60), decision: z.enum(['dismissed', 'restored']), reason: z.string().max(1000), replacement: z.string().max(500).nullable().default(null) }).parse(req.body);
     return mutate(req, reply, companyId, tx => decideSuggestion(tx, req.principal, companyId, id, b));
+  });
+  app.get('/companies/:companyId/board', async req => {
+    const companyId = company(req);
+    const q = z.object({ siteId: uuid.optional(), from: z.iso.datetime({ offset: true }).optional(), to: z.iso.datetime({ offset: true }).optional(),
+      hazard: z.string().max(60).optional(), equipmentId: uuid.optional(), ownerId: uuid.optional() }).parse(req.query);
+    return db.tenant(companyId, tx => board(tx, req.principal, companyId, q));
+  });
+  app.post('/companies/:companyId/nonconformities/:id/relations', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ relatedId: uuid, decision: z.enum(['linked', 'unrelated']), reason: z.string().max(1000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => relate(tx, req.principal, companyId, id, b), 201);
+  });
+  app.post('/companies/:companyId/sites', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ name: z.string().max(120) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => addSite(tx, req.principal, companyId, b), 201);
   });
   app.get('/companies/:companyId/equipment/:id/history', async req => {
     const companyId = company(req);

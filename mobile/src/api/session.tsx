@@ -3,7 +3,7 @@ import { api, ApiError } from './client';
 import { load, remove, save } from './storage';
 import type { Company, Env, Me } from './types';
 
-type Stored = { token: string | null; companyId: string | null; userId?: string | null };
+type Stored = { token: string | null; companyId: string | null; userId?: string | null; siteId?: string | null };
 
 type Session = {
   ready: boolean;
@@ -15,6 +15,9 @@ type Session = {
   companies: Company[];
   company: Company | null;
   siteId: string | null;
+  /** Sites this person works in: a site-scoped member only their own; company-wide roles all. */
+  sites: { id: string; name: string }[];
+  selectSite: (id: string) => void;
   /** Role in the selected company (first one wins if several). */
   role: Me['memberships'][number]['role'] | null;
   startLogin: (email: string) => Promise<void>;
@@ -65,7 +68,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Session>(() => {
     const company = companies.find(c => c.id === stored.companyId) ?? companies[0] ?? null;
     const role = company?.roles[0]?.role ?? null;
-    const siteId = company ? (company.roles.find(r => r.siteId)?.siteId ?? company.sites[0]?.id ?? null) : null;
+    const fixedSite = company?.roles.find(r => r.siteId)?.siteId ?? null;
+    const companyWide = !!company?.roles.some(r => !r.siteId);
+    const sites = company ? company.sites.filter(s => companyWide || s.id === fixedSite || (!company.roles.length)) : [];
+    const siteId = company ? (!companyWide && fixedSite ? fixedSite
+      : sites.find(s => s.id === stored.siteId)?.id ?? fixedSite ?? company.sites[0]?.id ?? null) : null;
     const call = <T,>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: string, body?: unknown, idempotencyKey?: string) =>
       api<T>(method, path, { token: stored.token, body, idempotencyKey });
 
@@ -75,7 +82,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
 
     return {
-      ready, env, token: stored.token, userId: me?.userId ?? stored.userId ?? null, me, companies, company, siteId, role,
+      ready, env, token: stored.token, userId: me?.userId ?? stored.userId ?? null, me, companies, company, siteId, sites, role,
+      selectSite: id => persist({ ...stored, siteId: id }),
       startLogin: async email => { await api('POST', '/auth/email/start', { body: { email } }); },
       verifyLogin: async (email, code) => {
         const r = await api<{ mfaRequired: boolean; token?: string; ticket?: string }>('POST', '/auth/email/verify', { body: { email, code } });
@@ -93,7 +101,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         persist({ token: null, companyId: null, userId: null });
       },
       refresh: async () => { if (stored.token) await loadAccount(stored.token); },
-      selectCompany: id => persist({ ...stored, companyId: id }),
+      selectCompany: id => persist({ ...stored, companyId: id, siteId: null }),
       createCompany: async (name, siteName) => {
         const r = await call<{ companyId: string; siteId: string }>('POST', '/companies', { name, siteName, timezone: 'Europe/Istanbul' });
         await loadAccount(stored.token!);
