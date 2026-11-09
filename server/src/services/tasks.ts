@@ -4,6 +4,7 @@ import { assessEvidence, evidenceRequirementSchema, limitSchema, selectLimit, wi
 import { can, onlyAssignedTasks, type Principal } from '../domain/permissions';
 import { localDay, occurrences, type Recurrence } from '../domain/schedule';
 import { ALLOWED_MIME } from '../storage/local';
+import { documentsForTask } from './documents';
 import { appendAudit } from './audit';
 import { relatedCourses } from './training';
 import { createFromTask } from './nonconformities';
@@ -114,6 +115,7 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     canAssign: can(p, 'task.assign', { companyId, siteId: t.site_id }).ok,
     // Training that fits this check (by check, obligation or topic); reading it is optional.
     relatedTraining: await relatedCourses(tx, companyId, { hazard: t.hazard_type, templateCode: t.template_code, ruleCode: t.rule_code }),
+    relatedDocuments: await documentsForTask(tx, p, companyId, { template_code: t.template_code, equipment_id: t.equipment_id, rule_code: t.rule_code }),
   };
 }
 

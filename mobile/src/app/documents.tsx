@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Loading } from '../components/states';
-import { Chevron, Pill, PrimaryButton, Tap } from '../components/ui';
+import { Chevron, FilterChip, Pill, PrimaryButton, Tap } from '../components/ui';
 import { DOC_STATUS, DOC_TYPE, fmtDay, issuerLine, type IssuerCheck } from '../features/documents';
 import { C, type } from '../theme';
 
@@ -14,16 +15,21 @@ type Doc = { id: string; docType: string; title: string; siteName: string | null
 /** Document vault: licences, certificates, reports. An upload is valid only after someone else reviewed it. */
 export default function DocumentsRoute() {
   const { company } = useSession();
-  const q = useApi<Doc[]>(company ? `/companies/${company.id}/documents` : null);
+  const [filter, setFilter] = useState<string | null>(null);
+  const q = useApi<Doc[]>(company ? `/companies/${company.id}/documents${filter ? `?filter=${filter}` : ''}` : null);
   const order = ['expired', 'unreviewed', 'rejected', 'file_pending', 'no_file', 'internally_reviewed', 'issuer_verified'];
   const docs = [...(q.data ?? [])].sort((a, b) => (order.indexOf(a.status) - (a.expiring ? 0.5 : 0)) - (order.indexOf(b.status) - (b.expiring ? 0.5 : 0)));
   return (
     <Screen title="Belge kasası" titleEn="Document vault" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       <PrimaryButton testID="doc-new" label="Belge ekle" onPress={() => router.push('/documents/new')} />
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Durumlar ayrı tutulur: incelenmedi, kurum içi incelendi, düzenleyen kurumdan doğrulandı, reddedildi, süresi doldu. Yükleme ya da kurum içi inceleme resmî geçerlilik doğrulaması değildir; GoverHub kurumu kendisi sorgulamaz.</Text>
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+        {([[null, 'Tümü'], ['expiring', 'Yakında bitecek'], ['expired', 'Süresi doldu'], ['pending_review', 'İnceleme bekliyor'], ['rejected', 'Reddedildi']] as const).map(([k, l]) =>
+          <FilterChip key={k ?? 'all'} testID={`doc-filter-${k ?? 'all'}`} label={l} px={11} active={filter === k} onPress={() => setFilter(k)} />)}
+      </View>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
-      {q.data?.length === 0 ? <Empty title="Henüz belge yok" /> : null}
+      {q.data?.length === 0 ? <Empty title={filter ? 'Bu filtreye uyan belge yok' : 'Henüz belge yok'} /> : null}
       {docs.map(d => {
         const st = DOC_STATUS[d.status] ?? DOC_STATUS.no_file!;
         return (

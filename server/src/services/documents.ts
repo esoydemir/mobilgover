@@ -88,14 +88,24 @@ const VERSIONS_SQL = `SELECT v.id, v.document_id, v.version, v.valid_from::text 
    FROM document_versions v JOIN users uu ON uu.id = v.uploaded_by LEFT JOIN users ru ON ru.id = v.reviewed_by LEFT JOIN users iu ON iu.id = v.issuer_checked_by
    LEFT JOIN LATERAL (SELECT * FROM evidence x WHERE x.document_version_id = v.id ORDER BY x.created_at DESC LIMIT 1) e ON true`;
 
-export async function listDocuments(tx: Tx, p: Principal, companyId: string, f: { siteId?: string | null; equipmentId?: string | null } = {}) {
+export type DocFilter = 'expiring' | 'expired' | 'pending_review' | 'rejected';
+/** Vault filters: soon to run out, ran out, waiting for review (also a newer version on a valid document), rejected. */
+export function matchesFilter(d: { status: DocStatus; expiring: boolean; pendingReview: boolean; latestRejected?: boolean }, f: DocFilter) {
+  if (f === 'expiring') return d.expiring && d.status !== 'expired';
+  if (f === 'expired') return d.status === 'expired';
+  if (f === 'pending_review') return d.pendingReview;
+  return d.status === 'rejected' || !!d.latestRejected;
+}
+
+export async function listDocuments(tx: Tx, p: Principal, companyId: string, f: { siteId?: string | null; equipmentId?: string | null; filter?: DocFilter | null } = {}) {
   const docs = (await tx.query(
     `SELECT d.*, s.name AS site_name, eq.name AS equipment_name FROM documents d LEFT JOIN sites s ON s.id = d.site_id LEFT JOIN equipment eq ON eq.id = d.equipment_id
       WHERE d.company_id = $1 AND d.archived_at IS NULL AND ($2::uuid IS NULL OR d.site_id = $2) AND ($3::uuid IS NULL OR d.equipment_id = $3)
       ORDER BY d.created_at`, [companyId, f.siteId ?? null, f.equipmentId ?? null])).rows;
   const readable = [];
   for (const d of docs) if (await canReadDoc(tx, p, companyId, d)) readable.push(d);
-  return listOut(tx, p, companyId, readable);
+  const out = await listOut(tx, p, companyId, readable);
+  return f.filter ? out.filter(d => matchesFilter(d, f.filter!)) : out;
 }
 
 async function listOut(tx: Tx, p: Principal, companyId: string, docs: any[]) {
@@ -109,6 +119,7 @@ async function listOut(tx: Tx, p: Principal, companyId: string, docs: any[]) {
       equipmentId: d.equipment_id, equipmentName: d.equipment_name, status: st.status, expiring: st.expiring, notYetValid: st.notYetValid,
       sharedReadOnly: !can(p, 'document.read', { companyId, siteId: d.site_id }).ok,
       validUntil: st.current?.valid_until ?? null, validFrom: st.current?.valid_from ?? null, versionCount: vs.length, pendingReview: !!st.pending || st.status === 'unreviewed',
+      latestRejected: [...vs].sort((a, b) => b.version - a.version)[0]?.review_status === 'rejected',
       issuerCheck: issuerCheckOf(st.current) };
   });
 }
@@ -156,7 +167,7 @@ export async function getDocument(tx: Tx, p: Principal, companyId: string, id: s
     status: st.status, expiring: st.expiring, notYetValid: st.notYetValid,
     issuerCheck: issuerCheckOf(st.current),
     currentVersionId: st.current?.id ?? null, validFrom: st.current?.valid_from ?? null, validUntil: st.current?.valid_until ?? null,
-    shares, maxUploadBytes: MAX_UPLOAD_BYTES.value,
+    shares, maxUploadBytes: MAX_UPLOAD_BYTES.value, uses: await documentUses(tx, id),
     expiryWarningDays: EXPIRY_WARNING_DAYS,
     versions: versions.map(v => ({ ...v,
       canRecordIssuerCheck: review && v.review_status === 'verified' && !v.issuer_check_method,
@@ -292,4 +303,69 @@ export async function shareDocument(tx: Tx, p: Principal, companyId: string, id:
   } else return { changed: false };
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: b.share ? 'document.shared' : 'document.unshared', entityType: 'document', entityId: id, payload: { siteId: b.siteId } });
   return { changed: true };
+}
+
+const LINK_KIND_TR: Record<string, string> = { task_template: 'Kontrol', equipment: 'Ekipman', obligation: 'Yükümlülük' };
+
+/** What a document is used for, with names resolved. Removed uses are not listed (they stay in the history). */
+export async function documentUses(tx: Tx, documentId: string) {
+  const rows = (await tx.query(`SELECT l.id, l.link_kind, l.ref, l.purpose, l.created_at, u.display_name AS created_by_name FROM document_links l JOIN users u ON u.id = l.created_by
+     WHERE l.document_id = $1 AND l.removed_at IS NULL ORDER BY l.created_at`, [documentId])).rows;
+  const out = [];
+  for (const r of rows) {
+    const name = r.link_kind === 'task_template' ? (await tx.query(`SELECT tt.title FROM task_templates tt JOIN rule_versions rv ON rv.id = tt.rule_version_id WHERE tt.code = $1 ORDER BY rv.version DESC LIMIT 1`, [r.ref])).rows[0]?.title
+      : r.link_kind === 'equipment' ? (await tx.query(`SELECT name FROM equipment WHERE id::text = $1`, [r.ref])).rows[0]?.name
+      : (await tx.query(`SELECT rv.obligation_title AS t FROM rules ru JOIN rule_versions rv ON rv.rule_id = ru.id WHERE ru.code = $1 ORDER BY rv.version DESC LIMIT 1`, [r.ref])).rows[0]?.t;
+    out.push({ id: r.id, kind: r.link_kind, kindLabel: LINK_KIND_TR[r.link_kind], ref: r.ref, name: name ?? r.ref, purpose: r.purpose, createdBy: r.created_by_name, createdAt: r.created_at });
+  }
+  return out;
+}
+
+export async function linkDocument(tx: Tx, p: Principal, companyId: string, id: string, b: { op: 'add' | 'remove'; kind?: 'task_template' | 'equipment' | 'obligation'; ref?: string; purpose?: string; linkId?: string }) {
+  const d = await loadDoc(tx, p, companyId, id, 'document.write');
+  if (b.op === 'remove') {
+    const r = await tx.query(`UPDATE document_links SET removed_by = $3, removed_at = clock_timestamp() WHERE id = $1 AND document_id = $2 AND removed_at IS NULL`, [b.linkId, id, p.userId]);
+    if (!r.rowCount) throw notFound('Kullanım');
+    await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.use_removed', entityType: 'document', entityId: id, payload: { linkId: b.linkId } });
+    return { ok: true };
+  }
+  if (!b.kind || !b.ref) throw invalid('Neye bağlanacağını seç.');
+  if ((b.purpose ?? '').trim().length < 5) throw invalid('Belgenin bu iş için hangi amaçla kullanıldığını yaz.');
+  if (b.kind === 'equipment') {
+    const e = (await tx.query(`SELECT site_id FROM equipment WHERE id::text = $1 AND company_id = $2`, [b.ref, companyId])).rows[0];
+    if (!e || (d.site_id && e.site_id !== d.site_id)) throw invalid('Ekipman bu belgenin şubesinde değil.');
+  } else if (b.kind === 'task_template') {
+    if (!(await tx.query(`SELECT 1 FROM task_templates WHERE code = $1`, [b.ref])).rowCount) throw invalid('Bilinmeyen kontrol.');
+  } else if (!(await tx.query(`SELECT 1 FROM rules WHERE code = $1`, [b.ref])).rowCount) throw invalid('Bilinmeyen yükümlülük.');
+  try {
+    const r = (await tx.query<{ id: string }>(`INSERT INTO document_links (company_id, document_id, link_kind, ref, purpose, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [companyId, id, b.kind, b.ref, b.purpose!.trim(), p.userId])).rows[0]!;
+    await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.use_added', entityType: 'document', entityId: id, payload: { kind: b.kind, ref: b.ref, purpose: b.purpose!.trim() } });
+    return { id: r.id };
+  } catch (e) {
+    if ((e as { code?: string }).code === '23505') throw conflict('ALREADY_LINKED', 'Bu belge buna zaten bağlı.');
+    throw e;
+  }
+}
+
+/** Documents a check uses (by its template or its equipment), readable by this person. */
+export async function documentsForTask(tx: Tx, p: Principal, companyId: string, t: { template_code: string; equipment_id: string | null; rule_code?: string | null }) {
+  const rows = (await tx.query(`SELECT DISTINCT d.id, d.site_id, d.title, l.purpose, l.link_kind FROM document_links l JOIN documents d ON d.id = l.document_id
+     WHERE l.company_id = $1 AND l.removed_at IS NULL AND d.archived_at IS NULL
+       AND ((l.link_kind = 'task_template' AND l.ref = $2) OR (l.link_kind = 'equipment' AND l.ref = $3) OR (l.link_kind = 'obligation' AND l.ref = $4))`,
+    [companyId, t.template_code, t.equipment_id ?? '', t.rule_code ?? ''])).rows;
+  const out = [];
+  for (const r of rows) if (await canReadDoc(tx, p, companyId, r)) out.push({ id: r.id, title: r.title, purpose: r.purpose, kind: r.link_kind });
+  return out;
+}
+
+/** What a document can be tied to: checks in use at its site(s), equipment of its site, obligations. */
+export async function useChoices(tx: Tx, p: Principal, companyId: string, id: string) {
+  const d = await loadDoc(tx, p, companyId, id, 'document.write');
+  const templates = (await tx.query(`SELECT DISTINCT ON (t.template_code) t.template_code AS code, tt.title FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
+     WHERE t.company_id = $1 AND ($2::uuid IS NULL OR t.site_id = $2) ORDER BY t.template_code, t.due_at DESC`, [companyId, d.site_id])).rows;
+  const equipment = (await tx.query(`SELECT id, name FROM equipment WHERE company_id = $1 AND ($2::uuid IS NULL OR site_id = $2) AND active ORDER BY name`, [companyId, d.site_id])).rows;
+  const obligations = (await tx.query(`SELECT DISTINCT r.code, rv.obligation_title AS title FROM obligations o JOIN rules r ON r.id = o.rule_id JOIN rule_versions rv ON rv.id = o.rule_version_id
+     WHERE o.company_id = $1 AND ($2::uuid IS NULL OR o.site_id = $2) AND o.decision = 'applies' ORDER BY r.code`, [companyId, d.site_id])).rows;
+  return { templates, equipment, obligations };
 }

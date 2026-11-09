@@ -73,7 +73,7 @@ export async function siteManagers(tx: Tx, companyId: string, siteId: string): P
 /** Inbox for one company. Items the user can no longer open (role or site changed, reassigned) are left out. */
 export async function listNotifications(tx: Tx, p: Principal, companyId: string, limit = 50) {
   const rows = (await tx.query(
-    `SELECT n.id, n.kind, n.entity_type, n.entity_id, n.title, n.body, n.created_at, n.read_at, n.site_id,
+    `SELECT n.id, n.kind, n.entity_type, n.entity_id, n.title, n.body, n.created_at, n.read_at, n.site_id, n.dedupe_key,
             nc.owner_id AS ncr_owner, nc.site_id AS ncr_site,
             EXISTS (SELECT 1 FROM ncr_actions a WHERE a.ncr_id = nc.id AND a.owner_id = $2) AS ncr_action_owner
        FROM notifications n
@@ -97,7 +97,41 @@ export async function listNotifications(tx: Tx, p: Principal, companyId: string,
     if (r.entity_type === 'membership') return can(p, 'ncr.manage', { companyId, siteId: r.site_id }).ok || can(p, 'members.manage', { companyId }).ok;
     return true;
   }).map(({ ncr_owner, ncr_site, ncr_action_owner, ...r }) => r);
-  return { items: visible, unread: visible.filter(r => !r.read_at).length };
+  const items = await markStale(tx, visible);
+  return { items, unread: items.filter(r => !r.read_at).length };
+}
+
+/**
+ * A reminder about a deadline is not shown as current once the deadline moved or the work is done:
+ * it stays in the list (history) marked "stale", with why. The dedupe key carries the deadline it was about.
+ */
+async function markStale<T extends { kind: string; dedupe_key: string }>(tx: Tx, rows: T[]) {
+  const due = (k: string) => k.split(':').slice(2).join(':');
+  const tr = rows.filter(r => r.kind === 'training_due_soon' || r.kind === 'training_overdue');
+  const ac = rows.filter(r => r.kind === 'action_due_soon' || r.kind === 'action_overdue');
+  const dc = rows.filter(r => r.kind === 'doc_expiring' || r.kind === 'doc_expired');
+  const trNow = tr.length ? (await tx.query(`SELECT id, due_at, completed_at, cancelled_at FROM training_assignments WHERE id = ANY($1)`, [tr.map(r => r.dedupe_key.split(':')[1])])).rows : [];
+  const acNow = ac.length ? (await tx.query(`SELECT id, due_at, status FROM ncr_actions WHERE id = ANY($1)`, [ac.map(r => r.dedupe_key.split(':')[1])])).rows : [];
+  const dcNow = dc.length ? (await tx.query(`SELECT v.id, v.document_id, (SELECT max(v2.version) FROM document_versions v2 WHERE v2.document_id = v.document_id AND v2.review_status = 'verified') AS current,
+       v.version FROM document_versions v WHERE v.id = ANY($1)`, [dc.map(r => r.dedupe_key.split(':')[1])])).rows : [];
+  return rows.map(row => {
+    const { dedupe_key, ...r } = row;
+    let stale: string | null = null;
+    const id = dedupe_key.split(':')[1];
+    if (tr.includes(row)) {
+      const a = trNow.find(x => x.id === id);
+      stale = !a ? null : a.completed_at ? 'Eğitim tamamlandı; bu hatırlatma eski.' : a.cancelled_at ? 'Atama iptal edildi.'
+        : a.due_at && new Date(a.due_at).toISOString() !== due(dedupe_key) ? 'Termin değişti; bu hatırlatma eski termine aitti.' : null;
+    } else if (ac.includes(row)) {
+      const a = acNow.find(x => x.id === id);
+      stale = !a ? null : a.status !== 'open' ? 'Aksiyon kapandı; bu hatırlatma eski.'
+        : a.due_at && new Date(a.due_at).toISOString() !== due(dedupe_key) ? 'Termin değişti; bu hatırlatma eski termine aitti.' : null;
+    } else if (dc.includes(row)) {
+      const v = dcNow.find(x => x.id === id);
+      stale = v && v.current && v.current > v.version ? 'Belge yenilendi; bu uyarı önceki sürüme aitti.' : null;
+    }
+    return { ...r, stale };
+  });
 }
 
 export async function markRead(tx: Tx, p: Principal, companyId: string, ids: string[] | 'all') {

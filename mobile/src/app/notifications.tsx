@@ -8,7 +8,7 @@ import { GhostButton, Tap } from '../components/ui';
 import { fmtDateTime } from '../features/dates';
 import { C, tint, type } from '../theme';
 
-export type Note = { id: string; kind: string; entity_type: string; entity_id: string; title: string; body: string; created_at: string; read_at: string | null };
+export type Note = { id: string; kind: string; entity_type: string; entity_id: string; title: string; body: string; created_at: string; read_at: string | null; stale?: string | null };
 type Inbox = { items: Note[]; unread: number };
 
 const TONE: Record<string, string> = {
@@ -53,7 +53,8 @@ export default function NotificationsRoute() {
           style={{ flexDirection: 'row', gap: 12, borderWidth: 1, borderColor: n.read_at ? C.bd : tint.white(0.16), backgroundColor: n.read_at ? C.bg : C.card, borderRadius: 20, padding: 14 }}>
           <View style={{ width: 8, height: 8, borderRadius: 999, marginTop: 6, backgroundColor: n.read_at ? 'transparent' : (TONE[n.kind] ?? C.t2) }} />
           <View style={{ flex: 1, gap: 3 }}>
-            <Text style={type(13.5, n.read_at ? 500 : 700, { color: n.read_at ? C.t2 : C.t1 })}>{n.title}</Text>
+            <Text style={type(13.5, n.read_at || n.stale ? 500 : 700, { color: n.read_at || n.stale ? C.t2 : C.t1 })}>{n.stale ? <Text style={{ color: C.t3 }}>ESKİ · </Text> : null}{n.title}</Text>
+            {n.stale ? <Text testID={`note-stale-${n.id}`} style={type(11.5, 600, { color: C.t3, lh: 1.4 })}>{n.stale}</Text> : null}
             <Text style={type(12, 400, { color: C.t3, lh: 1.45 })}>{n.body}</Text>
             <Text style={type(10.5, 400, { color: C.t3 })}>{fmtDateTime(n.created_at)}</Text>
           </View>

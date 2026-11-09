@@ -30,6 +30,7 @@ export type Requirement =
 
 export type TaskDetail = {
   relatedTraining?: { id: string; title: string; summary: string; is_example: boolean; minutes: number | null }[];
+  relatedDocuments?: { id: string; title: string; purpose: string; kind: string }[];
   id: string; status: TaskRow['status']; outcome: TaskRow['outcome']; dueAt: string; reviewFlag: string | null;
   title: string; instructions: string; severity: TaskRow['severity'];
   equipment: { id: string; name: string; type: string } | null;

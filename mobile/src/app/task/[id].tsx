@@ -115,6 +115,15 @@ export default function TaskDetailRoute() {
         </Card>
       ) : null}
 
+      {t.relatedDocuments?.length ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+          <Eyebrow>İLGİLİ BELGELER</Eyebrow>
+          {t.relatedDocuments.map(d => (
+            <Text key={d.id} testID={`task-doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={type(12.5, 500, { color: C.info, lh: 1.45 })}>{d.title} · {d.purpose}</Text>
+          ))}
+        </Card>
+      ) : null}
+
       {(t.measurements.length > 0 || t.evidence.length > 0) && (
         <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>SUNUCUDAKİ KAYITLAR</Eyebrow>

@@ -21,7 +21,8 @@ type Version = { id: string; version: number; valid_from: string | null; valid_u
 type DocDetail = { id: string; docType: string; title: string; issuer: string | null; documentNo: string | null; siteId: string | null; siteName: string | null; equipmentName: string | null;
   issuerCheck: IssuerCheck; status: string; expiring: boolean; notYetValid: boolean; currentVersionId: string | null; validFrom: string | null; validUntil: string | null; expiryWarningDays: number;
   maxUploadBytes: number; shares: { id: string; site_id: string; site_name: string }[]; versions: Version[];
-  permissions: { write: boolean; review: boolean; share: boolean } };
+  permissions: { write: boolean; review: boolean; share: boolean };
+  uses: { id: string; kind: string; kindLabel: string; name: string; purpose: string; createdBy: string }[] };
 
 const isDay = (v: string) => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v);
 const REVIEW: Record<string, [string, string]> = { unreviewed: ['İNCELENMEDİ', C.warn], verified: ['KURUM İÇİ İNCELENDİ', C.info], rejected: ['REDDEDİLDİ', C.crit] };
@@ -64,6 +65,7 @@ export default function DocumentRoute() {
           </Card>
           {!d.permissions.write && !d.siteId ? <Text style={type(11.5, 400, { color: C.t3 })}>Bu işletme geneli belge şubenle paylaşıldı: yalnız okuyabilirsin.</Text> : null}
           {err ? <ErrorBox message={err} /> : null}
+          <UsesCard d={d} onDone={q.reload} />
           {d.permissions.share ? <ShareCard d={d} onDone={q.reload} /> : null}
           {d.permissions.write ? <NewVersion docId={d.id} maxBytes={d.maxUploadBytes} onDone={q.reload} /> : null}
           <Eyebrow>SÜRÜMLER</Eyebrow>
@@ -257,5 +259,51 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
         </View>
       ) : null}
     </View>
+  );
+}
+
+/** What this document is used for: a check, a piece of equipment, an obligation, each with a purpose. */
+function UsesCard({ d, onDone }: { d: DocDetail; onDone: () => void }) {
+  const { company, call } = useSession();
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<'task_template' | 'equipment' | 'obligation'>('task_template');
+  const [ref, setRef] = useState<string | null>(null);
+  const [purpose, setPurpose] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const choices = useApi<{ templates: { code: string; title: string }[]; equipment: { id: string; name: string }[]; obligations: { code: string; title: string }[] }>(
+    open && d.permissions.write ? `/companies/${company!.id}/documents/${d.id}/use-choices` : null);
+  if (!d.uses.length && !d.permissions.write) return null;
+  const opts: [string, string][] = !choices.data ? [] : kind === 'task_template' ? choices.data.templates.map(t => [t.code, t.title])
+    : kind === 'equipment' ? choices.data.equipment.map(e => [e.id, e.name]) : choices.data.obligations.map(o => [o.code, o.title]);
+  const run = async (body: unknown) => { setError(null); try { await call('POST', `/companies/${company!.id}/documents/${d.id}/uses`, body); setOpen(false); setRef(null); setPurpose(''); onDone(); } catch (e) { setError(errorText(e)); } };
+  return (
+    <Card style={{ gap: 8 }}>
+      <Eyebrow>NE İÇİN KULLANILIYOR</Eyebrow>
+      {d.uses.length === 0 ? <Text style={type(12, 400, { color: C.t3 })}>Henüz bir göreve, ekipmana ya da yükümlülüğe bağlanmadı.</Text> : null}
+      {d.uses.map(u => (
+        <View key={u.id} testID={`doc-use-${u.id}`} style={{ gap: 2, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 6 }}>
+          <Text style={type(12.5, 600)}>{u.kindLabel}: {u.name}</Text>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Amaç: {u.purpose}</Text>
+          {d.permissions.write ? <Text onPress={() => run({ op: 'remove', linkId: u.id })} style={type(11.5, 500, { color: C.crit })}>Bağı kaldır</Text> : null}
+        </View>
+      ))}
+      {d.permissions.write && !open ? <GhostButton testID="doc-use-open" label="Kullanım amacı ekle" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => setOpen(true)} /> : null}
+      {open ? (
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {([['task_template', 'Kontrol'], ['equipment', 'Ekipman'], ['obligation', 'Yükümlülük']] as const).map(([k, l]) =>
+              <FilterChip key={k} testID={`doc-use-kind-${k}`} label={l} px={11} active={kind === k} onPress={() => { setKind(k); setRef(null); }} />)}
+          </View>
+          {!choices.data ? <Loading /> : opts.length === 0 ? <Text style={type(12, 400, { color: C.t3 })}>Bu şubede seçilecek kayıt yok.</Text> : (
+            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              {opts.map(([v, l]) => <FilterChip key={v} testID={`doc-use-ref-${v}`} label={l} px={11} active={ref === v} onPress={() => setRef(v)} />)}
+            </View>
+          )}
+          <Field label="Amaç" testID="doc-use-purpose" value={purpose} onChangeText={setPurpose} placeholder="ör. Sıcaklık ölçümünde kullanılan termometrenin kalibrasyon kanıtı" />
+          {error ? <ErrorBox message={error} /> : null}
+          <PrimaryButton testID="doc-use-save" label="Kaydet" glow={false} height={40} size={12} disabled={!ref || purpose.trim().length < 5} onPress={() => run({ op: 'add', kind, ref, purpose: purpose.trim() })} />
+        </View>
+      ) : null}
+    </Card>
   );
 }

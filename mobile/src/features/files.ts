@@ -104,3 +104,29 @@ export async function openEvidence(token: string | null, companyId: string, evid
   if (!(await Sharing.isAvailableAsync())) throw new Error('Bu cihazda dosya açma/paylaşma kullanılamıyor.');
   await Sharing.shareAsync(r.uri, { mimeType: r.headers['content-type'] ?? r.headers['Content-Type'], dialogTitle: opts.name ?? 'Belge' });
 }
+
+/**
+ * Download a file the server builds for this person (e.g. the PDF audit file). On the web the browser
+ * saves it; on a phone it is stored in the app's cache and offered to the share sheet (Files, Drive …).
+ */
+export async function downloadFromApi(token: string | null, path: string, name: string) {
+  const url = `${API_URL}${path}`;
+  const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
+  if (Platform.OS === 'web') {
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      let msg = res.status === 404 ? 'Bu şube ya da kayıtlar için yetkin yok.' : res.status === 403 ? 'Bu dosyayı alma yetkin yok.' : 'Dosya hazırlanamadı.';
+      try { msg = (await res.json()).error?.message ?? msg; } catch { /* not JSON */ }
+      throw new Error(msg);
+    }
+    const blobUrl = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = blobUrl; a.download = name; a.click();
+    return;
+  }
+  const dest = `${LegacyFS.cacheDirectory}${name}`;
+  const r = await LegacyFS.downloadAsync(url, dest, { headers });
+  if (r.status !== 200) throw new Error(r.status === 404 ? 'Bu şube ya da kayıtlar için yetkin yok.' : 'Dosya indirilemedi.');
+  if (!(await Sharing.isAvailableAsync())) throw new Error('Bu cihazda dosya paylaşma kullanılamıyor.');
+  await Sharing.shareAsync(r.uri, { mimeType: 'application/pdf', dialogTitle: name });
+}

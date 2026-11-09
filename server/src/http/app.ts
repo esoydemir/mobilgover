@@ -11,6 +11,7 @@ import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
 import { addSite, board, relate } from '../services/board';
+import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
 import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, decideSuggestion, equipmentHistory, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
 import { listNotifications, markProviderRead, markRead, providerNotifications } from '../services/notifications';
@@ -109,6 +110,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     if (err.code === '42501') return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Kayıt bulunamadı.' } });
     if (err.statusCode === 413) return reply.code(413).send({ error: { code: 'TOO_LARGE', message: 'Dosya çok büyük.' } });
     if (err.statusCode && err.statusCode < 500) return reply.code(err.statusCode).send({ error: { code: 'BAD_REQUEST', message: err.message } });
+    if (process.env.GH_DEBUG) console.error('DBGERR', err);
     log({ level: 'error', route: _req.routeOptions.url ?? 'unknown', code: err.code ?? null, message: redact(String(err.message ?? err)) });
     return reply.code(500).send({ error: { code: 'INTERNAL', message: 'Beklenmeyen bir hata oluştu; kayıt yapılmadı.' } });
   });
@@ -1026,7 +1028,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   const isoDate = z.iso.date().nullable();
   app.get('/companies/:companyId/documents', async req => {
     const companyId = company(req);
-    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional() }).parse(req.query);
+    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional(), filter: z.enum(['expiring', 'expired', 'pending_review', 'rejected']).optional() }).parse(req.query);
     return db.tenant(companyId, tx => docs.listDocuments(tx, req.principal, companyId, q));
   });
   app.post('/companies/:companyId/documents', async (req, reply) => {
@@ -1034,6 +1036,34 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ docType: z.enum(docs.DOC_TYPES), title: z.string().max(200), siteId: uuid.nullable().default(null), equipmentId: uuid.nullable().default(null),
       issuer: z.string().max(200).nullable().default(null), documentNo: z.string().max(100).nullable().default(null) }).parse(req.body);
     return mutate(req, reply, companyId, tx => docs.createDocument(tx, req.principal, companyId, b), 201);
+  });
+  app.get('/companies/:companyId/documents/:id/use-choices', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => docs.useChoices(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/documents/:id/uses', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ op: z.enum(['add', 'remove']), kind: z.enum(['task_template', 'equipment', 'obligation']).optional(), ref: z.string().max(80).optional(),
+      purpose: z.string().max(500).optional(), linkId: uuid.optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.linkDocument(tx, req.principal, companyId, id, b), b.op === 'add' ? 201 : 200);
+  });
+  // Audit file: data (json) or PDF. linkBase: the API address as the user's app sees it, used to print attachment links.
+  app.get('/companies/:companyId/audit-report', async (req, reply) => {
+    const companyId = company(req);
+    const q = z.object({ siteId: uuid.optional(), from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }), format: z.enum(['json', 'pdf']).default('pdf'),
+      linkBase: z.string().max(200).regex(/^(https?:\/\/[^\s]+|\/[^\s]*)?$/).default('') }).parse(req.query);
+    const report = await db.tenant(companyId, tx => auditReport(tx, req.principal, companyId, q));
+    if (q.format === 'json') return report;
+    const pdf = await renderPdf(report, q.linkBase.replace(/\/$/, ''));
+    const day = new Date().toISOString().slice(0, 10);
+    return reply.header('content-type', 'application/pdf').header('content-disposition', `attachment; filename="denetim-dosyasi-${day}.pdf"`).send(pdf);
+  });
+  app.get('/companies/:companyId/training/courses/:id/people', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => training.coursePeople(tx, req.principal, companyId, id));
   });
   app.get('/companies/:companyId/documents/:id', async req => {
     const companyId = company(req);

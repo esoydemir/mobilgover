@@ -405,3 +405,25 @@ export async function retrain(tx: Tx, p: Principal, companyId: string, id: strin
     dedupeKey: `training_assigned:${n.id}`, title: 'Yeniden eğitim atandı', body: `${v.title} · ${b.reason.trim()}` });
   return { id: n.id };
 }
+
+/**
+ * Who, for one course: assigned (by whom), read, completed, passed, field-verified — each separate,
+ * per version. A completion stays tied to the version it was made on, even after a new version.
+ * Managers only; a site manager sees the people of their own site.
+ */
+export async function coursePeople(tx: Tx, p: Principal, companyId: string, courseId: string) {
+  if (!holds(p, 'training.assign', companyId)) throw forbidden();
+  const rows = (await tx.query(`SELECT a.id, a.site_id, a.user_id, u.display_name AS user_name, ab.display_name AS assigned_by_name, a.assigned_at, a.due_at, a.reason,
+       v.version, v.status AS version_status, a.read_at, a.completed_at, a.passed_at, a.best_score, a.field_result, a.field_verified_at, fv.display_name AS field_verified_by_name,
+       a.cancelled_at, a.previous_assignment_id
+     FROM training_assignments a JOIN users u ON u.id = a.user_id JOIN users ab ON ab.id = a.assigned_by JOIN training_versions v ON v.id = a.version_id
+     LEFT JOIN users fv ON fv.id = a.field_verified_by WHERE a.company_id = $1 AND a.course_id = $2 ORDER BY v.version DESC, a.assigned_at DESC`, [companyId, courseId])).rows
+    .filter(r => can(p, 'training.assign', { companyId, siteId: r.site_id }).ok);
+  const count = (f: (r: any) => boolean) => rows.filter(r => !r.cancelled_at && f(r)).length;
+  return {
+    summary: { assigned: count(() => true), read: count(r => !!r.read_at), completed: count(r => !!r.completed_at), passed: count(r => !!r.passed_at),
+      fieldEffective: count(r => r.field_result === 'effective'), fieldNotEffective: count(r => r.field_result === 'not_effective'), retrainings: count(r => !!r.previous_assignment_id) },
+    people: rows.map(({ site_id, ...r }) => r),
+    note: 'Her satır bir atamadır; tamamlama, yapıldığı sürüme bağlı kalır. Katılım kaydı resmî sertifika değildir.',
+  };
+}

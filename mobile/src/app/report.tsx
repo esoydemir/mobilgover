@@ -9,6 +9,8 @@ import { Screen } from '../components/Screen';
 import { ErrorBox, Loading, StaleNote } from '../components/states';
 import { Card, Eyebrow, FilterChip, PrimaryButton } from '../components/ui';
 import { addDays, fmtDateTime, startOfDay } from '../features/dates';
+import { downloadFromApi } from '../features/files';
+import { API_URL } from '../api/client';
 import { C, tint, type } from '../theme';
 
 type Export = {
@@ -31,7 +33,10 @@ const tone = (v: number | null): RingDomain['tone'] => (v === null ? 'idle' : v 
 
 /** Indicators with their components, and the audit file with its gaps. */
 export default function ReportRoute() {
-  const { company, siteId, call } = useSession();
+  const { company, siteId, sites, call, token } = useSession();
+  const [pdfSite, setPdfSite] = useState<string | null | 'all'>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfMsg, setPdfMsg] = useState<string | null>(null);
   const [days, setDays] = useState(30);
   const [width, setWidth] = useState(346);
   const [file, setFile] = useState<Export | null>(null);
@@ -53,6 +58,17 @@ export default function ReportRoute() {
     setBusy(true); setError(null);
     try { setFile(await call<Export>('GET', `/companies/${company!.id}/audit-export?${query}`)); }
     catch (e) { setError(errorText(e)); } finally { setBusy(false); }
+  };
+
+  const pdfSiteId = pdfSite === 'all' ? null : pdfSite ?? siteId;
+  const downloadPdf = async () => {
+    setPdfBusy(true); setPdfMsg(null);
+    try {
+      const linkBase = typeof window !== 'undefined' && window.location ? `${window.location.origin}${API_URL.startsWith('/') ? API_URL : ''}` : API_URL;
+      await downloadFromApi(token, `/companies/${company!.id}/audit-report?format=pdf&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${pdfSiteId ? `&siteId=${pdfSiteId}` : ''}&linkBase=${encodeURIComponent(linkBase)}`,
+        `denetim-dosyasi-${new Date().toISOString().slice(0, 10)}.pdf`);
+      setPdfMsg('PDF indirildi.');
+    } catch (e) { setPdfMsg((e as Error).message); } finally { setPdfBusy(false); }
   };
 
   return (
@@ -93,7 +109,19 @@ export default function ReportRoute() {
         </>
       )}
 
-      <PrimaryButton testID="report-export" label={busy ? 'Hazırlanıyor…' : 'Denetim dosyası oluştur'} disabled={busy} onPress={exportFile} />
+      <Card style={{ gap: 9 }}>
+        <Eyebrow>PDF DENETİM DOSYASI</Eyebrow>
+        <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>Açık kritik kayıtlar, geciken kontroller, süresi dolan/yaklaşan belgeler, doğrulama bekleyen işler, kaynak ve kural sürümleri. Yalnız senin erişebildiğin kayıtlar ve ekler girer; ek bağlantıları açılırken yetki yeniden kontrol edilir. Tarih aralığı yukarıdaki seçim ({days} gün).</Text>
+        {sites.length > 1 ? (
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            <FilterChip testID="pdf-site-all" label="Tüm şubelerim" px={11} active={pdfSite === 'all'} onPress={() => setPdfSite('all')} />
+            {sites.map(st => <FilterChip key={st.id} testID={`pdf-site-${st.id}`} label={st.name} px={11} active={(pdfSite ?? siteId) === st.id && pdfSite !== 'all'} onPress={() => setPdfSite(st.id)} />)}
+          </View>
+        ) : null}
+        <PrimaryButton testID="report-pdf" label={pdfBusy ? 'Hazırlanıyor…' : 'PDF indir'} glow={false} height={44} size={13} disabled={pdfBusy} onPress={downloadPdf} />
+        {pdfMsg ? <Text testID="report-pdf-msg" style={type(12, 500, { color: pdfMsg === 'PDF indirildi.' ? C.lime : C.crit })}>{pdfMsg}</Text> : null}
+      </Card>
+      <PrimaryButton testID="report-export" label={busy ? 'Hazırlanıyor…' : 'Denetim dosyası oluştur (ekranda özet)'} disabled={busy} onPress={exportFile} />
       {error ? <ErrorBox message={error} /> : null}
       {file ? (
         <Card border={file.integrity.auditChain.ok ? tint.lime(0.3) : tint.crit(0.4)}>

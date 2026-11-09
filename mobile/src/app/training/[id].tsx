@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../components/ui';
+import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { VERSION_STATUS, linkLabel, LINK_KIND } from '../../features/training';
 import { useUi } from '../../state/app';
@@ -91,6 +91,7 @@ export default function CourseRoute() {
           <Text style={type(11, 400, { color: C.t3 })}>{pub.quiz.length} soruluk kısa değerlendirme · geçme puanı %{pub.pass_score}{pub.published_by_name ? ` · yayımlayan ${pub.published_by_name}` : ''}</Text>
         </Card>
       ) : null}
+      {c.permissions.assign ? <PeopleCard courseId={c.id} /> : null}
       <Eyebrow>SÜRÜMLER</Eyebrow>
       {c.versions.map(v => (
         <View key={v.id} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -101,5 +102,30 @@ export default function CourseRoute() {
       {c.permissions.publish && pub && !c.isExample ? <GhostButton testID="tr-archive" label="Arşivle (yeni atama yapılamaz)" height={36} size={11.5} color={C.crit} border={tint.crit(0.3)} style={{ alignSelf: 'flex-start' }}
         onPress={() => run(() => call('POST', `${base}/courses/${c.id}/archive`, {}), 'Arşivlendi')} /> : null}
     </Screen>
+  );
+}
+
+type People = { summary: { assigned: number; read: number; completed: number; passed: number; fieldEffective: number; fieldNotEffective: number; retrainings: number };
+  people: { id: string; user_name: string; assigned_by_name: string; assigned_at: string; version: number; read_at: string | null; completed_at: string | null; passed_at: string | null;
+    field_result: string | null; field_verified_by_name: string | null; cancelled_at: string | null; previous_assignment_id: string | null }[]; note: string };
+
+/** Who was assigned, read, completed, passed and was verified in the field — separately, per version. */
+function PeopleCard({ courseId }: { courseId: string }) {
+  const { company } = useSession();
+  const q = useApi<People>(company ? `/companies/${company.id}/training/courses/${courseId}/people` : null);
+  if (!q.data) return null;
+  const s = q.data.summary;
+  return (
+    <Card style={{ gap: 8 }}>
+      <Eyebrow>KİŞİLER</Eyebrow>
+      <Text testID="tr-people-summary" style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>Atanan {s.assigned} · okuyan {s.read} · tamamlayan {s.completed} · sınavı geçen {s.passed} · sahada etkili {s.fieldEffective} · etkili değil {s.fieldNotEffective}{s.retrainings ? ` · yeniden eğitim ${s.retrainings}` : ''}</Text>
+      {q.data.people.map(r => (
+        <Tap key={r.id} testID={`tr-person-${r.id}`} onPress={() => router.push(`/training/a/${r.id}`)} style={{ borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 6, gap: 2 }}>
+          <Text style={type(13, 600)}>{r.user_name} · sürüm {r.version}{r.previous_assignment_id ? ' · yeniden eğitim' : ''}{r.cancelled_at ? ' · iptal' : ''}</Text>
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>Atayan {r.assigned_by_name} · {r.read_at ? 'okudu' : 'okumadı'} · {r.completed_at ? 'tamamladı' : 'tamamlamadı'} · {r.passed_at ? 'geçti' : 'geçmedi'} · saha: {r.field_result === 'effective' ? `etkili (${r.field_verified_by_name})` : r.field_result === 'not_effective' ? `etkili değil (${r.field_verified_by_name})` : 'bekliyor'}</Text>
+        </Tap>
+      ))}
+      <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>{q.data.note}</Text>
+    </Card>
   );
 }
