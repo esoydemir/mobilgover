@@ -123,6 +123,7 @@ export default function NcrRoute() {
         <GhostButton testID="ncr-share-case" label="Vakayı mesleki ağda paylaş (önizlemeli, anonim)"
           onPress={() => router.push(`/network/share-case?ncrId=${n.id}`)} />
       ) : null}
+      {n.permissions.inviteVerifier ? <Text testID="ncr-case-posts" onPress={() => router.push('/network/case-posts')} style={type(12, 600, { color: C.info })}>İşletmenin vaka paylaşımları: onay ve geri çekme ›</Text> : null}
       <HistoryCard n={n} />
     </Screen>
   );

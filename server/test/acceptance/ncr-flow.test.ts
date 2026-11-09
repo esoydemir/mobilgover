@@ -325,7 +325,7 @@ describe('service delivery does not close a case', () => {
       description: 'Kapı açık kalıyor.', city: 'İstanbul', ncrId: ncr });
     expect(req.status).toBe(201);
     const q = await pro.post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Conta ve menteşe', exclusions: 'Kompresör', priceNet: 500, vatRate: 20,
-      materials: 'Conta', durationText: '1 saat', warrantyText: '3 ay', validUntil: later(72) });
+      materials: 'Conta', durationText: '1 saat', warrantyText: '3 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: later(72) });
     const acc = await owner().post(`${C()}/quotes/${q.body.id}/accept`);
     await pro.post(`/pro/jobs/${acc.body.jobId}/check-in`, { code: acc.body.checkinCode });
     await pro.post(`/pro/jobs/${acc.body.jobId}/report`, { report: 'Conta ve menteşe değiştirildi; 30 dk sonra iç sıcaklık 3 °C ölçüldü.' });

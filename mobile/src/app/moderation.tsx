@@ -22,17 +22,20 @@ const DECISION: Record<string, string> = { hide: 'İçeriği gizle', dismiss: '�
 
 /** Network moderation: every decision needs a reason and is recorded in the audit log. */
 export default function ModerationRoute() {
-  const [status, setStatus] = useState<'open' | 'closed'>('open');
-  const q = useApi<Report[]>(`/network/moderation/reports?status=${status}`);
+  const [status, setStatus] = useState<'open' | 'closed' | 'appeals'>('open');
+  const q = useApi<Report[]>(status === 'appeals' ? null : `/network/moderation/reports?status=${status}`);
+  const ap = useApi<Appeal[]>(status === 'appeals' ? '/network/moderation/appeals' : null);
   return (
     <Screen title="Moderasyon" titleEn="Moderation" gap={10} onRefresh={q.reload} refreshing={q.loading}>
       <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>Mesleki ağ şikâyetleri. Karar gerekçesi zorunludur; karar, aynı içerikteki tüm açık şikâyetleri kapatır ve denetim kaydına yazılır. Kendi şikâyetini karara bağlayamazsın.</Text>
       <View style={{ flexDirection: 'row', gap: 7 }}>
         <FilterChip testID="mod-open" label="Açık" active={status === 'open'} onPress={() => setStatus('open')} />
         <FilterChip testID="mod-closed" label="Karara bağlanan" active={status === 'closed'} onPress={() => setStatus('closed')} />
+        <FilterChip testID="mod-appeals" label="İtirazlar" active={status === 'appeals'} onPress={() => setStatus('appeals')} />
       </View>
+      {status === 'appeals' ? (ap.error ? <ErrorBox message={ap.error} /> : !ap.data ? <Loading /> : ap.data.length === 0 ? <Empty title="Açık itiraz yok" /> : ap.data.map(a => <AppealCard key={a.id} a={a} reload={ap.reload} />)) : null}
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
-      {!q.data ? <Loading /> : q.data.length === 0 ? <Empty title={status === 'open' ? 'Açık şikâyet yok' : 'Karar yok'} /> : q.data.map(r => <ReportCard key={r.id} r={r} reload={q.reload} />)}
+      {status === 'appeals' ? null : !q.data ? <Loading /> : q.data.length === 0 ? <Empty title={status === 'open' ? 'Açık şikâyet yok' : 'Karar yok'} /> : q.data.map(r => <ReportCard key={r.id} r={r} reload={q.reload} />)}
     </Screen>
   );
 }
@@ -65,6 +68,34 @@ function ReportCard({ r, reload }: { r: Report; reload: () => Promise<void> }) {
           {error ? <ErrorBox message={error} /> : null}
           <PrimaryButton testID={`mod-submit-${r.id}`} label="Kararı kaydet" glow={false} height={40} size={12.5} disabled={!decision || notes.trim().length < 10}
             onPress={async () => { setError(null); try { await call('POST', `/network/moderation/reports/${r.id}`, { decision, notes }); showToast('Karar kaydedildi'); await reload(); } catch (e) { setError(errorText(e)); } }} />
+        </>
+      )}
+    </Card>
+  );
+}
+
+type Appeal = { id: string; reason: string; created_at: string; target_type: string; decision: string; decision_notes: string; first_moderator: string | null; mine_first: boolean };
+
+/** An appeal is decided by a moderator other than the one who made the first decision (the server enforces it). */
+function AppealCard({ a, reload }: { a: Appeal; reload: () => Promise<void> }) {
+  const { call } = useSession();
+  const { showToast } = useUi();
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const go = async (decision: 'upheld' | 'overturned') => { setError(null); try { await call('POST', `/network/moderation/appeals/${a.id}`, { decision, notes }); showToast('İtiraz karara bağlandı'); await reload(); } catch (e) { setError(errorText(e)); } };
+  return (
+    <Card style={{ gap: 7 }} border={tint.warn(0.3)}>
+      <Text style={type(10, 700, { ls: 0.08, color: C.warn })}>İTİRAZ · {TARGET[a.target_type]} · ilk karar: {DECISION[a.decision]}</Text>
+      <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>İlk gerekçe ({a.first_moderator}): {a.decision_notes}</Text>
+      <Text style={type(12.5, 500, { lh: 1.45 })}>İtiraz: {a.reason}</Text>
+      {a.mine_first ? <Text testID={`appeal-own-${a.id}`} style={type(12, 600, { color: C.crit })}>İlk kararı sen verdin; bu itirazı başka bir moderatör incelemeli.</Text> : (
+        <>
+          <Field label="Gerekçe (zorunlu)" testID={`appeal-notes-${a.id}`} value={notes} onChangeText={setNotes} multiline />
+          {error ? <ErrorBox message={error} /> : null}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <PrimaryButton testID={`appeal-overturn-${a.id}`} label="Kararı kaldır" glow={false} height={38} size={12} style={{ flex: 1 }} disabled={notes.trim().length < 10} onPress={() => go('overturned')} />
+            <PrimaryButton testID={`appeal-uphold-${a.id}`} label="Karar kalsın" glow={false} height={38} size={12} style={{ flex: 1 }} disabled={notes.trim().length < 10} onPress={() => go('upheld')} />
+          </View>
         </>
       )}
     </Card>

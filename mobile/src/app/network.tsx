@@ -32,6 +32,7 @@ export default function NetworkRoute() {
             <GhostButton testID="net-my-profile" label="Profilim" height={38} size={12} onPress={() => router.push(`/network/p/${session!.userId}`)} />
             <GhostButton testID="net-search" label="Uzman ara" height={38} size={12} onPress={() => router.push('/network/search')} />
             <GhostButton testID="net-compose" label="Paylaş" height={38} size={12} onPress={() => router.push('/network/compose')} />
+            <GhostButton testID="net-my-reports" label="Şikâyetlerim" height={38} size={12} onPress={() => router.push('/network/reports')} />
             {me.data.moderator ? <GhostButton testID="net-moderation" label="Moderasyon" height={38} size={12} onPress={() => router.push('/moderation')} /> : null}
           </View>
           <View style={{ flexDirection: 'row', gap: 7 }}>

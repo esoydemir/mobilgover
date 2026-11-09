@@ -28,7 +28,7 @@ type Category = { code: string; name: string; required_credentials: string[]; is
 type Inbox = {
   requests: { id: string; category_name: string; title: string; description: string; city: string; created_at: string; my_quote_status: string | null;
     shared_ncr: { title: string; riskLevel: string; hazardType: string } | null }[];
-  jobs: { id: string; status: string; title: string; company_name: string; site_name: string; checked_in_at: string | null; business_note: string | null }[];
+  jobs: { id: string; status: string; title: string; company_name: string; site_name: string; checked_in_at: string | null; business_note: string | null; cancel_reason: string | null }[];
 };
 
 const V_STATUS: Record<string, [string, string]> = { verified: ['DOĞRULANDI', C.lime], pending: ['İNCELEMEDE', C.warn], rejected: ['REDDEDİLDİ', C.crit], not_verified: ['DOĞRULANMADI', C.t3] };
@@ -200,7 +200,7 @@ function MyProfessionalArea() {
 function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () => void }) {
   const { call } = useSession();
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ scope: '', exclusions: '', priceNet: '', vatRate: '20', materials: '', durationText: '', warrantyText: '' });
+  const [f, setF] = useState({ scope: '', exclusions: '', priceNet: '', vatRate: '20', materials: '', durationText: '', warrantyText: '', deliverable: '' });
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (v: string) => setF(x => ({ ...x, [k]: v }));
   return (
@@ -222,8 +222,9 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
           <Field label="Malzeme" testID="q-mat" value={f.materials} onChangeText={set('materials')} />
           <Field label="Süre" testID="q-dur" value={f.durationText} onChangeText={set('durationText')} />
           <Field label="Garanti" testID="q-war" value={f.warrantyText} onChangeText={set('warrantyText')} />
+          <Field label="Teslim edilecek çıktı" testID="q-deliv" value={f.deliverable} onChangeText={set('deliverable')} placeholder="ör. Servis raporu, öncesi/sonrası sıcaklık ölçümü" />
           {error ? <ErrorBox message={error} /> : null}
-          <PrimaryButton testID="quote-submit" label="Teklifi gönder (3 gün geçerli)" height={46} size={13}
+          <PrimaryButton testID="quote-submit" label="Teklifi gönder (3 gün geçerli)" height={46} size={13} disabled={f.deliverable.trim().length < 3}
             onPress={async () => {
               setError(null);
               try {
@@ -247,7 +248,7 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
     <Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
       <Text style={type(14.5, 600)}>{j.title}</Text>
       <Text style={type(12, 400, { color: C.t2 })}>{j.company_name} · {j.site_name}</Text>
-      <Text testID="pro-job-status" style={type(12, 600, { color: j.status === 'accepted' ? C.lime : C.warn })}>{({ scheduled: 'Planlandı', checked_in: 'Giriş yapıldı', report_submitted: 'Rapor gönderildi, teslim kabulü bekleniyor', accepted: 'İşletme teslim kabul etti', disputed: 'İşletme itiraz etti' } as Record<string, string>)[j.status] ?? j.status}</Text>
+      <Text testID="pro-job-status" style={type(12, 600, { color: j.status === 'accepted' ? C.lime : C.warn })}>{({ scheduled: 'Planlandı', checked_in: 'Giriş yapıldı', report_submitted: 'Rapor gönderildi, teslim kabulü bekleniyor', accepted: 'İşletme teslim kabul etti', disputed: 'İşletme itiraz etti', revision_requested: 'İşletme revizyon istedi: yeni rapor gönder', cancelled: 'İşletme işi iptal etti' } as Record<string, string>)[j.status] ?? j.status}</Text>
       {j.status === 'scheduled' ? (
         <>
           <Field label="İşletmenin gösterdiği giriş kodu" testID="pro-code" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={8} />
@@ -255,20 +256,21 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
           <Text style={type(11, 400, { color: C.t3 })}>Giriş yalnızca yerinde bulunduğunu kaydeder; işin yapıldığını kanıtlamaz.</Text>
         </>
       ) : null}
-      {j.status === 'checked_in' ? (
+      {j.status === 'checked_in' || j.status === 'revision_requested' ? (
         <>
-          <Field label="Hizmet raporu" testID="pro-report" value={report} onChangeText={setReport} multiline placeholder="Ne yapıldı, hangi ölçümler alındı, hangi parçalar kullanıldı?" />
+          <Field label={j.status === 'revision_requested' ? 'Revize hizmet raporu (önceki sürüm saklanır)' : 'Hizmet raporu'} testID="pro-report" value={report} onChangeText={setReport} multiline placeholder="Ne yapıldı, hangi ölçümler alındı, hangi parçalar kullanıldı?" />
           <GhostButton testID="pro-report-submit" label="Raporu gönder" disabled={report.trim().length < 20} onPress={() => run(() => call('POST', `/pro/jobs/${j.id}/report`, { report: report.trim() }))} />
         </>
       ) : null}
       {j.business_note ? <Text style={type(12, 400, { color: C.t2 })}>İşletmenin notu: {j.business_note}</Text> : null}
+      {j.cancel_reason ? <Text style={type(12, 500, { color: C.crit })}>İptal gerekçesi: {j.cancel_reason}</Text> : null}
       {error ? <ErrorBox message={error} /> : null}
     </Card>
   );
 }
 
 type ProNote = { id: string; kind: string; title: string; body: string; created_at: string; read_at: string | null };
-const PRO_TONE: Record<string, string> = { provider_new_request: C.info, quote_accepted: C.lime, quote_not_selected: C.t3, job_accepted: C.lime, job_disputed: C.crit };
+const PRO_TONE: Record<string, string> = { provider_new_request: C.info, quote_accepted: C.lime, quote_not_selected: C.t3, job_accepted: C.lime, job_disputed: C.crit, job_revision_requested: C.warn, job_cancelled: C.crit };
 
 /** Provider-side notifications: new requests in approved categories, quote accepted / not selected, delivery result. */
 function ProNotifications({ onChange }: { onChange: () => void }) {

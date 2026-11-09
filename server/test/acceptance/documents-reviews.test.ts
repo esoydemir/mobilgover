@@ -147,7 +147,7 @@ describe('service reviews and marketplace notifications', () => {
       description: 'Yıllık bakım.', city: 'İstanbul' });
     requestId = req.body.id;
     const q = await pro().post(`/pro/requests/${requestId}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 400, vatRate: 20,
-      materials: '-', durationText: '1 saat', warrantyText: '1 ay', validUntil: new Date(Date.now() + 3 * 86400_000).toISOString() });
+      materials: '-', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: new Date(Date.now() + 3 * 86400_000).toISOString() });
     expect(q.status).toBe(201);
     expect((await notes(demo.users.owner.id, 'quote_received')).length).toBe(1);
     expect((await notes(demo.users.manager.id, 'quote_received')).length).toBe(1);
@@ -183,7 +183,7 @@ describe('service reviews and marketplace notifications', () => {
     const req = await owner().post(`${C()}/service-requests`, { siteId: demo.siteId, categoryCode: 'refrigeration_service', title: 'Conta değişimi',
       description: 'Kapı contası.', city: 'İstanbul' });
     const q = await pro().post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Conta', exclusions: 'Menteşe', priceNet: 300, vatRate: 20,
-      materials: 'Conta', durationText: '1 saat', warrantyText: '3 ay', validUntil: new Date(Date.now() + 3 * 86400_000).toISOString() });
+      materials: 'Conta', durationText: '1 saat', warrantyText: '3 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: new Date(Date.now() + 3 * 86400_000).toISOString() });
     expect(q.body).toEqual({ id: expect.any(String) });
     const acc = await owner().post(`${C()}/quotes/${q.body.id}/accept`);
     expect(acc.body.jobId).toEqual(expect.any(String));

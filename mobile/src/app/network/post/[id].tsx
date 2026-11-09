@@ -37,6 +37,9 @@ export default function PostRoute() {
         </View>
       </Tap>
       {p.status === 'draft' ? <Text style={type(12, 600, { color: C.warn })}>TASLAK · yalnız sen görürsün</Text> : null}
+      {p.withdrawn ? <Text testID="net-withdrawn" style={type(12.5, 600, { color: C.crit, lh: 1.45 })}>İşletme bu vaka paylaşımını geri çekti; ağda görünmüyor. Gerekçe: {p.withdrawn.reason}</Text> : null}
+      {p.reapprovalNeeded ? <Text testID="net-reapproval" style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Metin izin verilen sürümden farklı. Yayımlamak için işletme sahibi ya da merkez yöneticisinin yeniden onayı gerekir (Uygunsuzluk ekranı → Vaka paylaşımları).</Text> : null}
+      {p.kind === 'case' && p.mine && p.status === 'published' ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Metni değiştirirsen paylaşım ağdan kalkar ve yeniden izin gerekir.</Text> : null}
       {p.hidden ? <Text style={type(12.5, 600, { color: C.crit, lh: 1.45 })}>Moderasyonla gizlendi. Gerekçe: {p.hiddenReason}</Text> : null}
       {p.kind === 'case' ? <CaseBox s={p.caseSnapshot} /> : null}
       {edit !== null ? (
@@ -50,8 +53,8 @@ export default function PostRoute() {
       ) : <Text testID="net-post-text" style={type(14, 400, { lh: 1.6 })}>{p.body}</Text>}
       <Text style={type(11, 500, { color: C.t3, lh: 1.4 })}>{USER_CONTENT}</Text>
       <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
-        {p.mine && p.status === 'draft' ? <PrimaryButton testID="net-publish-draft" label="Yayımla" glow={false} height={36} size={12} onPress={() => run(() => call('POST', `/network/posts/${id}`, { op: 'publish' }), 'Yayımlandı')} /> : null}
-        {p.mine && !p.hidden && edit === null ? <GhostButton testID="net-edit" label="Düzenle" height={36} size={12} onPress={() => setEdit(p.body ?? '')} /> : null}
+        {p.mine && p.status === 'draft' && !p.reapprovalNeeded ? <PrimaryButton testID="net-publish-draft" label="Yayımla" glow={false} height={36} size={12} onPress={() => run(() => call('POST', `/network/posts/${id}`, { op: 'publish' }), 'Yayımlandı')} /> : null}
+        {p.mine && !p.hidden && !p.withdrawn && edit === null ? <GhostButton testID="net-edit" label="Düzenle" height={36} size={12} onPress={() => setEdit(p.body ?? '')} /> : null}
         {p.mine ? <GhostButton testID="net-delete" label="Sil" height={36} size={12} color={C.crit} border={tint.crit(0.3)} onPress={() => run(async () => { await call('POST', `/network/posts/${id}`, { op: 'delete' }); router.back(); }, 'Silindi')} /> : null}
         {!p.mine ? <GhostButton testID="net-report-post" label="Şikâyet et" height={36} size={12} onPress={() => setReport({ type: 'post', id: p.id })} /> : null}
       </View>

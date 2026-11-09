@@ -141,7 +141,7 @@ describe('high risk: independent verification kept; an invited outside verifier 
     await owner().post(`${M}/causes`, { stage: 'initial', categories: ['equipment'], notes: 'Kompresör zayıf.' });
     const pro = client(env, provider.token);
     const req = await owner().post(`${C()}/service-requests`, { siteId: demo.siteId, categoryCode: 'refrigeration_service', title: 'Soğutucu bakımı', description: 'Sıcaklık yüksek.', city: 'İstanbul', ncrId: r.id });
-    const qt = await pro.post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 300, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', validUntil: later(48) });
+    const qt = await pro.post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 300, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: later(48) });
     const acc = await owner().post(`${C()}/quotes/${qt.body.id}/accept`);
     await pro.post(`/pro/jobs/${acc.body.jobId}/check-in`, { code: acc.body.checkinCode });
     await pro.post(`/pro/jobs/${acc.body.jobId}/report`, { report: 'Kondenser temizlendi, gaz basıncı normale döndü, 3 °C.' });
@@ -250,7 +250,7 @@ describe('notifications: provider side and overdue checks, once each', () => {
     const nr = inbox1.items.filter((x: any) => x.kind === 'provider_new_request' && x.entity_id === req.body.id);
     expect(nr.length).toBe(1);
     expect(JSON.stringify(nr)).not.toContain('Kalabalık Kafe');
-    const qt = await pro.post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 300, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', validUntil: later(48) });
+    const qt = await pro.post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 300, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: later(48) });
     const acc = await own.post(`${F()}/quotes/${qt.body.id}/accept`);
     await pro.post(`/pro/jobs/${acc.body.jobId}/check-in`, { code: acc.body.checkinCode });
     await pro.post(`/pro/jobs/${acc.body.jobId}/report`, { report: 'Kondenser temizlendi, iç sıcaklık 3 °C ölçüldü.' });

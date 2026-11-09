@@ -88,12 +88,12 @@ describe('request → quote → job → acceptance', () => {
     // A profile without this category sees nothing and cannot quote.
     await client(env, otherProToken).post('/pro/profile', { kind: 'individual', displayName: 'Gazcı Veli', city: 'İstanbul' });
     expect((await client(env, otherProToken).get('/pro/inbox')).body.requests).toEqual([]);
-    expect((await client(env, otherProToken).post(`/pro/requests/${requestId}/quotes`, { scope: 'Kontrol', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: '-', durationText: '1 saat', warrantyText: 'yok', validUntil: future() })).status).toBe(404);
+    expect((await client(env, otherProToken).post(`/pro/requests/${requestId}/quotes`, { scope: 'Kontrol', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: '-', durationText: '1 saat', warrantyText: 'yok', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: future() })).status).toBe(404);
   });
 
   it('quotes use comparable fields; accepting one awards the job and states payment is out of scope', async () => {
     const q = await pro().post(`/pro/requests/${requestId}/quotes`, { scope: 'Termostat ve gaz basıncı kontrolü', exclusions: 'Kompresör değişimi', priceNet: 850, vatRate: 20,
-      materials: 'Gerekirse termostat', durationText: '1–2 saat', warrantyText: '3 ay işçilik', validUntil: future() });
+      materials: 'Gerekirse termostat', durationText: '1–2 saat', warrantyText: '3 ay işçilik', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: future() });
     expect(q.status).toBe(201);
     quoteId = q.body.id;
     const detail = (await owner().get(`${C()}/service-requests/${requestId}`)).body;
@@ -131,7 +131,7 @@ describe('request → quote → job → acceptance', () => {
  */
 describe('server controls: category approval, expiry, sharing', () => {
   let tech: string, techAuthId: string, credId: string, ncrId: string;
-  const quoteBody = () => ({ scope: 'Kontrol ve ayar', exclusions: 'Parça', priceNet: 500, vatRate: 20, materials: '-', durationText: '1 saat', warrantyText: '1 ay', validUntil: future() });
+  const quoteBody = () => ({ scope: 'Kontrol ve ayar', exclusions: 'Parça', priceNet: 500, vatRate: 20, materials: '-', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: future() });
   const newRequest = async (extra: Record<string, unknown> = {}) => (await owner().post(`${C()}/service-requests`,
     { siteId: demo.siteId, categoryCode: 'refrigeration_service', title: 'Dolap arızası', description: 'Soğutucu ısınıyor, kapı contası yırtık.', city: 'İstanbul', ...extra })).body.id as string;
 
@@ -224,6 +224,6 @@ describe('server controls: category approval, expiry, sharing', () => {
     expect(acc.status).toBe(200);
     await probe();
     const job = (await client(env, tech).get('/pro/inbox')).body.jobs.find((j: any) => j.id === acc.body.jobId);
-    expect(Object.keys(job).sort()).toEqual(['accepted_at', 'business_note', 'checked_in_at', 'city', 'company_name', 'id', 'report_submitted_at', 'site_name', 'status', 'title']);
+    expect(Object.keys(job).sort()).toEqual(['accepted_at', 'business_note', 'cancel_reason', 'checked_in_at', 'city', 'company_name', 'id', 'report_submitted_at', 'site_name', 'status', 'title']);
   });
 });

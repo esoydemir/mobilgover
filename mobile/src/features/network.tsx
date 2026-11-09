@@ -10,7 +10,7 @@ import { fmtDateTime } from './dates';
 
 export type Post = { id: string; authorId: string; authorName: string; authorTitle: string; authorPhoto: boolean; kind: 'post' | 'case'; status: 'draft' | 'published';
   body: string | null; caseSnapshot: any; createdAt: string; publishedAt: string | null; editedAt: string | null; hidden: boolean; hiddenReason: string | null;
-  commentCount: number; mine: boolean; label: string };
+  commentCount: number; mine: boolean; label: string; reapprovalNeeded?: boolean; withdrawn?: { reason: string; at: string } | null };
 
 export const USER_CONTENT = 'Kullanıcı paylaşımı · doğrulanmış mevzuat ya da platform onaylı içerik değildir.';
 export const REPORT_REASONS: [string, string][] = [['misleading', 'Yanıltıcı / mevzuat gibi sunulmuş'], ['personal_data', 'Kişisel veri'], ['commercial_data', 'Ticari bilgi'],

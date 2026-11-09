@@ -227,14 +227,90 @@ export async function listRequests(tx: Tx, p: Principal, companyId: string) {
 }
 
 export async function requestDetail(tx: Tx, p: Principal, companyId: string, id: string) {
-  const r = (await tx.query(`SELECT r.*, c.name AS category_name FROM service_requests r JOIN service_categories c ON c.code = r.category_code WHERE r.id = $1 AND r.company_id = $2`, [id, companyId])).rows[0];
+  const r = (await tx.query(`SELECT r.*, c.name AS category_name, ip.display_name AS invited_name FROM service_requests r JOIN service_categories c ON c.code = r.category_code
+     LEFT JOIN professional_profiles ip ON ip.id = r.invited_profile_id WHERE r.id = $1 AND r.company_id = $2`, [id, companyId])).rows[0];
   if (!r || !can(p, 'service.request', { companyId, siteId: r.site_id }).ok) throw notFound('Hizmet talebi');
+  // Each provider's approval for this category, as it is NOW (it may have run out or been suspended since quoting).
   const quotes = (await tx.query(
-    `SELECT q.*, pp.display_name, (q.price_net * (1 + q.vat_rate / 100))::numeric(12,2) AS price_gross, (q.valid_until < now()) AS expired
-       FROM quotes q JOIN professional_profiles pp ON pp.id = q.provider_profile_id WHERE q.request_id = $1 ORDER BY q.created_at`, [id])).rows;
+    `SELECT q.*, pp.display_name, pp.status AS profile_status, (q.price_net * (1 + q.vat_rate / 100))::numeric(12,2) AS price_gross, (q.valid_until < now()) AS expired,
+            EXISTS (SELECT 1 FROM service_authorizations a WHERE a.profile_id = q.provider_profile_id AND a.category_code = $2 AND ${LIVE_AUTH('a', 3)}) AS authorization_live,
+            (SELECT a.status FROM service_authorizations a WHERE a.profile_id = q.provider_profile_id AND a.category_code = $2 ORDER BY a.decided_at DESC NULLS LAST LIMIT 1) AS authorization_status
+       FROM quotes q JOIN professional_profiles pp ON pp.id = q.provider_profile_id WHERE q.request_id = $1 ORDER BY q.created_at`, [id, r.category_code, today()])).rows
+    .map(q => ({ ...q, providerStatus: providerStatus(q) }));
   const job = (await tx.query(`SELECT * FROM service_jobs WHERE request_id = $1`, [id])).rows[0] ?? null;
+  const reports = job ? (await tx.query(`SELECT sr.version, sr.report, sr.submitted_at, sr.decision, sr.decision_note, sr.decided_at, u.display_name AS decided_by_name
+     FROM service_job_reports sr LEFT JOIN users u ON u.id = sr.decided_by WHERE sr.job_id = $1 ORDER BY sr.version`, [job.id])).rows : [];
+  const jobProvider = job ? quotes.find(q => q.provider_profile_id === job.provider_profile_id) ?? null : null;
   const review = job ? (await tx.query(`SELECT id, quality, timeliness, communication, comment, show_on_profile, created_at FROM service_reviews WHERE job_id = $1`, [job.id])).rows[0] ?? null : null;
-  return { request: r, quotes, job, review, canReview: !!job && job.status === 'accepted' && !review };
+  const history = (await tx.query(`SELECT e.event_type, e.payload, e.occurred_at, u.display_name AS actor_name FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
+     WHERE e.company_id = $1 AND ((e.entity_type = 'service_request' AND e.entity_id = $2) OR (e.entity_type = 'service_job' AND e.entity_id = $3)
+        OR (e.entity_type = 'quote' AND e.entity_id = ANY($4))) ORDER BY e.seq`, [companyId, id, job?.id ?? id, quotes.map(q => q.id)])).rows;
+  const mode = r.invited_profile_id ? 'direct' : 'open';
+  return {
+    request: r, quotes, job, review, reports, history,
+    mode, modeNote: mode === 'direct'
+      ? `Doğrudan ${r.invited_name ?? 'tek uzmana'} gönderildi; yalnız o teklif verebilir, karşılaştırma yapılmaz.`
+      : 'Kategoride onayı olan uzmanlar teklif verebilir; gelen teklifler aynı sırayla karşılaştırılır.',
+    // Same order for every quote: scope, exclusions, price, duration, deliverable.
+    comparison: mode === 'open' && quotes.length > 1 ? COMPARE_ROWS : null,
+    jobProviderStatus: jobProvider ? jobProvider.providerStatus : null,
+    canReview: !!job && job.status === 'accepted' && !review,
+    canCancel: (r.status === 'open') || (!!job && ['scheduled', 'checked_in', 'report_submitted', 'revision_requested'].includes(job.status)),
+  };
+}
+
+export const COMPARE_ROWS = [
+  { key: 'scope', label: 'Kapsam' }, { key: 'exclusions', label: 'Hariç tutulanlar' }, { key: 'price', label: 'Ücret (KDV dahil)' },
+  { key: 'duration_text', label: 'Süre' }, { key: 'deliverable', label: 'Teslim edilecek çıktı' }, { key: 'warranty_text', label: 'Garanti' }, { key: 'valid_until', label: 'Teklif geçerliliği' },
+];
+
+/** What the business should know about the provider now; nothing is hidden behind a quote that was valid earlier. */
+function providerStatus(q: { authorization_live: boolean; authorization_status: string | null; profile_status: string }) {
+  if (q.profile_status !== 'active') return { live: false, label: 'Uzman profili askıya alındı', note: 'Bu uzmanla yeni iş başlatılamaz. Devam eden iş varsa durumunu sen değerlendir; gerekirse iptal edebilirsin.' };
+  if (q.authorization_live) return { live: true, label: 'Kategori onayı geçerli', note: null };
+  return { live: false, label: q.authorization_status === 'suspended' ? 'Kategori onayı askıya alındı' : 'Kategori onayı artık geçerli değil',
+    note: 'Bu teklif kabul edilemez. Devam eden iş varsa raporunu dikkatle incele; gerekirse işi gerekçeyle iptal edebilirsin.' };
+}
+
+/** Business cancels an open request, or a job before it is accepted, with a reason. Kept in the history. */
+export async function cancelService(tx: Tx, p: Principal, companyId: string, requestId: string, reason: string) {
+  const r = (await tx.query(`SELECT * FROM service_requests WHERE id = $1 AND company_id = $2 FOR UPDATE`, [requestId, companyId])).rows[0];
+  if (!r || !can(p, 'service.request', { companyId, siteId: r.site_id }).ok) throw notFound('Hizmet talebi');
+  if (reason.trim().length < 10) throw invalid('İptal gerekçesini yaz (en az bir cümle).');
+  const j = (await tx.query(`SELECT * FROM service_jobs WHERE request_id = $1 FOR UPDATE`, [requestId])).rows[0];
+  if (j) {
+    if (!['scheduled', 'checked_in', 'report_submitted', 'revision_requested'].includes(j.status)) throw conflict('INVALID_STATE', 'Kabul edilmiş ya da kapanmış iş iptal edilemez.');
+    await tx.query(`UPDATE service_jobs SET status = 'cancelled', cancelled_by = $2, cancelled_at = now(), cancel_reason = $3 WHERE id = $1`, [j.id, p.userId, reason.trim()]);
+    const proUser = (await tx.query<{ user_id: string }>(`SELECT user_id FROM professional_profiles WHERE id = $1`, [j.provider_profile_id])).rows[0]!.user_id;
+    await notifyUser(tx, { companyId, siteId: null, userId: proUser, kind: 'job_cancelled', entityType: 'pro_job', entityId: j.id,
+      dedupeKey: `job_cancelled:${j.id}`, title: 'İş işletme tarafından iptal edildi', body: reason.trim() });
+  } else if (r.status !== 'open') throw conflict('INVALID_STATE', 'Bu talep iptal edilebilir durumda değil.');
+  await tx.query(`UPDATE service_requests SET status = 'cancelled', cancelled_by = $2, cancelled_at = now(), cancel_reason = $3 WHERE id = $1`, [requestId, p.userId, reason.trim()]);
+  await tx.query(`UPDATE quotes SET status = 'rejected' WHERE request_id = $1 AND status = 'submitted'`, [requestId]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: j ? 'service.job_cancelled' : 'service.request_cancelled', entityType: j ? 'service_job' : 'service_request',
+    entityId: j?.id ?? requestId, payload: { reason: reason.trim(), requestId } });
+  return { status: 'cancelled' };
+}
+
+/**
+ * Exactly what a provider would see of this request, before it is sent. Private photos, staff
+ * details and business documents are never part of a request in this version.
+ */
+export async function requestPreview(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; city: string;
+  ncrId?: string | null; shareNcrSummary?: boolean; invitedProfileId?: string | null }) {
+  if (!can(p, 'service.request', { companyId, siteId: b.siteId }).ok) throw forbidden();
+  const cat = (await tx.query(`SELECT name FROM service_categories WHERE code = $1`, [b.categoryCode])).rows[0];
+  const ncr = b.ncrId && b.shareNcrSummary ? (await tx.query(`SELECT title, risk_level, hazard_type FROM nonconformities WHERE id = $1 AND company_id = $2`, [b.ncrId, companyId])).rows[0] : null;
+  const invited = b.invitedProfileId ? (await tx.query(`SELECT display_name FROM professional_profiles WHERE id = $1`, [b.invitedProfileId])).rows[0] : null;
+  return {
+    audience: invited ? `Yalnız ${invited.display_name}` : `"${cat?.name ?? b.categoryCode}" kategorisinde geçerli onayı olan uzmanlar`,
+    shown: [
+      { label: 'Başlık', value: b.title }, { label: 'Açıklama', value: b.description }, { label: 'Şehir', value: b.city }, { label: 'Kategori', value: cat?.name ?? b.categoryCode },
+      ...(ncr ? [{ label: 'Uygunsuzluk başlığı', value: ncr.title }, { label: 'Risk', value: ncr.risk_level }, { label: 'Tür', value: ncr.hazard_type }] : []),
+    ],
+    afterAward: ['İşletme adı', 'Şube adı ve adresi (yalnız teklifi kabul edilen uzmana)'],
+    never: ['Uygunsuzluğun açıklaması, notları ve fotoğrafları', 'Çalışan adları ve iletişim bilgileri', 'İşletme belgeleri', 'Görevler, ölçümler ve diğer kayıtlar'],
+  };
 }
 
 export async function acceptQuote(tx: Tx, p: Principal, companyId: string, quoteId: string) {
@@ -268,22 +344,28 @@ export async function acceptQuote(tx: Tx, p: Principal, companyId: string, quote
   return { jobId: job.id, checkinCode: code, payment: 'Ödeme bu aşamada uygulama dışında yapılır; GoverHub ödeme almaz.' };
 }
 
-/** Business accepts delivery after reading the report. Check-in alone is never enough. */
+/**
+ * Business accepts the delivered report, or asks for a revision with a reason (the provider then
+ * sends a new report version). Check-in alone is never enough. Every version and decision is kept.
+ */
 export async function acceptJob(tx: Tx, p: Principal, companyId: string, jobId: string, b: { accept: boolean; note: string }) {
   const j = (await tx.query(`SELECT j.*, r.site_id, r.ncr_id FROM service_jobs j JOIN service_requests r ON r.id = j.request_id WHERE j.id = $1 AND j.company_id = $2 FOR UPDATE OF j`, [jobId, companyId])).rows[0];
   if (!j || !can(p, 'service.request', { companyId, siteId: j.site_id }).ok) throw notFound('Hizmet işi');
-  if (j.status !== 'report_submitted') throw conflict('REPORT_MISSING', 'Teslim kabulü için önce uzmanın hizmet raporu gelmeli.');
-  if (b.note.trim().length < 5) throw invalid('Kabul veya itiraz için kısa bir not yaz.');
-  await tx.query(`UPDATE service_jobs SET status = $2, accepted_by = $3, accepted_at = now(), business_note = $4 WHERE id = $1`,
-    [jobId, b.accept ? 'accepted' : 'disputed', p.userId, b.note]);
+  if (j.status !== 'report_submitted') throw conflict('REPORT_MISSING', 'Teslim kabulü için önce uzmanın (yeni) hizmet raporu gelmeli.');
+  if (b.note.trim().length < (b.accept ? 5 : 10)) throw invalid(b.accept ? 'Kabul için kısa bir not yaz.' : 'Revizyon için neyin eksik olduğunu yaz (en az bir cümle).');
+  const status = b.accept ? 'accepted' : 'revision_requested';
+  await tx.query(`UPDATE service_jobs SET status = $2, accepted_by = $3, accepted_at = now(), business_note = $4 WHERE id = $1`, [jobId, status, p.userId, b.note.trim()]);
+  await tx.query(`UPDATE service_job_reports SET decision = $2, decision_note = $3, decided_by = $4, decided_at = now()
+     WHERE job_id = $1 AND version = (SELECT max(version) FROM service_job_reports WHERE job_id = $1)`, [jobId, status, b.note.trim(), p.userId]);
   if (b.accept) await tx.query(`UPDATE service_requests SET status = 'completed' WHERE id = $1`, [j.request_id]);
-  await appendAudit(tx, { companyId, actorId: p.userId, eventType: b.accept ? 'service.accepted' : 'service.disputed', entityType: 'service_job', entityId: jobId,
-    payload: { ncrId: j.ncr_id, note: b.note } });
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: b.accept ? 'service.accepted' : 'service.revision_requested', entityType: 'service_job', entityId: jobId,
+    payload: { ncrId: j.ncr_id, note: b.note.trim() } });
   const proUser = (await tx.query<{ user_id: string }>(`SELECT user_id FROM professional_profiles WHERE id = $1`, [j.provider_profile_id])).rows[0]!.user_id;
-  await notifyUser(tx, { companyId, siteId: null, userId: proUser, kind: b.accept ? 'job_accepted' : 'job_disputed', entityType: 'pro_job', entityId: jobId,
-    dedupeKey: `job_result:${jobId}`, title: b.accept ? 'Teslimin kabul edildi' : 'Teslimine itiraz edildi', body: b.note.trim() });
-  return { status: b.accept ? 'accepted' : 'disputed', linkedNonconformity: j.ncr_id,
-    reminder: j.ncr_id ? 'Uygunsuzluk kendiliğinden kapanmaz; düzeltme ve doğrulama adımlarını tamamla.' : null };
+  const v = (await tx.query<{ n: number }>(`SELECT max(version)::int AS n FROM service_job_reports WHERE job_id = $1`, [jobId])).rows[0]!.n;
+  await notifyUser(tx, { companyId, siteId: null, userId: proUser, kind: b.accept ? 'job_accepted' : 'job_revision_requested', entityType: 'pro_job', entityId: jobId,
+    dedupeKey: `job_result:${jobId}:${v}`, title: b.accept ? 'Teslimin kabul edildi' : 'İşletme raporunda revizyon istedi', body: b.note.trim() });
+  return { status, linkedNonconformity: j.ncr_id,
+    reminder: j.ncr_id ? 'Uygunsuzluk kendiliğinden kapanmaz; teknik etkinlik kontrolü ve doğrulama ayrıca yapılır.' : null };
 }
 
 // ── Provider: open requests, quotes, jobs ──
@@ -303,13 +385,13 @@ export async function providerInbox(tx: Tx, p: Principal) {
     `SELECT a.category_code, c.name, a.status, a.valid_until, (a.status = 'approved' AND NOT (${LIVE_AUTH('a', 2)})) AS expired
        FROM service_authorizations a JOIN service_categories c ON c.code = a.category_code WHERE a.profile_id = $1 ORDER BY c.name`, [pr.id, today()])).rows;
   const jobs = (await tx.query(
-    `SELECT j.id, j.status, j.checked_in_at, j.report_submitted_at, j.accepted_at, j.business_note, r.title, r.city, co.name AS company_name, s.name AS site_name
+    `SELECT j.id, j.status, j.checked_in_at, j.report_submitted_at, j.accepted_at, j.business_note, j.cancel_reason, r.title, r.city, co.name AS company_name, s.name AS site_name
        FROM service_jobs j JOIN service_requests r ON r.id = j.request_id JOIN companies co ON co.id = j.company_id JOIN sites s ON s.id = r.site_id
       WHERE j.provider_profile_id = $1 ORDER BY j.created_at DESC`, [pr.id])).rows;
   return { requests, jobs, authorizations };
 }
 
-export async function submitQuote(tx: Tx, p: Principal, requestId: string, b: { scope: string; exclusions: string; priceNet: number; vatRate: number; materials: string; durationText: string; warrantyText: string; validUntil: string }) {
+export async function submitQuote(tx: Tx, p: Principal, requestId: string, b: { scope: string; exclusions: string; priceNet: number; vatRate: number; materials: string; durationText: string; warrantyText: string; validUntil: string; deliverable: string }) {
   const pr = await ownProfile(tx, p);
   const r = (await tx.query(
     `SELECT r.*, NOT (${LIVE_AUTH('a', 3)}) AS auth_expired FROM service_requests r
@@ -321,9 +403,9 @@ export async function submitQuote(tx: Tx, p: Principal, requestId: string, b: { 
   if (r.status !== 'open') throw conflict('INVALID_STATE', 'Talep teklif almaya kapalı.');
   if (new Date(b.validUntil) <= new Date()) throw invalid('Geçerlilik tarihi gelecekte olmalı.');
   const q = await tx.query<{ id: string }>(
-    `INSERT INTO quotes (request_id, company_id, provider_profile_id, scope, exclusions, price_net, vat_rate, materials, duration_text, warranty_text, valid_until)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-    [requestId, r.company_id, pr.id, b.scope, b.exclusions, b.priceNet, b.vatRate, b.materials, b.durationText, b.warrantyText, b.validUntil]);
+    `INSERT INTO quotes (request_id, company_id, provider_profile_id, scope, exclusions, price_net, vat_rate, materials, duration_text, warranty_text, valid_until, deliverable)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+    [requestId, r.company_id, pr.id, b.scope, b.exclusions, b.priceNet, b.vatRate, b.materials, b.durationText, b.warrantyText, b.validUntil, b.deliverable]);
   await appendAudit(tx, { companyId: r.company_id, actorId: p.userId, eventType: 'service.quote_submitted', entityType: 'quote', entityId: q.rows[0]!.id, payload: { priceNet: b.priceNet, vatRate: b.vatRate } });
   await notify(tx, { companyId: r.company_id, siteId: r.site_id, userIds: await businessSide(tx, r.company_id, r.site_id, r.created_by),
     kind: 'quote_received', entityType: 'service_request', entityId: requestId, dedupeKey: `quote_received:${q.rows[0]!.id}`,
@@ -349,14 +431,16 @@ export async function checkIn(tx: Tx, p: Principal, jobId: string, code: string)
 
 export async function submitReport(tx: Tx, p: Principal, jobId: string, report: string) {
   const j = await ownJob(tx, p, jobId);
-  if (j.status !== 'checked_in') throw conflict('INVALID_STATE', 'Rapor için önce işletmede giriş yapılmalı.');
+  if (j.status !== 'checked_in' && j.status !== 'revision_requested') throw conflict('INVALID_STATE', j.status === 'scheduled' ? 'Rapor için önce işletmede giriş yapılmalı.' : 'Bu iş için şu an rapor beklenmiyor.');
   if (report.trim().length < 20) throw invalid('Raporda ne yapıldığını, ölçümleri ve kullanılan parçaları yaz.');
+  const version = ((await tx.query<{ n: number | null }>(`SELECT max(version)::int AS n FROM service_job_reports WHERE job_id = $1`, [jobId])).rows[0]!.n ?? 0) + 1;
   await tx.query(`UPDATE service_jobs SET status = 'report_submitted', report = $2, report_submitted_at = now() WHERE id = $1`, [jobId, report]);
-  await appendAudit(tx, { companyId: j.company_id, actorId: p.userId, eventType: 'service.report_submitted', entityType: 'service_job', entityId: jobId, payload: { length: report.length } });
+  await tx.query(`INSERT INTO service_job_reports (company_id, job_id, version, report, submitted_by) VALUES ($1,$2,$3,$4,$5)`, [j.company_id, jobId, version, report, p.userId]);
+  await appendAudit(tx, { companyId: j.company_id, actorId: p.userId, eventType: 'service.report_submitted', entityType: 'service_job', entityId: jobId, payload: { length: report.length, version } });
   const r = (await tx.query(`SELECT id, site_id, title, created_by FROM service_requests WHERE id = $1`, [j.request_id])).rows[0];
   await notify(tx, { companyId: j.company_id, siteId: r.site_id, userIds: await businessSide(tx, j.company_id, r.site_id, r.created_by),
-    kind: 'service_report_delivered', entityType: 'service_request', entityId: r.id, dedupeKey: `service_report_delivered:${jobId}`,
-    title: 'Hizmet raporu teslim edildi: kabulün bekleniyor', body: `${r.title} · raporu oku, kabul et ya da itiraz et. Kabul, bağlı uygunsuzluğu kapatmaz.` });
+    kind: 'service_report_delivered', entityType: 'service_request', entityId: r.id, dedupeKey: `service_report_delivered:${jobId}:${version}`,
+    title: version > 1 ? 'Revize hizmet raporu geldi: kabulün bekleniyor' : 'Hizmet raporu teslim edildi: kabulün bekleniyor', body: `${r.title} · raporu oku, kabul et ya da gerekçeyle revizyon iste. Kabul, bağlı uygunsuzluğu kapatmaz.` });
 }
 
 /** On the business side: whoever opened the request and the people who manage that site. */

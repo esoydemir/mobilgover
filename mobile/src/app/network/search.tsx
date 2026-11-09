@@ -4,12 +4,14 @@ import { Text, View } from 'react-native';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { Empty, ErrorBox, Field, Loading } from '../../components/states';
-import { FilterChip, Pill, Tap } from '../../components/ui';
+import { FilterChip, GhostButton, Pill, Tap } from '../../components/ui';
 import { Avatar } from '../../features/network';
 import { C, tint, type } from '../../theme';
 
 type Result = { userId: string; displayName: string; title: string; city: string; district: string | null; specialties: string[]; hasPhoto: boolean;
-  approvedCategories: string[]; verifiedJobs: number; followers: number; reasons: string[] };
+  approvedCategories: string[]; declaredCategories: string[]; verifiedJobs: number; followers: number; reasons: string[]; identityVerified: boolean; checkedCredentials: number; declaredExperience: number };
+type Res = { rankingNote: string; results: Result[]; suggestedCategories: { code: string; name: string; why: string }[]; questions: string[];
+  relaxations: { filter: 'text' | 'specialty' | 'category' | 'city' | 'approvedOnly'; label: string; count: number }[] };
 type Category = { code: string; name: string };
 
 /** Search by specialty, category, region and approval. Ranking is explained; it is not driven by follower count. */
@@ -27,11 +29,24 @@ export default function NetworkSearchRoute() {
   if (category) qs.set('category', category);
   if (city.trim()) qs.set('city', city.trim());
   if (approved) qs.set('approvedOnly', '1');
-  const res = useApi<{ rankingNote: string; results: Result[] }>(`/network/search?${qs.toString()}`);
+  const res = useApi<Res>(`/network/search?${qs.toString()}`);
+  const relax = (f: Res['relaxations'][number]['filter']) => { if (f === 'text') setText(''); if (f === 'specialty') setSpecialty(null); if (f === 'category') setCategory(null); if (f === 'city') setCity(''); if (f === 'approvedOnly') setApproved(false); };
   const catName = (c: string) => cats.data?.find(x => x.code === c)?.name ?? c;
   return (
     <Screen title="Uzman ara" titleEn="Find experts" gap={10}>
-      <Field label="Ad, unvan ya da uzmanlık" testID="net-q" value={text} onChangeText={setText} />
+      <Field label="Sorunu ya da aradığın kişiyi yaz" testID="net-q" value={text} onChangeText={setText} placeholder="ör. dolabım soğutmuyor · ya da ad, unvan, uzmanlık" />
+      {res.data?.suggestedCategories.length && !category ? (
+        <View testID="net-q-suggest" style={{ borderWidth: 1, borderColor: tint.info(0.35), borderRadius: 16, padding: 12, gap: 6 }}>
+          <Text style={type(11, 700, { ls: 0.08, color: C.info })}>BUNU MU ARIYORSUN?</Text>
+          {res.data.suggestedCategories.map(sg => (
+            <Tap key={sg.code} testID={`net-q-suggest-${sg.code}`} onPress={() => setCategory(sg.code)}>
+              <Text style={type(13.5, 600)}>{sg.name} ›</Text>
+              <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{sg.why}</Text>
+            </Tap>
+          ))}
+          {res.data.questions.map(qq => <Text key={qq} style={type(12, 500, { color: C.t2 })}>{qq}</Text>)}
+        </View>
+      ) : null}
       <Field label="Bölge (il)" testID="net-q-city" value={city} onChangeText={setCity} />
       <Text style={type(12, 600)}>Uzmanlık</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -45,7 +60,12 @@ export default function NetworkSearchRoute() {
       {res.data ? <Text testID="net-ranking-note" style={type(11, 400, { color: C.t3, lh: 1.45 })}>{res.data.rankingNote}</Text> : null}
       {res.error ? <ErrorBox message={res.error} onRetry={res.reload} /> : null}
       {!res.data && res.loading ? <Loading /> : null}
-      {res.data?.results.length === 0 ? <Empty title="Eşleşen profil yok" body="Filtreleri gevşetmeyi dene." /> : null}
+      {res.data?.results.length === 0 ? (
+        <View testID="net-empty" style={{ gap: 8 }}>
+          <Empty title="Eşleşen profil yok" body={res.data.relaxations.length ? 'Şu filtrelerden birini kaldırırsan sonuç çıkıyor:' : 'Başka kelimelerle dene ya da filtreleri temizle.'} />
+          {res.data.relaxations.map(r => <GhostButton key={r.filter} testID={`net-relax-${r.filter}`} label={`${r.label} (${r.count} kişi)`} height={38} size={12} onPress={() => relax(r.filter)} />)}
+        </View>
+      ) : null}
       {(res.data?.results ?? []).map(r => (
         <Tap key={r.userId} testID={`net-result-${r.userId}`} onPress={() => router.push(`/network/p/${r.userId}`)}
           style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 20, backgroundColor: C.card, padding: 13, gap: 7 }}>
@@ -56,13 +76,17 @@ export default function NetworkSearchRoute() {
               <Text style={type(11.5, 400, { color: C.t3 })}>{r.title ? `${r.title} · ` : ''}{r.city}{r.district ? ` / ${r.district}` : ''}</Text>
             </View>
           </View>
-          {r.specialties.length ? <Text style={type(12, 400, { color: C.t2 })}>Uzmanlık (beyan): {r.specialties.join(', ')}</Text> : null}
+          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>PLATFORMDA KONTROL EDİLEN</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {r.approvedCategories.length
               ? r.approvedCategories.map(c => <Pill key={c} label={`ONAYLI · ${catName(c)}`} fg={C.lime} bg={tint.lime(0.12)} />)
               : <Pill label="HİZMET ONAYI YOK" fg={C.t3} bg={tint.white(0.06)} />}
-            {r.verifiedJobs ? <Pill label={`${r.verifiedJobs} DOĞRULANMIŞ HİZMET`} fg={C.info} bg={tint.info(0.12)} /> : null}
+            <Pill label={r.identityVerified ? 'KİMLİK DOĞRULANDI' : 'KİMLİK DOĞRULANMADI'} fg={r.identityVerified ? C.info : C.t3} bg={r.identityVerified ? tint.info(0.12) : tint.white(0.06)} />
+            {r.checkedCredentials ? <Pill label={`${r.checkedCredentials} KONTROL EDİLMİŞ BELGE`} fg={C.info} bg={tint.info(0.12)} /> : null}
+            <Pill label={r.verifiedJobs ? `${r.verifiedJobs} TAMAMLANMIŞ İŞ (izinli)` : 'PLATFORMDA İŞ GEÇMİŞİ YOK'} fg={r.verifiedJobs ? C.info : C.t3} bg={r.verifiedJobs ? tint.info(0.12) : tint.white(0.06)} />
           </View>
+          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>KİŞİSEL BEYAN</Text>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.4 })}>{r.specialties.length ? `Uzmanlık: ${r.specialties.join(', ')}` : 'Uzmanlık yazılmamış'}{r.declaredExperience ? ` · ${r.declaredExperience} deneyim kaydı` : ''}{r.declaredCategories.length ? ` · onaysız kategori: ${r.declaredCategories.map(catName).join(', ')}` : ''}</Text>
           {r.reasons.length ? <Text style={type(11, 400, { color: C.t3 })}>Neden üstte: {r.reasons.join(' · ')}</Text> : null}
         </Tap>
       ))}

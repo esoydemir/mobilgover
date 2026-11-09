@@ -78,7 +78,7 @@ describe('search with explained ranking', () => {
 
   it('a network profile without approval cannot quote', async () => {
     const req = await owner().post(`${C()}/service-requests`, { siteId: demo.siteId, categoryCode: 'refrigeration_service', title: 'Bakım', description: 'Yıllık bakım', city: 'İstanbul' });
-    const q = await A().post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', validUntil: later(48) });
+    const q = await A().post(`/pro/requests/${req.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: later(48) });
     expect(q.status).toBe(404);
   });
 });
@@ -195,8 +195,8 @@ describe('from a profile to a service request', () => {
       return { id: u as string, token: await createSession(tx, u) };
     });
     expect((await client(env, other.token).get('/pro/inbox')).body.requests.map((r: any) => r.id)).not.toContain(ok.body.id);
-    const q = await client(env, other.token).post(`/pro/requests/${ok.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', validUntil: later(48) });
+    const q = await client(env, other.token).post(`/pro/requests/${ok.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: later(48) });
     expect(q.status).toBe(404);
-    expect((await P().post(`/pro/requests/${ok.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', validUntil: later(48) })).status).toBe(201);
+    expect((await P().post(`/pro/requests/${ok.body.id}/quotes`, { scope: 'Bakım', exclusions: 'Parça', priceNet: 100, vatRate: 20, materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu ve ölçüm kaydı', validUntil: later(48) })).status).toBe(201);
   });
 });

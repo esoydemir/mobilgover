@@ -2,6 +2,8 @@ import type { Db, Tx } from '../db/pool';
 import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { contentMatchesMime, sha256Hex, type EvidenceStore } from '../storage/local';
+import { suggestCategories } from '../domain/intent';
+import { createHash } from 'node:crypto';
 import { appendAudit } from './audit';
 
 /**
@@ -156,9 +158,35 @@ export async function viewProfile(tx: Tx, p: Principal, userId: string) {
 
 export async function search(tx: Tx, p: Principal, q: { text?: string; specialty?: string; category?: string; city?: string; approvedOnly?: boolean }) {
   await myProfile(tx, p);
+  const names = Object.fromEntries((await tx.query(`SELECT code, name FROM service_categories`)).rows.map(r => [r.code, r.name]));
+  // Plain words ("dolabım soğutmuyor") → a suggested category. Only a suggestion; shown with the words it rests on.
+  const suggested = q.text ? suggestCategories(q.text, names) : [];
+  const run = async (f: typeof q) => searchOnce(tx, p, f, suggested);
+  const results = await run(q);
+  // Nothing found: which filter could go, and how many would then show.
+  const relaxations = [];
+  if (!results.length) {
+    const tries: [keyof typeof q, string][] = [['approvedOnly', '"Yalnız onaylılar"ı kaldır'], ['city', 'Bölge filtresini kaldır'], ['specialty', 'Uzmanlık filtresini kaldır'],
+      ['category', 'Kategori filtresini kaldır'], ['text', 'Arama metnini kaldır']];
+    for (const [k, label] of tries) {
+      if (!q[k]) continue;
+      const n = (await run({ ...q, [k]: undefined })).length;
+      if (n) relaxations.push({ filter: k, label, count: n });
+    }
+  }
+  const questions = q.text && suggested.length && !q.city ? ['Hangi ilde? (bölge seçersen yakındaki uzmanlar öne çıkar)'] : [];
+  if (q.text && suggested.length > 1 && !q.category) questions.push('Hangi hizmet türü? Birden fazla tür eşleşti.');
+  return { rankingNote: RANKING_NOTE, suggestedCategories: suggested, questions, relaxations, results: results.slice(0, 50) };
+}
+
+async function searchOnce(tx: Tx, p: Principal, q: { text?: string; specialty?: string; category?: string; city?: string; approvedOnly?: boolean },
+  suggested: { code: string; name: string }[]) {
   const blocked = await blockedWith(tx, p.userId);
   const rows = (await tx.query(`SELECT n.user_id, n.display_name, n.title, n.city, n.district, n.specialties, n.categories, (n.photo_key IS NOT NULL) AS has_photo,
-       pp.id AS pro_id, (SELECT count(*)::int FROM network_follows f WHERE f.followee_id = n.user_id) AS followers
+       pp.id AS pro_id, (SELECT count(*)::int FROM network_follows f WHERE f.followee_id = n.user_id) AS followers,
+       (SELECT count(*)::int FROM network_experience x WHERE x.user_id = n.user_id) AS experience_count,
+       EXISTS (SELECT 1 FROM professional_verifications v WHERE v.profile_id = pp.id AND v.kind = 'identity' AND v.status = 'verified') AS identity_verified,
+       (SELECT count(*)::int FROM professional_verifications v WHERE v.profile_id = pp.id AND v.kind <> 'identity' AND v.status = 'verified' AND (v.valid_until IS NULL OR v.valid_until >= CURRENT_DATE)) AS checked_credentials
      FROM network_profiles n LEFT JOIN professional_profiles pp ON pp.user_id = n.user_id AND pp.status = 'active'
     WHERE n.status = 'active' AND n.user_id <> $1
       AND ($2::text IS NULL OR $2 = ANY(n.specialties))
@@ -166,26 +194,36 @@ export async function search(tx: Tx, p: Principal, q: { text?: string; specialty
   const proIds = rows.map(r => r.pro_id).filter(Boolean);
   const approvals = proIds.length ? (await tx.query(`SELECT a.profile_id, a.category_code FROM service_authorizations a WHERE a.profile_id = ANY($1) AND a.status = 'approved' AND a.valid_until >= $2::date
        AND NOT EXISTS (SELECT 1 FROM professional_verifications bv WHERE bv.id = ANY(a.basis_verification_ids) AND (bv.status <> 'verified' OR bv.valid_until < $2::date))`, [proIds, today()])).rows : [];
+  // Completed jobs the business allowed to show on the profile (no business names).
   const history = proIds.length ? (await tx.query(`SELECT sr.provider_profile_id AS id, count(*)::int AS n FROM service_reviews sr JOIN service_jobs j ON j.id = sr.job_id
        WHERE sr.provider_profile_id = ANY($1) AND sr.show_on_profile AND j.status = 'accepted' GROUP BY 1`, [proIds])).rows : [];
   const text = (q.text ?? '').trim().toLocaleLowerCase('tr');
-  const out = rows.map(r => {
+  const intentCats = suggested.map(x => x.code);
+  return rows.map(r => {
     const approved = approvals.filter(a => a.profile_id === r.pro_id).map(a => a.category_code as string);
     const verifiedJobs = history.find(h => h.id === r.pro_id)?.n ?? 0;
-    const textHit = !text || [r.display_name, r.title, ...r.specialties].some((x: string) => x.toLocaleLowerCase('tr').includes(text));
+    const nameHit = !!text && [r.display_name, r.title, ...r.specialties].some((x: string) => x.toLocaleLowerCase('tr').includes(text));
+    // The text matched a profile directly, or describes a problem that points to a category this person works in.
+    const intentHit = !nameHit && intentCats.some(c => approved.includes(c) || r.categories.includes(c));
+    const textHit = !text || nameHit || intentHit;
     const reasons: string[] = [];
     let score = 0;
-    if (text && textHit) { score += 40; reasons.push('aramayla eşleşiyor'); }
+    if (nameHit) { score += 40; reasons.push('aramayla eşleşiyor'); }
+    if (intentHit) {
+      const c = intentCats.find(x => approved.includes(x)) ?? intentCats.find(x => r.categories.includes(x))!;
+      score += approved.includes(c) ? 35 : 10; reasons.push(`yazdığın sorun "${suggested.find(x => x.code === c)!.name}" ile eşleşti${approved.includes(c) ? ' (onaylı)' : ' (yalnız beyan)'}`);
+    }
     if (q.category && approved.includes(q.category)) { score += 30; reasons.push('bu kategoride geçerli hizmet onayı'); }
     else if (q.category && r.categories.includes(q.category)) { score += 5; reasons.push('bu kategoride çalıştığını beyan ediyor (onay yok)'); }
     if (verifiedJobs) { score += Math.min(20, verifiedJobs * 5); reasons.push(`${verifiedJobs} doğrulanmış hizmet`); }
     if (q.city && r.city.toLocaleLowerCase('tr') === q.city.toLocaleLowerCase('tr')) { score += 5; reasons.push('bölge eşleşiyor'); }
     return { userId: r.user_id, displayName: r.display_name, title: r.title, city: r.city, district: r.district, specialties: r.specialties, hasPhoto: r.has_photo,
-      approvedCategories: approved, verifiedJobs, followers: r.followers, score, reasons, textHit,
+      approvedCategories: approved, declaredCategories: r.categories.filter((c: string) => !approved.includes(c)), verifiedJobs, followers: r.followers, score, reasons, textHit,
+      identityVerified: !!r.identity_verified, checkedCredentials: r.checked_credentials ?? 0, declaredExperience: r.experience_count,
       categoryMatch: !q.category || r.categories.includes(q.category) || approved.includes(q.category) };
-  }).filter(r => r.textHit && r.categoryMatch && (!q.approvedOnly || (q.category ? r.approvedCategories.includes(q.category) : r.approvedCategories.length > 0)))
-    .sort((a, b) => b.score - a.score || b.followers - a.followers || a.displayName.localeCompare(b.displayName, 'tr'));
-  return { rankingNote: RANKING_NOTE, results: out.slice(0, 50).map(({ textHit, categoryMatch, ...r }) => r) };
+  }).filter(r => r.textHit && r.categoryMatch && (!q.approvedOnly || (q.category ? r.approvedCategories.includes(q.category) : intentCats.length ? intentCats.some(c => r.approvedCategories.includes(c)) : r.approvedCategories.length > 0)))
+    .sort((a, b) => b.score - a.score || b.followers - a.followers || a.displayName.localeCompare(b.displayName, 'tr'))
+    .map(({ textHit, categoryMatch, ...r }) => r);
 }
 
 // ── Follow / block ──
@@ -223,7 +261,8 @@ function postOut(r: any, viewer: string) {
   const mine = r.author_id === viewer;
   return { id: r.id, authorId: r.author_id, authorName: r.author_name, authorTitle: r.author_title, authorPhoto: r.author_photo, kind: r.kind, status: r.status,
     body: r.hidden_at && !mine ? null : r.body, caseSnapshot: r.hidden_at && !mine ? null : r.case_snapshot, createdAt: r.created_at, publishedAt: r.published_at, editedAt: r.edited_at,
-    hidden: !!r.hidden_at, hiddenReason: mine ? r.hidden_reason : null, commentCount: r.comment_count, mine, label: POST_NOTE };
+    hidden: !!r.hidden_at, hiddenReason: mine ? r.hidden_reason : null, commentCount: r.comment_count, mine, label: POST_NOTE,
+    reapprovalNeeded: mine && r.kind === 'case' ? !!r.case_reapproval_needed : false, withdrawn: r.status === 'withdrawn' ? { reason: r.withdraw_reason, at: r.withdrawn_at } : null };
 }
 
 export async function createPost(tx: Tx, p: Principal, b: { body: string; publish: boolean }) {
@@ -238,7 +277,8 @@ export async function createPost(tx: Tx, p: Principal, b: { body: string; publis
 
 async function ownPost(tx: Tx, p: Principal, id: string) {
   const r = (await tx.query(`SELECT * FROM network_posts WHERE id = $1 FOR UPDATE`, [id])).rows[0];
-  if (!r || r.status === 'deleted' || (r.author_id !== p.userId && r.status === 'draft')) throw notFound('Paylaşım');
+  if (!r || r.status === 'deleted' || (r.author_id !== p.userId && (r.status === 'draft' || r.status === 'withdrawn'))) throw notFound('Paylaşım');
+  if (r.status === 'withdrawn') throw conflict('WITHDRAWN', 'Bu vaka paylaşımı işletme tarafından geri çekildi; değiştirilemez.');
   if (r.author_id !== p.userId) throw forbidden('Yalnız kendi paylaşımını değiştirebilirsin.');
   return r;
 }
@@ -250,6 +290,10 @@ export async function updatePost(tx: Tx, p: Principal, id: string, b: { body?: s
     await tx.query(`UPDATE network_posts SET status = 'deleted', deleted_at = clock_timestamp() WHERE id = $1`, [id]);
   } else if (b.op === 'publish') {
     if (r.status !== 'draft') throw conflict('NOT_DRAFT', 'Yalnız taslak yayımlanır.');
+    // A case share is published only with the content that was permitted.
+    if (r.kind === 'case' && (r.case_reapproval_needed || r.case_content_hash !== caseHash(r.body, r.case_snapshot))) {
+      throw conflict('CASE_REAPPROVAL_NEEDED', 'Vaka metni izin verilen sürümden farklı; yayımlamak için işletme sahibi ya da merkez yöneticisinin yeniden onayı gerekir.');
+    }
     await tx.query(`UPDATE network_posts SET status = 'published', published_at = clock_timestamp() WHERE id = $1`, [id]);
   } else {
     const body = (b.body ?? '').trim();
@@ -260,7 +304,12 @@ export async function updatePost(tx: Tx, p: Principal, id: string, b: { body?: s
       const issues = await dataCheck(tx, r.case_company_id, [{ field: 'summary', text: body }]);
       if (issues.length) throw new AppError(422, 'CASE_SHARE_PRIVATE_DATA', 'Özette kişisel ya da ticari bilgi var.', { issues });
     }
-    await tx.query(`UPDATE network_posts SET body = $2, edited_at = CASE WHEN status = 'published' THEN clock_timestamp() ELSE edited_at END WHERE id = $1`, [id, body]);
+    if (r.kind === 'case' && body !== r.body) {
+      // The permission covered the previewed text only: a change takes the post off the network until it is permitted again.
+      await tx.query(`UPDATE network_posts SET body = $2, edited_at = clock_timestamp(), status = 'draft', case_reapproval_needed = true WHERE id = $1`, [id, body]);
+    } else {
+      await tx.query(`UPDATE network_posts SET body = $2, edited_at = CASE WHEN status = 'published' THEN clock_timestamp() ELSE edited_at END WHERE id = $1`, [id, body]);
+    }
   }
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: `network.post_${b.op ?? 'edited'}`, entityType: 'network_post', entityId: id, payload: {} });
 }
@@ -269,7 +318,7 @@ export async function feed(tx: Tx, p: Principal, q: { scope: 'all' | 'following'
   await myProfile(tx, p);
   const blocked = [...(await blockedWith(tx, p.userId))];
   const rows = (await tx.query(`${POST_SQL}
-     WHERE po.status <> 'deleted' AND n.status = 'active'
+     WHERE po.status NOT IN ('deleted','withdrawn') AND n.status = 'active'
        AND (po.status = 'published' OR po.author_id = $1)
        AND (po.hidden_at IS NULL OR po.author_id = $1)
        AND NOT (po.author_id = ANY($2::uuid[]))
@@ -285,7 +334,7 @@ export async function getPost(tx: Tx, p: Principal, id: string) {
   await myProfile(tx, p);
   const r = (await tx.query(`${POST_SQL} WHERE po.id = $1`, [id])).rows[0];
   const blocked = await blockedWith(tx, p.userId);
-  if (!r || r.status === 'deleted' || (r.status === 'draft' && r.author_id !== p.userId) || blocked.has(r.author_id) || (r.hidden_at && r.author_id !== p.userId)) throw notFound('Paylaşım');
+  if (!r || r.status === 'deleted' || ((r.status === 'draft' || r.status === 'withdrawn') && r.author_id !== p.userId) || blocked.has(r.author_id) || (r.hidden_at && r.author_id !== p.userId)) throw notFound('Paylaşım');
   const comments = (await tx.query(`SELECT c.*, n.display_name AS author_name FROM network_comments c JOIN network_profiles n ON n.user_id = c.author_id
      WHERE c.post_id = $1 AND c.deleted_at IS NULL ORDER BY c.created_at`, [id])).rows
     .filter(c => !blocked.has(c.author_id) && (!c.hidden_at || c.author_id === p.userId))
@@ -450,11 +499,113 @@ export async function shareCase(tx: Tx, p: Principal, companyId: string, ncrId: 
   if (!prof) throw new AppError(409, 'NO_NETWORK_PROFILE', 'Paylaşmak için önce mesleki ağ profilini oluştur.');
   const built = await buildCase(tx, companyId, ncrId, b.fields, b.summary);
   if (built.issues.length) throw new AppError(422, 'CASE_SHARE_PRIVATE_DATA', 'Özette kişisel ya da ticari bilgi var; önizlemedeki uyarıları düzelt.', { issues: built.issues });
-  const r = (await tx.query<{ id: string }>(`INSERT INTO network_posts (author_id, kind, status, body, case_snapshot, case_company_id, case_ncr_id, case_permitted_by, case_permitted_at)
-     VALUES ($1,'case','draft',$2,$3,$4,$5,$1, clock_timestamp()) RETURNING id`, [p.userId, b.summary.trim(), JSON.stringify(built.snapshot), companyId, ncrId])).rows[0]!;
+  const r = (await tx.query<{ id: string }>(`INSERT INTO network_posts (author_id, kind, status, body, case_snapshot, case_company_id, case_ncr_id, case_permitted_by, case_permitted_at, case_content_hash)
+     VALUES ($1,'case','draft',$2,$3,$4,$5,$1, clock_timestamp(), $6) RETURNING id`, [p.userId, b.summary.trim(), JSON.stringify(built.snapshot), companyId, ncrId,
+       caseHash(b.summary.trim(), built.snapshot)])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.case_shared', entityType: 'nonconformity', entityId: ncrId,
     payload: { postId: r.id, fields: b.fields, status: 'draft' } });
   return { postId: r.id, snapshot: built.snapshot };
 }
 
 export async function moderatorFlag(p: Principal) { return { moderator: isModerator(p) }; }
+
+/** The permitted content: summary + shared fields. */
+export function caseHash(body: string, snapshot: unknown) {
+  // Stable key order: the snapshot comes back from jsonb with its keys reordered.
+  const canon = (v: unknown): unknown => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
+    ? Object.fromEntries(Object.keys(v as object).sort().map(k => [k, canon((v as Record<string, unknown>)[k])])) : v;
+  return createHash('sha256').update(JSON.stringify(canon({ body, snapshot }))).digest('hex');
+}
+
+/** Case posts of one business, for its authorised people (permission and withdrawal). */
+export async function businessCasePosts(tx: Tx, p: Principal, companyId: string) {
+  if (!can(p, 'members.manage', { companyId }).ok) throw forbidden();
+  return (await tx.query(`SELECT po.id, po.status, po.body, po.case_ncr_id, po.case_reapproval_needed, po.published_at, po.withdrawn_at, po.withdraw_reason, po.hidden_at,
+       n.display_name AS author_name, nc.title AS ncr_title FROM network_posts po JOIN network_profiles n ON n.user_id = po.author_id
+       LEFT JOIN nonconformities nc ON nc.id = po.case_ncr_id WHERE po.kind = 'case' AND po.case_company_id = $1 AND po.status <> 'deleted' ORDER BY po.created_at DESC`, [companyId])).rows;
+}
+
+/** An authorised person permits the CURRENT text again (after the data check). */
+export async function reapproveCase(tx: Tx, p: Principal, companyId: string, postId: string, b: { permit: boolean }) {
+  if (!can(p, 'members.manage', { companyId }).ok) throw forbidden('Vaka paylaşımına işletme sahibi ya da merkez yöneticisi izin verir.');
+  const r = (await tx.query(`SELECT * FROM network_posts WHERE id = $1 AND kind = 'case' AND case_company_id = $2 FOR UPDATE`, [postId, companyId])).rows[0];
+  if (!r || r.status === 'deleted') throw notFound('Vaka paylaşımı');
+  if (r.status === 'withdrawn') throw conflict('WITHDRAWN', 'Geri çekilen paylaşım yeniden onaylanmaz; gerekirse yeni paylaşım hazırla.');
+  if (!b.permit) throw invalid('İzni açıkça onayla.');
+  const issues = await dataCheck(tx, companyId, [{ field: 'summary', text: r.body }]);
+  if (issues.length) throw new AppError(422, 'CASE_SHARE_PRIVATE_DATA', 'Metinde kişisel ya da ticari bilgi var; yazar düzeltmeli.', { issues });
+  await tx.query(`UPDATE network_posts SET case_reapproval_needed = false, case_content_hash = $2, case_permitted_by = $3, case_permitted_at = clock_timestamp() WHERE id = $1`,
+    [postId, caseHash(r.body, r.case_snapshot), p.userId]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.case_share_reapproved', entityType: 'nonconformity', entityId: r.case_ncr_id, payload: { postId } });
+  return { ok: true };
+}
+
+/** Withdraw: the post (and its comments) is closed to the network at once. Kept for the record. */
+export async function withdrawCase(tx: Tx, p: Principal, companyId: string, postId: string, reason: string) {
+  if (!can(p, 'members.manage', { companyId }).ok) throw forbidden('Vaka paylaşımını işletme sahibi ya da merkez yöneticisi geri çeker.');
+  const r = (await tx.query(`SELECT * FROM network_posts WHERE id = $1 AND kind = 'case' AND case_company_id = $2 FOR UPDATE`, [postId, companyId])).rows[0];
+  if (!r || r.status === 'deleted') throw notFound('Vaka paylaşımı');
+  if (r.status === 'withdrawn') throw conflict('ALREADY_WITHDRAWN', 'Bu paylaşım zaten geri çekildi.');
+  if (reason.trim().length < 10) throw invalid('Geri çekme gerekçesini yaz.');
+  await tx.query(`UPDATE network_posts SET status = 'withdrawn', withdrawn_by = $2, withdrawn_at = clock_timestamp(), withdraw_reason = $3 WHERE id = $1`, [postId, p.userId, reason.trim()]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.case_share_withdrawn', entityType: 'nonconformity', entityId: r.case_ncr_id, payload: { postId, reason: reason.trim() } });
+  return { status: 'withdrawn' };
+}
+
+/** The reporter follows their reports; the decision and its reason are shown. */
+export async function myReports(tx: Tx, p: Principal) {
+  await myProfile(tx, p, false);
+  return (await tx.query(`SELECT r.id, r.target_type, r.target_id, r.reason, r.status, r.decision, r.decision_notes, r.created_at, r.handled_at,
+       a.status AS appeal_status FROM network_reports r LEFT JOIN network_appeals a ON a.report_id = r.id WHERE r.reporter_id = $1 ORDER BY r.created_at DESC LIMIT 100`, [p.userId])).rows
+    .map(r => ({ ...r, statusLabel: r.status === 'open' ? 'İnceleniyor' : r.status === 'dismissed' ? 'Reddedildi (içerik kaldı)' : r.decision === 'hide' ? 'İçerik gizlendi' : 'Profil askıya alındı' }));
+}
+
+/** Decisions on the user's own content, which they may appeal once. */
+export async function decisionsOnMe(tx: Tx, p: Principal) {
+  return (await tx.query(`SELECT r.id, r.target_type, r.target_id, r.decision, r.decision_notes, r.handled_at, a.status AS appeal_status, a.decision_notes AS appeal_notes
+     FROM network_reports r LEFT JOIN network_posts po ON r.target_type = 'post' AND po.id = r.target_id
+       LEFT JOIN network_comments c ON r.target_type = 'comment' AND c.id = r.target_id LEFT JOIN network_appeals a ON a.report_id = r.id
+    WHERE r.status = 'actioned' AND (po.author_id = $1 OR c.author_id = $1 OR (r.target_type = 'profile' AND r.target_id = $1))
+    ORDER BY r.handled_at DESC`, [p.userId])).rows;
+}
+
+export async function appeal(tx: Tx, p: Principal, reportId: string, reason: string) {
+  const mine = (await decisionsOnMe(tx, p)).find(d => d.id === reportId);
+  if (!mine) throw notFound('Karar');
+  if (mine.appeal_status) throw conflict('ALREADY_APPEALED', 'Bu karara zaten itiraz ettin.');
+  if (reason.trim().length < 10) throw invalid('İtiraz gerekçeni yaz (en az bir cümle).');
+  const r = (await tx.query<{ id: string }>(`INSERT INTO network_appeals (report_id, appellant_id, reason) VALUES ($1,$2,$3) RETURNING id`, [reportId, p.userId, reason.trim()])).rows[0]!;
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'network.appeal_filed', entityType: 'network_report', entityId: reportId, payload: { appealId: r.id } });
+  return { id: r.id };
+}
+
+/** Appeals waiting for a moderator who did NOT make the first decision. */
+export async function appealQueue(tx: Tx, p: Principal) {
+  if (!isModerator(p)) throw forbidden('Moderasyon yetkin yok.');
+  return (await tx.query(`SELECT a.id, a.reason, a.status, a.created_at, r.id AS report_id, r.target_type, r.target_id, r.decision, r.decision_notes, r.handled_by,
+       hu.display_name AS first_moderator, (r.handled_by = $1) AS mine_first
+     FROM network_appeals a JOIN network_reports r ON r.id = a.report_id LEFT JOIN users hu ON hu.id = r.handled_by WHERE a.status = 'open' ORDER BY a.created_at`, [p.userId])).rows;
+}
+
+export async function decideAppeal(tx: Tx, p: Principal, appealId: string, b: { decision: 'upheld' | 'overturned'; notes: string }) {
+  if (!isModerator(p)) throw forbidden('Moderasyon yetkin yok.');
+  const a = (await tx.query(`SELECT a.*, r.handled_by, r.target_type, r.target_id, r.decision AS first_decision FROM network_appeals a JOIN network_reports r ON r.id = a.report_id
+     WHERE a.id = $1 FOR UPDATE OF a`, [appealId])).rows[0];
+  if (!a) throw notFound('İtiraz');
+  if (a.status !== 'open') throw conflict('ALREADY_HANDLED', 'Bu itiraz karara bağlandı.');
+  if (a.handled_by === p.userId) throw forbidden('İlk kararı sen verdin; itirazı başka bir moderatör incelemeli.');
+  if (a.appellant_id === p.userId) throw forbidden('Kendi itirazını karara bağlayamazsın.');
+  if (b.notes.trim().length < 10) throw invalid('Kararın gerekçesini yaz.');
+  if (b.decision === 'overturned') {
+    if (a.first_decision === 'hide') await tx.query(`UPDATE ${a.target_type === 'post' ? 'network_posts' : 'network_comments'} SET hidden_at = NULL, hidden_reason = NULL WHERE id = $1`, [a.target_id]);
+    if (a.first_decision === 'suspend_profile') {
+      const author = a.target_type === 'profile' ? a.target_id
+        : (await tx.query(`SELECT author_id FROM ${a.target_type === 'post' ? 'network_posts' : 'network_comments'} WHERE id = $1`, [a.target_id])).rows[0].author_id;
+      await tx.query(`UPDATE network_profiles SET status = 'active', suspended_reason = NULL WHERE user_id = $1`, [author]);
+    }
+  }
+  await tx.query(`UPDATE network_appeals SET status = $2, decision_notes = $3, handled_by = $4, handled_at = clock_timestamp() WHERE id = $1`, [appealId, b.decision, b.notes.trim(), p.userId]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'network.appeal_decided', entityType: 'network_report', entityId: a.report_id,
+    payload: { appealId, decision: b.decision, notes: b.notes.trim() } });
+  return { status: b.decision };
+}

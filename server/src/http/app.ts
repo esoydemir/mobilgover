@@ -11,6 +11,7 @@ import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
 import { addSite, board, relate } from '../services/board';
+import { suggestCategories } from '../domain/intent';
 import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, decideSuggestion, equipmentHistory, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
 import { listNotifications, markProviderRead, markRead, providerNotifications } from '../services/notifications';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
@@ -144,6 +145,28 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
         await tx.query(`INSERT INTO client_operations (company_id, op_key, user_id, request_hash, status_code, response) VALUES ($1,$2,$3,$4,$5,$6)`,
           [companyId, opKey, req.principal.userId, reqHash, status, JSON.stringify(body ?? null)]);
       }
+      return { replay: false, status, body };
+    });
+    if (out.replay) reply.header('idempotent-replay', 'true');
+    return reply.code(out.status).send(out.body);
+  }
+
+  /** Same as mutate() for work outside a business (network, provider side): a resent operation answers once. */
+  async function userMutate(req: FastifyRequest, reply: FastifyReply, fn: (tx: Tx) => Promise<unknown>, status = 200) {
+    const key = req.headers['idempotency-key'];
+    const opKey = typeof key === 'string' && key.length >= 8 && key.length <= 128 ? key : null;
+    const reqHash = sha256(canonical({ url: req.url, method: req.method, body: req.body ?? null }));
+    const out = await db.system(async tx => {
+      if (opKey) {
+        const prev = (await tx.query(`SELECT * FROM user_operations WHERE user_id = $1 AND op_key = $2`, [req.principal.userId, opKey])).rows[0];
+        if (prev) {
+          if (prev.request_hash !== reqHash) throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'Bu işlem anahtarı farklı bir istekle kullanılmış.');
+          return { replay: true, status: prev.status_code, body: prev.response };
+        }
+      }
+      const body = await fn(tx);
+      if (opKey) await tx.query(`INSERT INTO user_operations (user_id, op_key, request_hash, status_code, response) VALUES ($1,$2,$3,$4,$5)`,
+        [req.principal.userId, opKey, reqHash, status, JSON.stringify(body ?? null)]);
       return { replay: false, status, body };
     });
     if (out.replay) reply.header('idempotent-replay', 'true');
@@ -681,6 +704,11 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
 
   // ── Marketplace: categories and public profiles ──
   app.get('/service-categories', async () => db.system(async tx => (await tx.query(`SELECT * FROM service_categories ORDER BY name`)).rows));
+  app.get('/service-categories/suggest', async req => {
+    const { text } = z.object({ text: z.string().max(500).default('') }).parse(req.query);
+    const names = await db.system(async tx => Object.fromEntries((await tx.query(`SELECT code, name FROM service_categories`)).rows.map(r => [r.code, r.name])));
+    return { suggestions: suggestCategories(text, names), note: 'Öneri, yazdığın kelimelere dayanır; teşhis değildir. Uygun değilse başka kategori seç.' };
+  });
   app.get('/professionals/:id', async req => db.system(tx => mk.profileView(tx, z.object({ id: uuid }).parse(req.params).id)));
 
   // ── Marketplace: provider side ──
@@ -713,8 +741,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ scope: z.string().trim().min(5).max(2000), exclusions: z.string().trim().min(2).max(2000), priceNet: z.number().min(0).max(10_000_000),
       vatRate: z.number().min(0).max(100), materials: z.string().max(2000), durationText: z.string().min(2).max(200), warrantyText: z.string().min(2).max(500),
-      validUntil: z.iso.datetime({ offset: true }) }).parse(req.body);
-    return reply.code(201).send(await db.system(tx => mk.submitQuote(tx, req.principal, id, b)));
+      validUntil: z.iso.datetime({ offset: true }), deliverable: z.string().trim().min(3).max(1000) }).parse(req.body);
+    return userMutate(req, reply, tx => mk.submitQuote(tx, req.principal, id, b), 201);
   });
   app.post('/pro/jobs/:id/check-in', async req => {
     const { id } = z.object({ id: uuid }).parse(req.params);
@@ -722,11 +750,10 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     await db.system(tx => mk.checkIn(tx, req.principal, id, code));
     return { ok: true, note: 'Giriş kaydı yalnızca yerinde bulunmayı gösterir.' };
   });
-  app.post('/pro/jobs/:id/report', async req => {
+  app.post('/pro/jobs/:id/report', async (req, reply) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
     const { report } = z.object({ report: z.string().max(8000) }).parse(req.body);
-    await db.system(tx => mk.submitReport(tx, req.principal, id, report));
-    return { ok: true };
+    return userMutate(req, reply, async tx => { await mk.submitReport(tx, req.principal, id, report); return { ok: true }; });
   });
 
   // ── Marketplace: review (platform) ──
@@ -756,6 +783,18 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
       ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false),
       invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.createRequest(tx, req.principal, companyId, b), 201);
+  });
+  app.post('/companies/:companyId/service-requests/preview', async req => {
+    const companyId = company(req);
+    const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().max(200), description: z.string().max(4000), city: z.string().max(60),
+      ncrId: uuid.nullable().optional(), shareNcrSummary: z.boolean().default(false), invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
+    return db.tenant(companyId, tx => mk.requestPreview(tx, req.principal, companyId, b));
+  });
+  app.post('/companies/:companyId/service-requests/:id/cancel', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ reason: z.string().max(1000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => mk.cancelService(tx, req.principal, companyId, id, b.reason));
   });
   app.get('/companies/:companyId/service-requests', async req => {
     const companyId = company(req);
@@ -832,7 +871,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   app.post('/network/posts', async (req, reply) => {
     const b = z.object({ body: z.string().max(5000), publish: z.boolean().default(false) }).parse(req.body);
-    return reply.code(201).send(await db.system(tx => net.createPost(tx, req.principal, b)));
+    return userMutate(req, reply, tx => net.createPost(tx, req.principal, b), 201);
   });
   app.get('/network/posts/:id', async req => db.system(tx => net.getPost(tx, req.principal, z.object({ id: uuid }).parse(req.params).id)));
   app.post('/network/posts/:id', async req => {
@@ -843,7 +882,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/network/posts/:id/comments', async (req, reply) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ body: z.string().max(2000) }).parse(req.body);
-    return reply.code(201).send(await db.system(tx => net.comment(tx, req.principal, id, b.body)));
+    return userMutate(req, reply, tx => net.comment(tx, req.principal, id, b.body), 201);
   });
   app.post('/network/comments/:id', async req => {
     const { id } = z.object({ id: uuid }).parse(req.params);
@@ -853,7 +892,37 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/network/reports', async (req, reply) => {
     const b = z.object({ targetType: z.enum(['post', 'comment', 'profile']), targetId: uuid, reason: z.enum(['misleading', 'personal_data', 'commercial_data', 'harassment', 'spam', 'other']),
       details: z.string().max(1000).default('') }).parse(req.body);
-    return reply.code(201).send(await db.system(tx => net.report(tx, req.principal, b)));
+    return userMutate(req, reply, tx => net.report(tx, req.principal, b), 201);
+  });
+  app.get('/network/my-reports', async req => db.system(tx => net.myReports(tx, req.principal)));
+  app.get('/network/decisions-on-me', async req => db.system(tx => net.decisionsOnMe(tx, req.principal)));
+  app.post('/network/reports/:id/appeal', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ reason: z.string().max(2000) }).parse(req.body);
+    return userMutate(req, reply, tx => net.appeal(tx, req.principal, id, b.reason), 201);
+  });
+  app.get('/network/moderation/appeals', async req => db.system(tx => net.appealQueue(tx, req.principal)));
+  app.post('/network/moderation/appeals/:id', async req => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ decision: z.enum(['upheld', 'overturned']), notes: z.string().max(2000) }).parse(req.body);
+    return db.system(tx => net.decideAppeal(tx, req.principal, id, b));
+  });
+  // Case shares seen from the business: permit the current text again, or withdraw.
+  app.get('/companies/:companyId/network/case-posts', async req => {
+    const companyId = company(req);
+    return db.system(tx => net.businessCasePosts(tx, req.principal, companyId));
+  });
+  app.post('/companies/:companyId/network/case-posts/:postId/approve', async req => {
+    const companyId = company(req);
+    const { postId } = z.object({ postId: uuid }).parse(req.params);
+    const b = z.object({ permit: z.boolean() }).parse(req.body);
+    return db.system(tx => net.reapproveCase(tx, req.principal, companyId, postId, b));
+  });
+  app.post('/companies/:companyId/network/case-posts/:postId/withdraw', async req => {
+    const companyId = company(req);
+    const { postId } = z.object({ postId: uuid }).parse(req.params);
+    const b = z.object({ reason: z.string().max(1000) }).parse(req.body);
+    return db.system(tx => net.withdrawCase(tx, req.principal, companyId, postId, b.reason));
   });
   app.get('/network/moderation/reports', async req => {
     const q = z.object({ status: z.enum(['open', 'closed']).default('open') }).parse(req.query);

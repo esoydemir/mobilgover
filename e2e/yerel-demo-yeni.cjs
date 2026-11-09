@@ -169,7 +169,7 @@ async function apiLogin(email) {
   await id('svc-cat-refrigeration_service').click(); await id('svc-submit').click(); await wait(3500);
   const reqId = p.url().split('/service/')[1];
   await pro('POST', `/pro/requests/${reqId}/quotes`, { scope: 'Bakım ve gaz kontrolü', exclusions: 'Yedek parça', priceNet: 400, vatRate: 20,
-    materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', validUntil: new Date(Date.now() + 3 * 86400000).toISOString() });
+    materials: 'Yok', durationText: '1 saat', warrantyText: '1 ay', deliverable: 'Servis raporu', validUntil: new Date(Date.now() + 3 * 86400000).toISOString() });
   await p.goto(WEB + '/notifications'); await wait(2500);
   check('İşletmeye "Yeni teklif geldi" bildirimi', (await body()).includes('Yeni teklif geldi'));
   await p.getByTestId('note-quote_received').first().click(); await wait(3000);
