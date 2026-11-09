@@ -12,7 +12,8 @@ export type NcrDetail = {
   equipment: { id: string; name: string; type: string } | null;
   task: { id: string; obligation_id: string; title: string; instructions: string } | null;
   flow: { stages: { key: StageKey; state: 'done' | 'active' | 'todo'; missing: string | null }[]; readyForEffectiveness: boolean; blockers: string[] };
-  steps: { step: string; notes: string; done_by: string; done_by_name: string; done_at: string; iteration: number }[];
+  steps: { step: string; notes: string; done_by: string; done_by_name: string; done_at: string; iteration: number;
+    data: { measurement?: { value: number; unit: string | null; limitMin: number | null; limitMax: number | null; within: boolean | null; basis: string } } | null }[];
   causes: { id: string; stage: 'initial' | 'verified'; iteration: number; categories: Cause[]; notes: string; migrated: boolean; done_by_name: string; done_at: string }[];
   actions: { id: string; iteration: number; kind: 'correction' | 'corrective_action' | 'follow_up'; description: string; owner_id: string | null; owner_name: string | null;
     owner_inactive: boolean; due_at: string | null; status: 'open' | 'done' | 'cancelled'; result_notes: string | null; done_by_name: string | null; done_at: string | null; overdue: boolean; created_by: string;
@@ -30,7 +31,14 @@ export type NcrDetail = {
   services: { id: string; title: string; status: string; category_code: string; job_status: string | null }[];
   history: { event_type: string; payload: any; occurred_at: string; actor_name: string | null }[];
   cause: { initial: NcrDetail['causes'][number] | null; verified: NcrDetail['causes'][number] | null };
-  suggestions: { category: Cause; kind: string; title: string; body: string; available: boolean; serviceCategory: string | null }[];
+  suggestions: { key: string; category: Cause; kind: string; title: string; body: string; available: boolean; serviceCategory: string | null; equipmentId: string | null;
+    dismissed: { reason: string; replacement: string | null; by: string; at: string } | null }[];
+  next: { stage: string; who: string; what: string; mine: boolean };
+  firstAction: { level: string; items: { key: 'containment' | 'assignment'; text: string }[]; note: string } | null;
+  closureMissing: { stage: StageKey; missing: string | null }[];
+  progress: { done: number; total: number };
+  measurement: { value: string; unit: string; limit_min: string | null; limit_max: string | null; measured_at: string } | null;
+  documents: { id: string; title: string; docType: string }[];
   permissions: { act: boolean; manage: boolean; verify: boolean; selfVerify: boolean; verifyBlockedReason: string | null; reopen: boolean; serviceRequest: boolean; inviteVerifier: boolean };
 };
 
@@ -67,6 +75,7 @@ export function historyLine(h: NcrDetail['history'][number]): string {
     case 'nonconformity.assigned': return `Sorumlu / termin belirlendi${p.reason ? ` · gerekçe: ${p.reason}` : ''}`;
     case 'nonconformity.step_done': return p.step === 'containment' ? 'İlk müdahale kaydedildi' : p.step === 'effectiveness_check' ? 'Etkinlik kontrolü kaydedildi' : `Adım: ${p.step}`;
     case 'nonconformity.cause_assessed': return `${p.stage === 'verified' ? 'Kök neden doğrulandı' : 'İlk değerlendirme'}: ${(p.categories ?? []).map((c: Cause) => CAUSE_LABEL[c]?.[0] ?? c).join(', ')}`;
+    case 'nonconformity.suggestion_decided': return `Öneri ${p.decision === 'dismissed' ? 'kenara konuldu' : 'geri alındı'}: ${p.reason}${p.replacement ? ` · yerine: ${p.replacement}` : ''}`;
     case 'nonconformity.action_added': return `${ACTION_KIND[p.kind] ?? 'Aksiyon'} eklendi: ${p.description}`;
     case 'nonconformity.action_done': return `Aksiyon "yapıldı" olarak bildirildi${p.notes ? `: ${p.notes}` : ''} (doğrulama bekliyor)`;
     case 'nonconformity.action_verified': return `Aksiyon sonucu doğrulandı${p.mode === 'self' ? ' (öz doğrulama)' : p.via === 'grant' ? ' (dış doğrulayıcı)' : ''}${p.legacy ? ' · eski kayıt' : ''}${p.notes ? `: ${p.notes}` : ''}`;

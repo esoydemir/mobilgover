@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { useUi } from '../state/app';
 import { Text, View } from 'react-native';
@@ -99,6 +100,7 @@ function EquipmentRow({ e, onSaved }: { e: Equipment; onSaved: () => void }) {
       </Tap>
       {open && (
         <View style={{ gap: 10 }}>
+          <GhostButton testID={`eq-history-${e.id}`} label="Geçmiş: kayıtlar, hizmetler, belgeler" height={38} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/equipment/${e.id}`)} />
           <Field label="Adı / yeri" testID={`eq-edit-name-${e.id}`} value={name} onChangeText={setName} />
           {e.type === 'thermometer' ? (
             <Field label="Kalibrasyon geçerlilik tarihi" testID={`eq-edit-cal-${e.id}`} value={cal} onChangeText={setCal} placeholder="2027-06-30"

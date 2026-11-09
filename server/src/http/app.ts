@@ -10,7 +10,7 @@ import { canonical, sha256 } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
-import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
+import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, decideSuggestion, equipmentHistory, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
 import { listNotifications, markProviderRead, markRead, providerNotifications } from '../services/notifications';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
 import { confirmTotpSetup, listSessions, logout, revokeOtherSessions, revokeSession, startEmailLogin, startTotpSetup, verifyEmailLogin, verifyMfaLogin } from '../services/auth';
@@ -513,11 +513,22 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/nonconformities/:id/steps', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const b = z.object({ step: z.string(), notes: z.string().max(4000) }).parse(req.body);
+    const b = z.object({ step: z.string(), notes: z.string().max(4000), measurement: z.object({ value: z.number(), unit: z.string().max(20).nullable().optional() }).nullable().optional() }).parse(req.body);
     if (b.step !== 'containment' && b.step !== 'effectiveness_check') {
       throw new AppError(422, 'STEP_MOVED', 'Düzeltme ve düzeltici faaliyet artık "aksiyon", kök neden "neden değerlendirmesi" olarak kaydediliyor. Uygulamayı güncelle.');
     }
-    return mutate(req, reply, companyId, async tx => { await recordStep(tx, req.principal, companyId, id, b.step as 'containment', b.notes); return { ok: true }; }, 201);
+    return mutate(req, reply, companyId, async tx => { await recordStep(tx, req.principal, companyId, id, b.step as 'containment', b.notes, b.measurement ?? null); return { ok: true }; }, 201);
+  });
+  app.post('/companies/:companyId/nonconformities/:id/suggestions', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ key: z.string().max(60), decision: z.enum(['dismissed', 'restored']), reason: z.string().max(1000), replacement: z.string().max(500).nullable().default(null) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => decideSuggestion(tx, req.principal, companyId, id, b));
+  });
+  app.get('/companies/:companyId/equipment/:id/history', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => equipmentHistory(tx, req.principal, companyId, id));
   });
   app.post('/companies/:companyId/nonconformities/:id/assignment', async (req, reply) => {
     const companyId = company(req);

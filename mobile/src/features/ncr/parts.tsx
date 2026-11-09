@@ -200,31 +200,57 @@ export function CauseCard({ n, base, reload }: { n: NcrDetail; base: string; rel
 }
 
 /** Suggestions only lead somewhere; nothing is ordered or closed without the user. */
-export function SupportCard({ n, onFollowUp, onAssign }: { n: NcrDetail; onFollowUp: () => void; onAssign: () => void }) {
+export function SupportCard({ n, base, reload, onFollowUp, onAssign }: { n: NcrDetail; base: string; reload: () => void; onFollowUp: () => void; onAssign: () => void }) {
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [instead, setInstead] = useState('');
+  const { busy, error, run, post } = useRun(() => { setDeciding(null); setReason(''); setInstead(''); reload(); });
   if (!n.suggestions.length || n.status === 'closed') return null;
+  // A critical case's first step comes first; suggestions wait until it is done.
+  if (n.firstAction) return (
+    <Card radius={22} style={{ paddingVertical: 13, paddingHorizontal: 16, gap: 6 }}>
+      <Eyebrow color={C.t3}>ÖNERİLEN DESTEK · BEKLİYOR</Eyebrow>
+      <Text testID="support-waiting" style={type(12, 400, { color: C.t3, lh: 1.45 })}>Önce yukarıdaki kritik ilk işlemler yapılmalı; {n.suggestions.length} öneri ondan sonra gösterilir.</Text>
+    </Card>
+  );
   const go = (kind: string, cat: string | null) => {
     if (kind === 'explanation' && n.task) router.push(`/obligation/${n.task.obligation_id}`);
     else if (kind === 'service_request') router.push(`/service/new?ncrId=${n.id}&title=${encodeURIComponent(n.title)}${cat ? `&category=${cat}` : ''}`);
     else if (kind === 'equipment') router.push('/equipment');
+    else if (kind === 'equipment_history' && n.equipment) router.push(`/equipment/${n.equipment.id}`);
     else if (kind === 'team') router.push('/team');
     else if (kind === 'follow_up') onFollowUp();
     else if (kind === 'assign') onAssign();
     else if (kind === 'training') router.push(`/training/assign?ncrId=${n.id}`);
   };
-  const label: Record<string, string> = { explanation: 'Açıklamayı aç', service_request: 'Talep formunu aç', equipment: 'Ekipmanlar', team: 'Ekip', follow_up: 'Takip aksiyonu ekle', assign: 'Sorumluyu değiştir', training: 'Eğitim ata' };
+  const label: Record<string, string> = { explanation: 'Açıklamayı aç', service_request: 'Talep formunu aç', equipment: 'Ekipmanlar', equipment_history: 'Ekipman geçmişi', team: 'Ekip', follow_up: 'Takip aksiyonu ekle', assign: 'Sorumluyu değiştir', training: 'Eğitim ata' };
   return (
     <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <Eyebrow color={C.lime}>ÖNERİLEN DESTEK</Eyebrow>
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İlk değerlendirmedeki nedenlere göre. Öneriler yalnızca yol gösterir; sen onaylamadan hiçbir talep, sipariş ya da kapanış olmaz.</Text>
-      {n.suggestions.map((s, i) => (
+      {n.suggestions.length > 1 ? <Text style={type(11.5, 500, { color: C.t2 })}>{new Set(n.suggestions.map(s => s.category)).size} neden için {n.suggestions.length} öneri.</Text> : null}
+      {n.suggestions.map((s, i) => s.dismissed ? (
+        <View key={i} testID={`support-${s.kind}`} style={{ borderWidth: 1, borderColor: C.bd, borderStyle: 'dashed', borderRadius: 16, padding: 12, gap: 4 }}>
+          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{CAUSE_LABEL[s.category][0].toUpperCase()} · KENARA KONULDU</Text>
+          <Text style={type(12.5, 600, { color: C.t2 })}>{s.title}</Text>
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Gerekçe: {s.dismissed.reason}{s.dismissed.replacement ? ` · Yerine: ${s.dismissed.replacement}` : ''} · {s.dismissed.by}</Text>
+          {n.permissions.act ? <Text testID={`support-restore-${s.key}`} onPress={() => setDeciding(`restore:${s.key}`)} style={type(11.5, 600, { color: C.info })}>Geri al</Text> : null}
+          {deciding === `restore:${s.key}` ? <DecideBox reason={reason} setReason={setReason} busy={busy} error={error} label="Öneriyi geri al"
+            onSave={() => run(() => post(`${base}/suggestions`, { key: s.key, decision: 'restored', reason: reason.trim() }), 'Öneri geri alındı')} onCancel={() => setDeciding(null)} /> : null}
+        </View>
+      ) : (
         <View key={i} testID={`support-${s.kind}`} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, padding: 12, gap: 6 }}>
           <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{CAUSE_LABEL[s.category][0].toUpperCase()}</Text>
           <Text style={type(13.5, 600)}>{s.title}</Text>
           <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{s.body}</Text>
+          {s.kind === 'training' && n.relatedTraining.length ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İlgili: {n.relatedTraining.slice(0, 3).map(t => t.title).join(' · ')}</Text> : null}
           {s.available && label[s.kind] && (s.kind !== 'service_request' || n.permissions.serviceRequest) && (s.kind !== 'assign' || n.permissions.manage) && (s.kind !== 'training' || n.permissions.manage) ? (
             <GhostButton testID={`support-go-${s.kind}`} label={label[s.kind]!} height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => go(s.kind, s.serviceCategory)} />
           ) : !s.available ? <Pill label={s.kind === 'training' ? 'HENÜZ YOK' : 'BU KAYITTA YOK'} fg={C.t3} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
             : <Text style={type(11.5, 500, { color: C.t3 })}>{s.kind === 'service_request' ? 'Talebi işletme sahibi ya da yönetici açar; onlara bildirebilirsin.' : 'Bu adımı yönetici yapar.'}</Text>}
+          {n.permissions.act && deciding !== `dismiss:${s.key}` ? <Text testID={`support-dismiss-${s.key}`} onPress={() => setDeciding(`dismiss:${s.key}`)} style={type(11.5, 500, { color: C.t3 })}>Bu öneri uymuyor · gerekçeyle değiştir</Text> : null}
+          {deciding === `dismiss:${s.key}` ? <DecideBox reason={reason} setReason={setReason} instead={instead} setInstead={setInstead} busy={busy} error={error} label="Kenara koy"
+            onSave={() => run(() => post(`${base}/suggestions`, { key: s.key, decision: 'dismissed', reason: reason.trim(), replacement: instead.trim() || null }), 'Öneri kenara konuldu', 'Gerekçe geçmişe yazıldı.')} onCancel={() => setDeciding(null)} /> : null}
         </View>
       ))}
       {n.services.length ? (
@@ -241,6 +267,93 @@ export function SupportCard({ n, onFollowUp, onAssign }: { n: NcrDetail; onFollo
     </Card>
   );
 }
+function DecideBox({ reason, setReason, instead, setInstead, busy, error, label, onSave, onCancel }: { reason: string; setReason: (v: string) => void; instead?: string; setInstead?: (v: string) => void;
+  busy: boolean; error: string | null; label: string; onSave: () => void; onCancel: () => void }) {
+  return (
+    <View style={{ gap: 7, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
+      <Field label="Gerekçe (zorunlu)" testID="support-reason" value={reason} onChangeText={setReason} multiline placeholder="ör. Conta yeni değişti; sorun kapı menteşesinde." />
+      {setInstead ? <Field label="Yerine ne yapılacak (isteğe bağlı)" testID="support-instead" value={instead} onChangeText={setInstead} /> : null}
+      {error ? <ErrorBox message={error} /> : null}
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <PrimaryButton testID="support-decide-save" label={busy ? 'Kaydediliyor…' : label} glow={false} height={38} size={12} style={{ flex: 1 }} disabled={busy || reason.trim().length < 10} onPress={onSave} />
+        <GhostButton label="Vazgeç" height={38} size={12} onPress={onCancel} />
+      </View>
+    </View>
+  );
+}
+
+/** One look: how far, who is next and what, what is still missing for closure. */
+export function CaseSummary({ n }: { n: NcrDetail }) {
+  const STAGE_TR: Record<string, string> = { ...STAGE_LABEL, closed: 'Kapandı' };
+  return (
+    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 9 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Eyebrow style={{ flex: 1 }}>DURUM · {n.progress.done}/{n.progress.total} AŞAMA{n.iteration > 1 ? ` · ${n.iteration}. TUR` : ''}</Eyebrow>
+        {n.next.mine ? <Pill label="SIRA SENDE" fg={C.lime} bg={tint.lime(0.12)} /> : null}
+      </View>
+      <View testID="ncr-next" style={{ gap: 3 }}>
+        <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>SIRADA · {(STAGE_TR[n.next.stage] ?? n.next.stage).toLocaleUpperCase('tr')}</Text>
+        <Text style={type(13.5, 600, { lh: 1.4 })}>{n.next.what}</Text>
+        <Text style={type(12, 400, { color: C.t2 })}>Kim: {n.next.who}</Text>
+      </View>
+      {n.status !== 'closed' && n.closureMissing.length ? (
+        <View testID="ncr-missing" style={{ gap: 3, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
+          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>KAPANIŞ İÇİN EKSİK</Text>
+          {n.closureMissing.map(m => <Text key={m.stage} style={type(12, 400, { color: C.t2, lh: 1.45 })}>· {STAGE_LABEL[m.stage]}{m.missing ? `: ${m.missing}` : ''}</Text>)}
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
+/** Critical / high risk: the manager's first step is shown before anything else. */
+export function CriticalFirst({ n, onAssign }: { n: NcrDetail; onAssign: () => void }) {
+  if (!n.firstAction) return null;
+  return (
+    <View testID="ncr-critical-first" style={{ borderWidth: 1.5, borderColor: C.crit, backgroundColor: tint.crit(0.08), borderRadius: 20, padding: 15, gap: 8 }}>
+      <Text style={type(10.5, 800, { ls: 0.1, color: C.crit })}>{n.firstAction.level === 'critical' ? 'KRİTİK RİSK' : 'YÜKSEK RİSK'} · ÖNCE BUNLAR</Text>
+      {n.firstAction.items.map((it, i) => (
+        <View key={it.key} style={{ flexDirection: 'row', gap: 8 }}>
+          <Text style={type(13, 700, { color: C.crit })}>{i + 1}.</Text>
+          <Text style={[type(13, 500, { lh: 1.45 }), { flex: 1 }]}>{it.text}</Text>
+        </View>
+      ))}
+      {n.firstAction.items.some(i => i.key === 'assignment') && n.permissions.manage ? (
+        <GhostButton testID="ncr-critical-assign" label="Sorumlu ve termin ata" height={38} size={12} color={C.crit} border={tint.crit(0.4)} style={{ alignSelf: 'flex-start' }} onPress={onAssign} />
+      ) : null}
+      <Text style={type(11, 400, { color: C.t3 })}>{n.firstAction.note}</Text>
+    </View>
+  );
+}
+
+/** Records linked to the case, each opened in its own screen (back returns here). */
+export function LinkedRecords({ n }: { n: NcrDetail }) {
+  const evidence = n.actions.flatMap(a => a.evidence.filter(e => e.status === 'stored'));
+  const rows: { key: string; label: string; sub: string; go: () => void }[] = [
+    ...(n.task ? [{ key: `task-${n.task.id}`, label: `Kontrol: ${n.task.title}`, sub: 'Kaydın açıldığı görev', go: () => router.push(`/task/${n.task!.id}`) }] : []),
+    ...(n.equipment ? [{ key: `equipment-${n.equipment.id}`, label: `Ekipman: ${n.equipment.name}`, sub: 'Geçmiş kayıtlar, hizmetler, belgeler, son ölçümler', go: () => router.push(`/equipment/${n.equipment!.id}`) }] : []),
+    ...n.documents.map(d => ({ key: `doc-${d.id}`, label: `Belge: ${d.title}`, sub: 'Ekipmanın belgesi', go: () => router.push(`/documents/${d.id}`) })),
+    ...n.services.map(s => ({ key: `svc-${s.id}`, label: `Hizmet: ${s.title}`, sub: SERVICE_STATUS[s.job_status ?? s.status] ?? s.status, go: () => router.push(`/service/${s.id}`) })),
+    ...n.trainings.map(t => ({ key: `tr-${t.id}`, label: `Eğitim: ${t.title}`, sub: t.userName, go: () => router.push(`/training/a/${t.id}`) })),
+  ];
+  if (!rows.length && !evidence.length) return null;
+  return (
+    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Eyebrow>İLGİLİ KAYITLAR</Eyebrow>
+      {rows.map(r => (
+        <Tap key={r.key} testID={`ncr-link-${r.key}`} onPress={r.go} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={type(13, 600)} numberOfLines={2}>{r.label}</Text>
+            <Text style={type(11, 400, { color: C.t3 })}>{r.sub}</Text>
+          </View>
+          <Text style={type(15, 400, { color: C.t3 })}>›</Text>
+        </Tap>
+      ))}
+      {evidence.length ? <Text style={type(11.5, 400, { color: C.t3 })}>{evidence.length} kanıt dosyası aksiyonların altında açılır.</Text> : null}
+    </Card>
+  );
+}
+
 const SERVICE_STATUS: Record<string, string> = { open: 'teklif bekleniyor', awarded: 'iş verildi', completed: 'tamamlandı', cancelled: 'iptal', accepted: 'teslim kabul edildi', disputed: 'itiraz edildi', report_submitted: 'rapor geldi', checked_in: 'uzman geldi', scheduled: 'planlandı' };
 
 export function ActionsCard({ n, base, reload, me, formKind, setFormKind }: {
@@ -261,7 +374,10 @@ export function ActionsCard({ n, base, reload, me, formKind, setFormKind }: {
       {n.actions.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz aksiyon yok. {n.depth === 'capa' ? 'Tam CAPA: en az bir düzeltme ve bir düzeltici faaliyet gerekir.' : 'En az bir düzeltme gerekir.'}</Text> : null}
       {rounds.map(r => (
         <View key={r} style={{ gap: 8 }}>
-          {rounds.length > 1 ? <Text style={type(10, 700, { ls: 0.08, color: r === n.iteration ? C.lime : C.t3 })}>{r}. TUR{r === n.iteration ? ' · GÜNCEL' : ''}</Text> : null}
+          {rounds.length > 1 || n.iteration > 1 ? <Text testID={`round-${r}`} style={type(10, 700, { ls: 0.08, color: r === n.iteration ? C.lime : C.t3 })}>{r}. TUR{r === n.iteration ? ' · GÜNCEL' : ''}</Text> : null}
+          {n.verifications.filter(v => v.iteration === r && v.result !== 'effective').map((v, i) => (
+            <Text key={i} style={type(11.5, 400, { color: C.crit, lh: 1.45 })}>{v.result === 'reopened' ? 'Yeniden açıldı' : 'Doğrulama: etkili değil'} · {v.verified_by_name} · {fmtDateTime(v.verified_at)} · {v.notes}</Text>
+          ))}
           {n.actions.filter(a => a.iteration === r).map(a => <ActionRow key={a.id} a={a} n={n} base={base} reload={reload} me={me} />)}
         </View>
       ))}

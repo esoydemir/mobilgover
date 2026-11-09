@@ -160,20 +160,24 @@ export function verifierConflict(n: Pick<FlowInput, 'independentVerification' | 
  * Support suggestions per cause category. They only point somewhere; nothing is ordered,
  * assigned or closed without the user doing it.
  */
-export type Suggestion = { category: CauseCategory; kind: 'explanation' | 'training' | 'service_request' | 'equipment' | 'assign' | 'team' | 'follow_up' | 'evidence'; title: string; body: string; available: boolean };
+export type Suggestion = { key: string; category: CauseCategory; kind: 'explanation' | 'training' | 'service_request' | 'equipment' | 'equipment_history' | 'assign' | 'team' | 'follow_up' | 'evidence';
+  title: string; body: string; available: boolean };
 
-export function suggestions(categories: CauseCategory[], ctx: { hasEquipment: boolean; hasObligation: boolean; serviceCategory: string | null }): Suggestion[] {
-  const out: Suggestion[] = [];
+export function suggestions(categories: CauseCategory[], ctx: { hasEquipment: boolean; hasObligation: boolean; serviceCategory: string | null;
+  relatedTraining?: number; equipmentHistory?: number }): Suggestion[] {
+  const out: Omit<Suggestion, 'key'>[] = [];
   for (const c of categories) {
     if (c === 'knowledge') {
       out.push({ category: c, kind: 'explanation', title: 'Talimatı ve "neden?" açıklamasını birlikte gözden geçir', available: ctx.hasObligation,
         body: ctx.hasObligation ? 'Görevin talimatı ve yükümlülüğün açıklaması, kaynağı ve kural sürümüyle açılır.' : 'Bu kayıt bir yükümlülüğe bağlı değil; açıklama yok.' });
       out.push({ category: c, kind: 'training', title: 'Kişiye eğitim ata', available: true,
-        body: 'İlgili eğitimi ata: okuma, kısa değerlendirme ve sahada etkinlik doğrulaması ayrı kaydedilir. Eğitimin tamamlanması bu kaydı kapatmaz.' });
+        body: `${ctx.relatedTraining ? `Bu konuyla ilgili ${ctx.relatedTraining} eğitim var. ` : ''}İlgili eğitimi ata: okuma, kısa değerlendirme ve sahada etkinlik doğrulaması ayrı kaydedilir. Eğitimin tamamlanması bu kaydı kapatmaz.` });
     }
     if (c === 'equipment') {
-      out.push({ category: c, kind: 'service_request', title: 'Uzman hizmeti için talep hazırla', available: true,
-        body: 'Talep formu bu kayda bağlı açılır. Sen göndermedikçe talep oluşmaz; teklif kabul etmedikçe iş başlamaz ve ödeme uygulama dışındadır.' });
+      if (ctx.hasEquipment) out.push({ category: c, kind: 'equipment_history', title: 'Ekipmanın geçmişine bak', available: true,
+        body: ctx.equipmentHistory ? `Bu ekipmanda önceden ${ctx.equipmentHistory} kayıt var: önceki müdahaleler, hizmetler, belgeler ve son ölçümler.` : 'Bu ekipmanda önceki kayıt yok; belgeleri ve son ölçümleri gör.' });
+      out.push({ category: c, kind: 'service_request', title: ctx.serviceCategory ? 'Uygun hizmet kategorisinde talep hazırla' : 'Uzman hizmeti için talep hazırla', available: true,
+        body: 'Talep formu bu kayda bağlı ve uygun kategori seçili açılır. Sen göndermedikçe talep oluşmaz; teklif kabul etmedikçe iş başlamaz ve ödeme uygulama dışındadır.' });
       if (ctx.hasEquipment) out.push({ category: c, kind: 'equipment', title: 'Ekipmanı kullanım dışı bırakmayı değerlendir', available: true,
         body: 'Ekipmanlar ekranından gerekçeyle kullanımdan kaldırılabilir; karar senin.' });
     }
@@ -182,9 +186,43 @@ export function suggestions(categories: CauseCategory[], ctx: { hasEquipment: bo
       out.push({ category: c, kind: 'team', title: 'Ekibe kişi ekle', available: true, body: 'Personel veya şube yöneticisi davet edilebilir.' });
     }
     if (c === 'process') {
+      out.push({ category: c, kind: 'assign', title: 'Süreç sorumlusunu belirle', available: true, body: 'Sürecin sahibini ve terminini bu kayıtta belirle; değişiklik geçmişte görünür.' });
       out.push({ category: c, kind: 'follow_up', title: 'Süreç için sorumlusu ve termini belli bir takip aksiyonu aç', available: true,
         body: 'Ne değişecek, kim yapacak, ne zamana kadar: aksiyon olarak kaydedilir ve terminine yaklaşınca bildirim gider.' });
     }
   }
-  return out;
+  return out.map(x => ({ ...x, key: `${x.category}:${x.kind}` }));
+}
+
+/**
+ * One look at a case: how far it is, who does what next, and what is still missing for closure.
+ * People are named where the case knows them; otherwise the role that acts.
+ */
+export type NextStep = { stage: StageKey | 'closed'; who: string; what: string; mine: boolean };
+export function nextStep(f: Flow, ctx: {
+  status: FlowInput['status']; ownerName: string | null; openActions: { ownerName: string | null; mine: boolean }[]; declaredActions: number;
+  serviceAccepted: boolean; can: { act: boolean; manage: boolean; verify: boolean; verifyAction: boolean }; independent: boolean;
+}): NextStep {
+  if (ctx.status === 'closed') return { stage: 'closed', who: '—', what: 'Kayıt doğrulanıp kapatıldı. Yeniden görülürse yeniden açılabilir.', mine: false };
+  const active = f.stages.find(s => s.state === 'active');
+  const owner = ctx.ownerName ?? 'Sorumlu (henüz atanmadı)';
+  const verifier = ctx.independent ? 'Bu turda payı olmayan bir yetkili ya da davet edilen dış doğrulayıcı' : 'Şube yöneticisi ya da işletme sahibi';
+  switch (active?.key) {
+    case 'containment': return { stage: 'containment', who: ctx.ownerName ?? 'Şubede çalışan herkes', what: 'İlk müdahaleyi kaydet: etkiyi şimdi nasıl sınırladın?', mine: ctx.can.act };
+    case 'assignment': return { stage: 'assignment', who: 'Şube yöneticisi ya da işletme sahibi', what: 'Sorumlu ve termin belirle.', mine: ctx.can.manage };
+    case 'cause': return { stage: 'cause', who: owner, what: 'İlk neden değerlendirmesini yap (bilgi, ekipman, kaynak, süreç).', mine: ctx.can.act };
+    case 'actions': {
+      if (ctx.declaredActions) return { stage: 'actions', who: verifier, what: `${ctx.declaredActions} aksiyonun "yapıldı" beyanını kanıtla doğrula.`, mine: ctx.can.verifyAction };
+      if (ctx.openActions.length) {
+        const names = [...new Set(ctx.openActions.map(a => a.ownerName ?? 'atanmamış'))];
+        return { stage: 'actions', who: names.join(', '), what: `${ctx.openActions.length} açık aksiyonu tamamla ve "yapıldı" bildir.`, mine: ctx.openActions.some(a => a.mine) };
+      }
+      return { stage: 'actions', who: owner, what: active.missing ?? 'Aksiyon ekle.', mine: ctx.can.act };
+    }
+    case 'root_cause': return { stage: 'root_cause', who: 'Şube yöneticisi ya da işletme sahibi', what: 'Kök nedeni dayanağıyla doğrula.', mine: ctx.can.manage };
+    case 'effectiveness': return { stage: 'effectiveness', who: owner,
+      what: ctx.serviceAccepted ? 'Hizmet teslim alındı; teknik etkinliği ayrıca kontrol et (ör. yeni ölçümle sıcaklığın limitte olduğunu göster).' : 'Önlemin işe yaradığını ölçüm ya da gözlemle kontrol et.', mine: ctx.can.act };
+    case 'verification': return { stage: 'verification', who: verifier, what: 'Etkinlik kontrolünü doğrula: etkiliyse kapat, değilse yeni tur başlar.', mine: ctx.can.verify };
+    default: return { stage: 'verification', who: verifier, what: 'Doğrulama bekleniyor.', mine: ctx.can.verify };
+  }
 }

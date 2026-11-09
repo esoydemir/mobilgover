@@ -10,7 +10,7 @@ import { ErrorBox, Field, Loading, StaleNote } from '../../components/states';
 import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { SEVERITY_LABEL } from '../../features/labels';
-import { ActionsCard, AssignmentCard, CauseCard, FlowStepper, HistoryCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
+import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
 import { HAZARDS, type NcrDetail } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -38,8 +38,8 @@ export default function NcrRoute() {
   const pending = ops.filter(o => o.path === `${base}/steps`).map(o => (o.body as { step: string }).step);
   const containment = n.steps.find(s => s.step === 'containment');
   const effectiveness = n.steps.find(s => s.step === 'effectiveness_check' && s.iteration === n.iteration);
-  const step = (s: 'containment' | 'effectiveness_check', notes: string, label: string) => {
-    enqueue({ companyId: company!.id, label: `Uygunsuzluk: ${label}`, path: `${base}/steps`, body: { step: s, notes } });
+  const step = (s: 'containment' | 'effectiveness_check', notes: string, label: string, value?: number | null) => {
+    enqueue({ companyId: company!.id, label: `Uygunsuzluk: ${label}`, path: `${base}/steps`, body: { step: s, notes, ...(value != null ? { measurement: { value } } : {}) } });
     showToast(`${label} kaydedildi`, 'Cihazda; bağlantı varsa hemen gönderilir.');
   };
 
@@ -74,6 +74,8 @@ export default function NcrRoute() {
         </View>
       ) : null}
 
+      <CriticalFirst n={n} onAssign={() => setAssignNudge(x => x + 1)} />
+      <CaseSummary n={n} />
       <FlowStepper n={n} />
 
       <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
@@ -91,8 +93,9 @@ export default function NcrRoute() {
 
       <AssignmentCard key={`a${assignNudge}-${n.owner?.id}-${n.due_at}`} n={n} base={base} reload={q.reload} initialOpen={assignNudge > 0} />
       <CauseCard n={n} base={base} reload={q.reload} />
-      <SupportCard n={n} onFollowUp={() => setFormKind('follow_up')} onAssign={() => setAssignNudge(x => x + 1)} />
+      <SupportCard n={n} base={base} reload={q.reload} onFollowUp={() => setFormKind('follow_up')} onAssign={() => setAssignNudge(x => x + 1)} />
       <TrainingCard n={n} />
+      <LinkedRecords n={n} />
       <ActionsCard n={n} base={base} reload={q.reload} me={me?.userId ?? null} formKind={formKind} setFormKind={setFormKind} />
 
       {n.status === 'open' ? (
@@ -104,11 +107,11 @@ export default function NcrRoute() {
                 <Text style={type(12.5, 500, { color: C.t2 })}>Önce tamamlanmalı:</Text>
                 {n.flow.blockers.map(b => <Text key={b} style={type(12, 400, { color: C.t3, lh: 1.45 })}>· {b}</Text>)}
               </View>
-            ) : n.permissions.act ? <StepForm testID="ncr-effectiveness" placeholder="Önlem işe yaradı mı? Ölçüm veya gözlemle göster (ör. 3 gün boyunca 2–4 °C)" label="Etkinlik kontrolünü kaydet ve doğrulama iste"
-              onSave={notes => step('effectiveness_check', notes, 'Etkinlik kontrolü')} /> : <Text style={type(12.5, 400, { color: C.t2 })}>Sorumlu kişi kaydeder.</Text>}
+            ) : n.permissions.act ? <EffectivenessForm n={n} onSave={(notes, value) => step('effectiveness_check', notes, 'Etkinlik kontrolü', value)} />
+              : <Text style={type(12.5, 400, { color: C.t2 })}>Sorumlu kişi kaydeder.</Text>}
         </Card>
       ) : effectiveness && n.status === 'awaiting_verification' ? (
-        <Callout tone="info" title="Etkinlik kontrolü" body={`${effectiveness.notes} · ${effectiveness.done_by_name}, ${fmtDateTime(effectiveness.done_at)}`} />
+        <Callout tone="info" title="Etkinlik kontrolü" body={`${effectiveness.notes}${effectiveness.data?.measurement ? ` · yeni ölçüm ${effectiveness.data.measurement.value} ${effectiveness.data.measurement.unit ?? ''}${effectiveness.data.measurement.within ? ' (limit içinde)' : ''}` : ''} · ${effectiveness.done_by_name}, ${fmtDateTime(effectiveness.done_at)}`} />
       ) : null}
 
       <VerificationCard n={n} base={base} reload={q.reload} />
@@ -132,6 +135,32 @@ function StepForm({ placeholder, label, onSave, testID }: { placeholder: string;
       <Field testID={`${testID}-notes`} value={notes} onChangeText={setNotes} multiline placeholder={placeholder} />
       <PrimaryButton testID={`${testID}-save`} label={label} disabled={notes.trim().length < 5} height={46} size={13}
         onPress={() => { onSave(notes.trim()); setNotes(''); }} />
+    </View>
+  );
+}
+
+/** Effectiveness: what was observed, optionally a new measurement compared with the finding's limits. */
+function EffectivenessForm({ n, onSave }: { n: NcrDetail; onSave: (notes: string, value: number | null) => void }) {
+  const [notes, setNotes] = useState('');
+  const [val, setVal] = useState('');
+  const m = n.measurement;
+  const value = val.trim() ? Number(val.replace(',', '.')) : null;
+  const lo = m?.limit_min != null ? Number(m.limit_min) : null, hi = m?.limit_max != null ? Number(m.limit_max) : null;
+  const out = value != null && Number.isFinite(value) && m ? (lo != null && value < lo) || (hi != null && value > hi) : false;
+  const serviceDone = n.services.some(s => s.job_status === 'accepted');
+  return (
+    <View style={{ gap: 10 }}>
+      {serviceDone ? <Text style={type(12, 500, { color: C.info, lh: 1.45 })}>Hizmet teslim alındı. Teslim kabulü teknik etkinlik değildir: sorunun giderildiğini burada ölçüm ya da gözlemle göster.</Text> : null}
+      <Field testID="ncr-effectiveness-notes" value={notes} onChangeText={setNotes} multiline placeholder="Önlem işe yaradı mı? Ölçüm veya gözlemle göster (ör. 3 gün boyunca 2–4 °C)" />
+      {m ? (
+        <>
+          <Field label={`Yeni ölçüm (${m.unit}) · ilk bulgu ${Number(m.value)} ${m.unit}, limit ${lo ?? '—'}…${hi ?? '—'} ${m.unit}`} testID="ncr-effectiveness-value" value={val}
+            onChangeText={setVal} keyboardType="decimal-pad" placeholder="ör. 3,5" />
+          {out ? <Text testID="ncr-effectiveness-out" style={type(12, 600, { color: C.crit, lh: 1.45 })}>Bu değer hâlâ limit dışında; etkinlik kontrolü olarak kaydedilemez. Yeni aksiyon ekle ya da ölçümü tekrarla.</Text> : null}
+        </>
+      ) : null}
+      <PrimaryButton testID="ncr-effectiveness-save" label="Etkinlik kontrolünü kaydet ve doğrulama iste" disabled={notes.trim().length < 5 || out || (value != null && !Number.isFinite(value))} height={46} size={13}
+        onPress={() => { onSave(notes.trim(), value); setNotes(''); setVal(''); }} />
     </View>
   );
 }

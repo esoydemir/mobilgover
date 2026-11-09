@@ -57,7 +57,8 @@ export function client(env: Env, token: string) {
       method, url, payload: isBuf ? body : body === undefined ? undefined : JSON.stringify(body),
       headers: { authorization: `Bearer ${token}`, ...(isBuf ? {} : body === undefined ? {} : { 'content-type': 'application/json' }), ...headers },
     });
-    return { status: res.statusCode, body: res.body ? JSON.parse(res.body) : null, headers: res.headers };
+    const json = String(res.headers['content-type'] ?? '').includes('json');
+    return { status: res.statusCode, body: res.body ? (json ? JSON.parse(res.body) : res.rawPayload) : null, headers: res.headers };
   };
   return {
     get: (url: string) => call('GET', url),

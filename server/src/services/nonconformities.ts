@@ -1,12 +1,13 @@
 import type { Tx } from '../db/pool';
 import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { RECURRENCE_WINDOW_DAYS, assessRisk, type Severity } from '../domain/nonconformity';
-import { CAUSE_CATEGORIES, SELF_VERIFY_MIN_REASON, actionContributors, flow, roundPerformers, selfVerifyAllowed, suggestions, type CauseCategory, type FlowInput, type RiskLevel } from '../domain/ncrflow';
+import { CAUSE_CATEGORIES, SELF_VERIFY_MIN_REASON, actionContributors, flow, nextStep, roundPerformers, selfVerifyAllowed, suggestions, type CauseCategory, type FlowInput, type RiskLevel } from '../domain/ncrflow';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { listAssignments, relatedCourses } from './training';
 import { notify, siteManagers } from './notifications';
 import { ALLOWED_MIME } from '../storage/local';
+import { canReadDoc } from './documents';
 
 /** Example response windows per risk level; a company sets its own in production. */
 const RESPONSE_HOURS: Record<string, number> = { critical: 4, high: 24, medium: 72, low: 168 };
@@ -106,7 +107,7 @@ async function load(tx: Tx, p: Principal, companyId: string, id: string, action:
 }
 
 async function flowData(tx: Tx, n: any) {
-  const steps = (await tx.query(`SELECT s.step, s.notes, s.done_by, s.done_at, s.iteration, u.display_name AS done_by_name
+  const steps = (await tx.query(`SELECT s.step, s.notes, s.done_by, s.done_at, s.iteration, s.data, u.display_name AS done_by_name
      FROM ncr_steps s JOIN users u ON u.id = s.done_by WHERE s.ncr_id = $1 ORDER BY s.done_at`, [n.id])).rows;
   const causes = (await tx.query(`SELECT c.id, c.stage, c.iteration, c.categories, c.notes, c.migrated, c.done_by, c.done_at, u.display_name AS done_by_name
      FROM ncr_cause_assessments c JOIN users u ON u.id = c.done_by WHERE c.ncr_id = $1 ORDER BY c.done_at`, [n.id])).rows;
@@ -160,22 +161,35 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
   const trainings = (await listAssignments(tx, p, companyId, trainingVisible ? 'managed' : 'mine', id));
   const relatedTraining = trainingVisible ? await relatedCourses(tx, companyId, { hazard: n.hazard_type, templateCode: task?.template_code ?? null, ruleCode: task?.rule_code ?? null }) : [];
   const closure = closureOptions(n, d.input, p.userId, canVerify && n.status === 'awaiting_verification');
-  return {
-    ...n,
-    // How verification works for this case (shown on screen).
-    verificationPolicy: n.risk_rationale.independentVerification
-      ? 'Yüksek risk: aksiyon sonuçlarını ve kapanışı, işte payı olmayan biri doğrular (işletmeden ya da davet edilen dış doğrulayıcı).'
-      : n.risk_level === 'medium'
-        ? 'Orta risk: düzeltme ve takip aksiyonlarında ve kapanışta gerekçeli öz doğrulama yapılabilir (etiketlenir); düzeltici faaliyet bağımsız doğrulanır.'
-        : 'Düşük risk: payı olan kişi gerekçe yazarak öz doğrulama yapabilir; "öz doğrulama" olarak etiketlenir.',
-    // Kept for older app versions.
-    requiredSteps: n.risk_rationale.steps, closable: { ok: false },
-    owner: n.owner_id ? { id: n.owner_id, name: owner?.display_name ?? null, active: !!owner?.active } : null,
-    overdue: n.status !== 'closed' && !!n.due_at && new Date(n.due_at) < new Date(),
-    equipment, task,
-    flow: f,
-    steps: d.steps, causes: d.causes, verifications: d.verifications, services, history, trainings, relatedTraining,
-    actions: d.actions.map((a, i) => {
+  const perms = { act: can(p, 'ncr.act', target).ok, manage: can(p, 'ncr.manage', target).ok };
+  // The finding's own measurement: its limits are what a new measurement in the effectiveness check is compared with.
+  const measurement = n.measurement_id ? (await tx.query(`SELECT value, unit, limit_min, limit_max, measured_at FROM measurements WHERE id = $1`, [n.measurement_id])).rows[0] ?? null : null;
+  // Linked records the person may open from the case (each checked for their own access).
+  const equipmentHistory = equipment ? (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM nonconformities WHERE company_id = $1 AND equipment_id = $2 AND id <> $3`,
+    [companyId, equipment.id, id])).rows[0]!.n : 0;
+  const docRows = equipment ? (await tx.query(`SELECT id, site_id, title, doc_type FROM documents WHERE company_id = $1 AND equipment_id = $2 AND archived_at IS NULL ORDER BY created_at`,
+    [companyId, equipment.id])).rows : [];
+  const documents = [];
+  for (const d0 of docRows) if (await canReadDoc(tx, p, companyId, d0)) documents.push({ id: d0.id, title: d0.title, docType: d0.doc_type });
+  const decisions = (await tx.query(`SELECT DISTINCT ON (suggestion_key) suggestion_key, decision, reason, replacement, decided_at, u.display_name AS decided_by_name
+     FROM ncr_suggestion_decisions sd JOIN users u ON u.id = sd.decided_by WHERE sd.ncr_id = $1 AND sd.iteration = $2 ORDER BY suggestion_key, decided_at DESC`, [id, n.iteration])).rows;
+  const serviceAccepted = services.some(sv => sv.job_status === 'accepted');
+  const curActions = d.actions.filter(a => a.iteration === n.iteration && a.kind !== 'follow_up');
+  const next = nextStep(f, {
+    status: n.status, ownerName: owner?.display_name ?? null, independent: !!n.risk_rationale.independentVerification, serviceAccepted,
+    openActions: curActions.filter(a => a.status === 'open').map(a => ({ ownerName: a.owner_name, mine: a.owner_id === p.userId })),
+    declaredActions: curActions.filter(a => a.status === 'done' && (a.verification_status === 'declared' || (a.verification_status === 'legacy' && n.status !== 'closed'))).length,
+    can: { ...perms, verify: closure.verify || closure.selfVerify, verifyAction: false },
+  });
+  const containmentDone = d.steps.some(st => st.step === 'containment');
+  // Critical (and high) risk: the first thing a manager must do comes before any training or support suggestion.
+  const firstAction = n.status === 'open' && (n.risk_level === 'critical' || n.risk_level === 'high') && (!containmentDone || !n.owner_id || !n.assigned_by)
+    ? { level: n.risk_level, items: [
+        ...(!containmentDone ? [{ key: 'containment', text: n.emergency_instruction ? `Etkiyi şimdi sınırla. Onaylı acil talimat: ${n.emergency_instruction}` : 'Etkiyi şimdi sınırla (ör. ürünü güvenli üniteye taşı, kullanımı durdur) ve ilk müdahaleyi kaydet.' }] : []),
+        ...(!n.assigned_by ? [{ key: 'assignment', text: `Sorumlu ve termin ata (örnek yanıt süresi: ${RESPONSE_HOURS[n.risk_level]} saat).` }] : []),
+      ], note: 'Eğitim ve destek önerileri bu ilk işlemlerden sonra gelir.' }
+    : null;
+  const mappedActions = d.actions.map((a, i) => {
       const inp = d.input.actions[i]!;
       const contributors = actionContributors(inp);
       const isProvider = d.input.providerUsers?.includes(p.userId) ?? false;
@@ -194,14 +208,41 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
           : selfOk ? `Bu aksiyonda payın var. Risk ${RISK_TR[n.risk_level]} olduğu için gerekçeli öz doğrulama yapabilirsin; "öz doğrulama" olarak etiketlenir.`
           : `Bu aksiyonda payın var ve risk ${RISK_TR[n.risk_level]}: bağımsız bir yetkili ya da davet ettiğiniz dış doğrulayıcı doğrulamalı.` : null,
         can_add_evidence: a.status === 'open' && n.status !== 'closed' && (a.owner_id === p.userId || manage) };
-    }),
+    });
+  // Next step: an action claim waits for someone who may verify it without a part in it.
+  if (next.stage === 'actions' && /beyanını/.test(next.what)) next.mine = mappedActions.some(a => a.can_verify || a.can_self_verify);
+  return {
+    ...n,
+    // How verification works for this case (shown on screen).
+    verificationPolicy: n.risk_rationale.independentVerification
+      ? 'Yüksek risk: aksiyon sonuçlarını ve kapanışı, işte payı olmayan biri doğrular (işletmeden ya da davet edilen dış doğrulayıcı).'
+      : n.risk_level === 'medium'
+        ? 'Orta risk: düzeltme ve takip aksiyonlarında ve kapanışta gerekçeli öz doğrulama yapılabilir (etiketlenir); düzeltici faaliyet bağımsız doğrulanır.'
+        : 'Düşük risk: payı olan kişi gerekçe yazarak öz doğrulama yapabilir; "öz doğrulama" olarak etiketlenir.',
+    // Kept for older app versions.
+    requiredSteps: n.risk_rationale.steps, closable: { ok: false },
+    owner: n.owner_id ? { id: n.owner_id, name: owner?.display_name ?? null, active: !!owner?.active } : null,
+    overdue: n.status !== 'closed' && !!n.due_at && new Date(n.due_at) < new Date(),
+    equipment, task,
+    flow: f,
+    steps: d.steps, causes: d.causes, verifications: d.verifications, services, history, trainings, relatedTraining,
+    actions: mappedActions,
     cause: { initial: latestInitial ?? null, verified: latestVerified ?? null },
     suggestions: latestInitial ? suggestions(latestInitial.categories as CauseCategory[], {
       hasEquipment: !!equipment, hasObligation: !!task?.obligation_id, serviceCategory: equipment ? SERVICE_FOR_EQUIPMENT[equipment.type] ?? null : null,
-    }).map(s => ({ ...s, serviceCategory: s.kind === 'service_request' && equipment ? SERVICE_FOR_EQUIPMENT[equipment.type] ?? null : null })) : [],
+      relatedTraining: relatedTraining.length, equipmentHistory,
+    }).map(s => {
+      const dec = decisions.find(x => x.suggestion_key === s.key);
+      return { ...s, serviceCategory: s.kind === 'service_request' && equipment ? SERVICE_FOR_EQUIPMENT[equipment.type] ?? null : null,
+        equipmentId: s.kind === 'equipment_history' ? equipment?.id ?? null : null,
+        dismissed: dec?.decision === 'dismissed' ? { reason: dec.reason, replacement: dec.replacement, by: dec.decided_by_name, at: dec.decided_at } : null };
+    }) : [],
+    measurement, documents, next, firstAction,
+    closureMissing: f.stages.filter(st => st.state !== 'done').map(st => ({ stage: st.key, missing: st.missing })),
+    progress: { done: f.stages.filter(st => st.state === 'done').length, total: f.stages.length },
     permissions: {
-      act: can(p, 'ncr.act', target).ok,
-      manage: can(p, 'ncr.manage', target).ok,
+      act: perms.act,
+      manage: perms.manage,
       verify: closure.verify,
       selfVerify: closure.selfVerify,
       verifyBlockedReason: closure.reason,
@@ -270,7 +311,8 @@ async function assertEligible(tx: Tx, companyId: string, siteId: string, userId:
 }
 
 /** First response (containment) and the effectiveness check of the current round. */
-export async function recordStep(tx: Tx, p: Principal, companyId: string, id: string, step: 'containment' | 'effectiveness_check', notes: string) {
+export type NewMeasurement = { value: number; unit?: string | null };
+export async function recordStep(tx: Tx, p: Principal, companyId: string, id: string, step: 'containment' | 'effectiveness_check', notes: string, measurement?: NewMeasurement | null) {
   const n = await load(tx, p, companyId, id, 'ncr.act', true);
   if (n.status === 'closed') throw conflict('NCR_CLOSED', 'Kapalı uygunsuzlukta adım eklenemez.');
   if (notes.trim().length < 5) throw invalid('Ne yapıldığını yaz.');
@@ -282,13 +324,75 @@ export async function recordStep(tx: Tx, p: Principal, companyId: string, id: st
     const d = await flowData(tx, n);
     const f = flow(d.input);
     if (!f.readyForEffectiveness) throw new AppError(422, 'FLOW_INCOMPLETE', `Önce: ${f.blockers.join(' ')}`);
-    await tx.query(`INSERT INTO ncr_steps (company_id, ncr_id, step, notes, done_by, iteration) VALUES ($1,$2,'effectiveness_check',$3,$4,$5)`, [companyId, id, notes.trim(), p.userId, n.iteration]);
+    // A new measurement is compared with the limits of the original finding. A value still outside
+    // the limits cannot be recorded as the effectiveness check: the problem is not fixed.
+    let data: Record<string, unknown> | null = null;
+    if (measurement) {
+      if (!Number.isFinite(measurement.value)) throw invalid('Ölçüm değeri sayı olmalı.');
+      const m = n.measurement_id ? (await tx.query(`SELECT unit, limit_min, limit_max FROM measurements WHERE id = $1`, [n.measurement_id])).rows[0] : null;
+      const lo = m?.limit_min != null ? Number(m.limit_min) : null, hi = m?.limit_max != null ? Number(m.limit_max) : null;
+      const within = m ? (lo == null || measurement.value >= lo) && (hi == null || measurement.value <= hi) : null;
+      data = { measurement: { value: measurement.value, unit: m?.unit ?? measurement.unit ?? null, limitMin: lo, limitMax: hi, within,
+        basis: m ? 'İlk bulgunun limitleriyle karşılaştırıldı.' : 'Karşılaştırılacak limit yok; değer yalnız kaydedildi.' } };
+      if (within === false) throw new AppError(422, 'MEASUREMENT_OUT_OF_LIMIT', `Yeni ölçüm (${measurement.value} ${m.unit}) hâlâ limit dışında (${lo ?? '—'}…${hi ?? '—'} ${m.unit}). Sorun giderilmemiş: yeni aksiyon ekle ya da ölçümü tekrarla.`);
+    }
+    await tx.query(`INSERT INTO ncr_steps (company_id, ncr_id, step, notes, done_by, iteration, data) VALUES ($1,$2,'effectiveness_check',$3,$4,$5,$6)`,
+      [companyId, id, notes.trim(), p.userId, n.iteration, data ? JSON.stringify(data) : null]);
     await tx.query(`UPDATE nonconformities SET status = 'awaiting_verification' WHERE id = $1`, [id]);
     const managers = await verifierRecipients(tx, companyId, n.site_id, roundPerformers(d.input), !!n.risk_rationale.independentVerification, n.id);
     await notify(tx, { companyId, siteId: n.site_id, userIds: managers, except: p.userId, kind: 'ncr_verification_requested', entityType: 'nonconformity', entityId: id,
       dedupeKey: `ncr_verification_requested:${id}:${n.iteration}`, title: 'Doğrulama isteği', body: `${n.title} · etkinlik kontrolü kaydedildi, doğrulaman bekleniyor` });
   }
-  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.step_done', entityType: 'nonconformity', entityId: id, payload: { step, notes: notes.trim(), iteration: n.iteration } });
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.step_done', entityType: 'nonconformity', entityId: id,
+    payload: { step, notes: notes.trim(), iteration: n.iteration, ...(step === 'effectiveness_check' && measurement ? { measurement } : {}) } });
+}
+
+/**
+ * A suggestion is only a pointer. Someone working on the case may set it aside with a reason (and
+ * say what they do instead), or bring it back. Kept per round and in the history; nothing is deleted.
+ */
+export async function decideSuggestion(tx: Tx, p: Principal, companyId: string, id: string, b: { key: string; decision: 'dismissed' | 'restored'; reason: string; replacement: string | null }) {
+  const n = await load(tx, p, companyId, id, 'ncr.act', true);
+  if (n.status === 'closed') throw conflict('NCR_CLOSED', 'Kapalı kayıtta öneri değiştirilemez.');
+  if (!/^[a-z_]+:[a-z_]+$/.test(b.key)) throw invalid('Bilinmeyen öneri.');
+  if (b.reason.trim().length < 10) throw invalid('Gerekçeyi yaz (en az bir cümle).');
+  const last = (await tx.query(`SELECT decision FROM ncr_suggestion_decisions WHERE ncr_id = $1 AND iteration = $2 AND suggestion_key = $3 ORDER BY decided_at DESC LIMIT 1`,
+    [id, n.iteration, b.key])).rows[0];
+  if ((last?.decision ?? 'restored') === b.decision) return { changed: false };
+  await tx.query(`INSERT INTO ncr_suggestion_decisions (company_id, ncr_id, iteration, suggestion_key, decision, reason, replacement, decided_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [companyId, id, n.iteration, b.key, b.decision, b.reason.trim(), b.replacement?.trim() || null, p.userId]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.suggestion_decided', entityType: 'nonconformity', entityId: id,
+    payload: { key: b.key, decision: b.decision, reason: b.reason.trim(), replacement: b.replacement?.trim() || null, iteration: n.iteration } });
+  return { changed: true };
+}
+
+/**
+ * One piece of equipment over time: earlier cases (only those this person may read), service
+ * requests for them, the equipment's documents and recent measurements.
+ */
+export async function equipmentHistory(tx: Tx, p: Principal, companyId: string, equipmentId: string) {
+  const e = (await tx.query(`SELECT e.id, e.site_id, e.name, e.type, e.serial, e.active, e.calibrated_until, s.name AS site_name FROM equipment e JOIN sites s ON s.id = e.site_id
+     WHERE e.id = $1 AND e.company_id = $2`, [equipmentId, companyId])).rows[0];
+  if (!e || !can(p, 'equipment.read', { companyId, siteId: e.site_id }).ok) throw notFound('Ekipman');
+  const rows = (await tx.query(`SELECT n.id, n.title, n.status, n.risk_level, n.hazard_type, n.detected_at, n.closed_at, n.owner_id, n.site_id,
+       EXISTS (SELECT 1 FROM ncr_actions a WHERE a.ncr_id = n.id AND a.owner_id = $3) AS my_action,
+       (SELECT json_agg(json_build_object('kind', a.kind, 'description', a.description, 'status', a.status, 'verification', a.verification_status) ORDER BY a.created_at)
+          FROM ncr_actions a WHERE a.ncr_id = n.id AND a.status <> 'cancelled') AS actions
+     FROM nonconformities n WHERE n.company_id = $1 AND n.equipment_id = $2 ORDER BY n.detected_at DESC`, [companyId, equipmentId, p.userId])).rows;
+  const cases = rows.filter(r => can(p, 'ncr.read', { companyId, siteId: r.site_id, recordId: r.id, assigneeId: r.owner_id === p.userId || r.my_action ? p.userId : r.owner_id }).ok)
+    .map(({ my_action, owner_id, site_id, ...r }) => ({ ...r, actions: r.actions ?? [] }));
+  const ids = cases.map(c => c.id);
+  const services = ids.length && can(p, 'service.request', { companyId, siteId: e.site_id }).ok
+    ? (await tx.query(`SELECT r.id, r.title, r.status, r.ncr_id, r.created_at, j.status AS job_status, j.accepted_at FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id
+         WHERE r.company_id = $1 AND r.ncr_id = ANY($2) ORDER BY r.created_at DESC`, [companyId, ids])).rows : [];
+  const docRows = (await tx.query(`SELECT id, site_id, title, doc_type FROM documents WHERE company_id = $1 AND equipment_id = $2 AND archived_at IS NULL`, [companyId, equipmentId])).rows;
+  const documents = [];
+  for (const d0 of docRows) if (await canReadDoc(tx, p, companyId, d0)) documents.push({ id: d0.id, title: d0.title, docType: d0.doc_type });
+  // Managers only: staff see their own assigned checks, not the equipment's whole record.
+  const measurements = can(p, 'task.assign', { companyId, siteId: e.site_id }).ok
+    ? (await tx.query(`SELECT m.value, m.unit, m.within_limit, m.measured_at, m.limit_min, m.limit_max FROM measurements m JOIN tasks t ON t.id = m.task_id
+         WHERE t.company_id = $1 AND t.equipment_id = $2 ORDER BY m.measured_at DESC LIMIT 10`, [companyId, equipmentId])).rows : [];
+  return { equipment: e, cases, services, documents, measurements };
 }
 
 /**
