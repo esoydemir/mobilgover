@@ -48,6 +48,7 @@ export default function AdminRoute() {
       {rules.data || rules.error ? (
         <>
           <SectionLabel>KURAL SÜRÜMLERİ</SectionLabel>
+          {roles.includes('rule_author') ? <PrimaryButton testID="rule-new" label="Yeni kural taslağı yaz" glow={false} height={42} size={12.5} onPress={() => router.push('/rule/new')} /> : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
             {(['in_review', 'approved', 'published', 'draft'] as const).map(s => <FilterChip key={s} label={{ in_review: 'İncelemede', approved: 'Onaylı', published: 'Yayında', draft: 'Taslak' }[s]} px={12} active={status === s} onPress={() => setStatus(s)} />)}
           </View>
@@ -58,7 +59,7 @@ export default function AdminRoute() {
                 <Text style={type(12, 700, { family: 'mono' })}>{r.code} v{r.version}</Text>
                 {r.is_example ? <ExampleBadge /> : null}
               </View>
-              <Text style={type(14, 600)}>{r.obligation_title}</Text>
+              <Text style={type(14, 600)} onPress={() => router.push(`/rule/${r.id}`)}>{r.obligation_title} ›</Text>
               <Text style={type(11.5, 400, { color: C.t3 })}>Gerekli alan incelemesi: {r.required_review_areas.join(', ') || 'yok'}{r.pendingAreaReviews.length ? ` · bekleyen: ${r.pendingAreaReviews.join(', ')}` : ''}</Text>
               {r.status === 'in_review' ? (
                 <View style={{ gap: 8 }}>

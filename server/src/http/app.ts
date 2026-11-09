@@ -11,6 +11,7 @@ import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
 import { addSite, board, relate } from '../services/board';
+import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
 import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, decideSuggestion, equipmentHistory, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
@@ -28,7 +29,7 @@ import * as net from '../services/network';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
-import { approve, areaReview, createDraft, draftSchema, listRuleVersions, previewImpact, publish, submitForReview } from '../services/rules';
+import { SAMPLE_PROFILES, approve, areaReview, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
 import { addEvidence, assignableMembers, assignTask, completeTask, generateTasks, listTasks, recordMeasurement, taskDetail } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
@@ -698,6 +699,20 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     platformGate(req);
     const b = draftSchema.parse(req.body);
     return reply.code(201).send(await db.system(tx => createDraft(tx, req.principal, b)));
+  });
+  app.get('/admin/rule-versions/:id', async req => { platformGate(req); return db.system(tx => ruleVersionDetail(tx, req.principal, rvId(req))); });
+  app.put('/admin/rule-versions/:id', async req => {
+    platformGate(req);
+    const b = draftSchema.parse(req.body);
+    return db.system(tx => updateDraft(tx, req.principal, rvId(req), b));
+  });
+  app.get('/admin/provisions', async req => { platformGate(req); return db.system(tx => listProvisions(tx, req.principal)); });
+  app.get('/admin/sample-profiles', async req => { platformGate(req); return SAMPLE_PROFILES; });
+  // Institution view: synthetic demo only (no business data is read).
+  app.get('/institution/demo', async req => {
+    if (!req.principal.platformRoles.length && !config.demoMode) throw forbidden();
+    const q = z.object({ region: z.string().max(60).optional(), type: z.string().max(60).optional() }).parse(req.query);
+    return institutionView(q);
   });
   app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
   app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); await db.system(tx => approve(tx, req.principal, rvId(req))); return { ok: true }; });

@@ -9,7 +9,7 @@ import { C, tint, type } from '../theme';
 type Item = { icon: string; label: string; sub: string; href: Href; badge?: number; show?: boolean };
 
 export default function MoreRoute() {
-  const { role, me, companies, company, sites, siteId, selectSite } = useSession();
+  const { role, me, env, companies, company, sites, siteId, selectSite } = useSession();
   const { ops } = useQueue();
   const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
   const verifier = !!company?.grants?.some(g => g.scopes.includes('ncr_verify'));
@@ -32,6 +32,7 @@ export default function MoreRoute() {
     { icon: '🚩', label: 'Ağ moderasyonu', sub: 'Şikâyetler, gerekçeli kararlar', href: '/moderation', show: !!me?.platformRoles.includes('network_moderator') },
     { icon: '🪪', label: 'Uzman alanı', sub: 'Mesleki profil, doğrulama, teklifler', href: '/pro' },
     { icon: '🛡️', label: 'Yönetim', sub: 'Kural onayı ve pazar yeri incelemesi', href: '/admin', show: (me?.platformRoles.length ?? 0) > 0 },
+    { icon: '🏛️', label: 'Kurum görünümü (sentetik demo)', sub: 'Bölge ve işletme türüne göre tekrar ve neden dağılımı; gerçek veri değil', href: '/institution', show: (me?.platformRoles.length ?? 0) > 0 || env?.mode === 'demo' },
     { icon: '⚙️', label: 'Hesap ve güvenlik', sub: 'Ek doğrulama, ortam bilgisi, çıkış', href: '/account' },
   ];
   return (

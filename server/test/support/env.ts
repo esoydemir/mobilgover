@@ -65,6 +65,7 @@ export function client(env: Env, token: string) {
     post: (url: string, body?: unknown, headers?: Record<string, string>) => call('POST', url, body ?? {}, headers),
     put: (url: string, body: Buffer, mime: string) => call('PUT', url, body, { 'content-type': mime }),
     patch: (url: string, body: unknown) => call('PATCH', url, body),
+    putJson: (url: string, body: unknown) => call('PUT', url, body),
   };
 }
 
