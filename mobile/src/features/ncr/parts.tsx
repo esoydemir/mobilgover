@@ -328,14 +328,18 @@ export function CriticalFirst({ n, onAssign }: { n: NcrDetail; onAssign: () => v
 
 /** Records linked to the case, each opened in its own screen (back returns here). */
 export function LinkedRecords({ n }: { n: NcrDetail }) {
+  const { role } = useSession();
   const evidence = n.actions.flatMap(a => a.evidence.filter(e => e.status === 'stored'));
-  const rows: { key: string; label: string; sub: string; go: () => void }[] = [
+  // An outside verifier (no role in this business) may read only the case and its evidence; the task, equipment,
+  // document and service screens would answer "not found", so those links are not offered.
+  const all: { key: string; label: string; sub: string; go: () => void }[] = [
     ...(n.task ? [{ key: `task-${n.task.id}`, label: `Kontrol: ${n.task.title}`, sub: 'Kaydın açıldığı görev', go: () => router.push(`/task/${n.task!.id}`) }] : []),
     ...(n.equipment ? [{ key: `equipment-${n.equipment.id}`, label: `Ekipman: ${n.equipment.name}`, sub: 'Geçmiş kayıtlar, hizmetler, belgeler, son ölçümler', go: () => router.push(`/equipment/${n.equipment!.id}`) }] : []),
     ...n.documents.map(d => ({ key: `doc-${d.id}`, label: `Belge: ${d.title}`, sub: 'Ekipmanın belgesi', go: () => router.push(`/documents/${d.id}`) })),
     ...n.services.map(s => ({ key: `svc-${s.id}`, label: `Hizmet: ${s.title}`, sub: SERVICE_STATUS[s.job_status ?? s.status] ?? s.status, go: () => router.push(`/service/${s.id}`) })),
     ...n.trainings.map(t => ({ key: `tr-${t.id}`, label: `Eğitim: ${t.title}`, sub: t.userName, go: () => router.push(`/training/a/${t.id}`) })),
   ];
+  const rows = role ? all : [];
   if (!rows.length && !evidence.length) return null;
   return (
     <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>

@@ -56,7 +56,7 @@ export default function RootLayout() {
 
 /** Sends signed-out users to sign-in and users without a business to setup. */
 function Gate({ children }: { children: ReactNode }) {
-  const { ready, token, companies, me } = useSession();
+  const { ready, token, companies, me, provider } = useSession();
   const path = usePathname();
   // Without a business: the provider area, the professional network and moderation stay reachable.
   const platform = (me?.platformRoles.length ?? 0) > 0;
@@ -66,9 +66,10 @@ function Gate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready) return;
     if (!token && !OPEN_ROUTES.includes(path)) router.replace('/login');
-    else if (token && me && companies.length === 0 && !providerOnly && path !== '/setup' && path !== '/account') router.replace('/setup');
+    // No business: a person with a professional profile goes to the provider area; everyone else to business setup.
+    else if (token && me && companies.length === 0 && !providerOnly && path !== '/setup' && path !== '/account') router.replace(provider ? '/pro' : '/setup');
     else if (token && path === '/login') router.replace('/');
-  }, [ready, token, companies.length, me, path, providerOnly]);
+  }, [ready, token, companies.length, me, path, providerOnly, provider]);
   if (!ready) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={C.lime} /></View>;
   return <>{children}</>;
 }

@@ -12,6 +12,8 @@ type Session = {
   /** Kept on the device so queued records can be matched to their author even when the app starts offline. */
   userId: string | null;
   me: Me | null;
+  /** True when the person has no business but has a professional (provider) profile: their home is the provider area. */
+  provider: boolean;
   companies: Company[];
   company: Company | null;
   siteId: string | null;
@@ -39,11 +41,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [stored, setStored] = useState<Stored>({ token: null, companyId: null });
   const [me, setMe] = useState<Me | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [provider, setProvider] = useState(false);
 
   const persist = useCallback((s: Stored) => { setStored(s); void save(KEY, s); }, []);
 
   const loadAccount = useCallback(async (token: string) => {
     const [m, c] = await Promise.all([api<Me>('GET', '/me', { token }), api<Company[]>('GET', '/companies', { token })]);
+    // Someone with no business but a professional profile belongs in the provider area, not the business setup.
+    let isProvider = false;
+    if (c.length === 0) {
+      try { isProvider = !!(await api<unknown>('GET', '/pro/profile', { token })); } catch { /* no profile or offline: treat as a plain new user */ }
+    }
+    setProvider(isProvider);
     setMe(m);
     setCompanies(c);
     return { m, c };
@@ -82,7 +91,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
 
     return {
-      ready, env, token: stored.token, userId: me?.userId ?? stored.userId ?? null, me, companies, company, siteId, sites, role,
+      ready, env, token: stored.token, userId: me?.userId ?? stored.userId ?? null, me, provider, companies, company, siteId, sites, role,
       selectSite: id => persist({ ...stored, siteId: id }),
       startLogin: async email => { await api('POST', '/auth/email/start', { body: { email } }); },
       verifyLogin: async (email, code) => {
@@ -97,7 +106,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       logout: async () => {
         try { await call('POST', '/auth/logout'); } catch { /* sign out locally anyway */ }
-        setMe(null); setCompanies([]);
+        setMe(null); setCompanies([]); setProvider(false);
         persist({ token: null, companyId: null, userId: null });
       },
       refresh: async () => { if (stored.token) await loadAccount(stored.token); },
@@ -110,7 +119,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       call,
     };
-  }, [ready, env, stored, me, companies, loadAccount, persist]);
+  }, [ready, env, stored, me, provider, companies, loadAccount, persist]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

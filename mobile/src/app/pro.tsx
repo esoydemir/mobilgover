@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
@@ -8,6 +8,8 @@ import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../components/states';
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../components/ui';
 import { addDays, fmtDate, fmtDateTime } from '../features/dates';
+import { Invitations } from '../features/Invitations';
+import { goRoot } from '../state/app';
 import { QUOTE_STATUS, RISK_LABEL, credentialLabel } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
@@ -112,8 +114,9 @@ function Row({ label, status, note }: { label: string; status: string; note?: st
 }
 
 function MyProfessionalArea() {
-  const { call } = useSession();
+  const { call, companies } = useSession();
   const { showToast } = useUi();
+  const [sending, setSending] = useState(false);
   const me = useApi<ProfileView | null>('/pro/profile');
   const cats = useApi<Category[]>('/service-categories');
   const inbox = useApi<Inbox>(me.data ? '/pro/inbox' : null);
@@ -146,6 +149,7 @@ function MyProfessionalArea() {
 
   return (
     <Screen title="Uzman alanı" titleEn="Professional" onRefresh={() => { void me.reload(); void inbox.reload(); }} refreshing={me.loading}>
+      {companies.length === 0 ? <Invitations onAccepted={() => goRoot('/')} /> : null}
       <ProfileCard v={me.data} />
       {error ? <ErrorBox message={error} /> : null}
 
@@ -164,8 +168,16 @@ function MyProfessionalArea() {
         <Field label="Veren kurum" testID="ver-issuer" value={ver.issuer} onChangeText={v => setVer(x => ({ ...x, issuer: v }))} />
         <Field label="Belge numarası / referans" testID="ver-ref" value={ver.documentRef} onChangeText={v => setVer(x => ({ ...x, documentRef: v }))} />
         {ver.kind !== 'identity' ? <Field label="Geçerlilik bitişi (YYYY-AA-GG)" value={ver.validUntil} onChangeText={v => setVer(x => ({ ...x, validUntil: v }))} placeholder="2028-12-31" /> : null}
-        <GhostButton testID="ver-submit" label="İncelemeye gönder" disabled={ver.issuer.trim().length < 2 || ver.documentRef.trim().length < 2 || (ver.kind === 'credential' && !ver.credentialType)}
-          onPress={() => act(() => call('POST', '/pro/verifications', { kind: ver.kind, credentialType: ver.kind === 'credential' ? ver.credentialType : null, issuer: ver.issuer.trim(), documentRef: ver.documentRef.trim(), validUntil: ver.validUntil || null }), 'Belge incelemeye gönderildi')} />
+        <GhostButton testID="ver-submit" label={sending ? 'Gönderiliyor…' : 'İncelemeye gönder'} disabled={sending || ver.issuer.trim().length < 2 || ver.documentRef.trim().length < 2 || (ver.kind === 'credential' && !ver.credentialType)}
+          onPress={async () => {
+            // One send per tap: the form empties on success so the same document is not submitted twice by accident.
+            setSending(true);
+            await act(async () => {
+              await call('POST', '/pro/verifications', { kind: ver.kind, credentialType: ver.kind === 'credential' ? ver.credentialType : null, issuer: ver.issuer.trim(), documentRef: ver.documentRef.trim(), validUntil: ver.validUntil || null });
+              setVer(v => ({ ...v, credentialType: '', issuer: '', documentRef: '', validUntil: '' }));
+            }, 'Belge incelemeye gönderildi');
+            setSending(false);
+          }} />
         <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Belgeni platformdaki bir inceleyici kontrol eder; kendi belgeni doğrulayamazsın.</Text>
       </Card>
 
@@ -192,7 +204,9 @@ function MyProfessionalArea() {
       {(inbox.data?.requests ?? []).map(r => <RequestCard key={r.id} r={r} onDone={() => inbox.reload()} />)}
 
       <SectionLabel>İŞLERİM</SectionLabel>
+      {inbox.data && inbox.data.jobs.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz işin yok. Teklifin kabul edilince iş burada görünür.</Text> : null}
       {(inbox.data?.jobs ?? []).map(j => <JobCard key={j.id} j={j} onDone={() => inbox.reload()} />)}
+      {companies.length === 0 ? <GhostButton testID="pro-to-setup" label="Kendi işletmemi de kurmak istiyorum" onPress={() => router.push('/setup')} /> : null}
     </Screen>
   );
 }

@@ -52,11 +52,12 @@ export default function VerifiersRoute() {
       <Card style={{ gap: 10 }}>
         <Eyebrow>DAVET ET</Eyebrow>
         <Field label="E-posta" testID="verifier-email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="uzman@ornek.com" />
-        <Text style={type(12, 600, { color: C.t2 })}>Kapsam</Text>
+        <Text style={type(12, 600, { color: C.t2 })}>Şube</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           {(company?.sites ?? []).map(s => <FilterChip key={s.id} testID={`verifier-site-${s.id}`} label={`Yalnız ${s.name}`} px={12} active={siteId === s.id} onPress={() => setSiteId(s.id)} />)}
           <FilterChip testID="verifier-site-all" label="Tüm şubeler" px={12} active={siteId === null} onPress={() => setSiteId(null)} />
         </View>
+        <Text style={type(12, 600, { color: C.t2 })}>Hangi kayıtlar</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <FilterChip testID="verifier-scope-all" label="Tüm uygunsuzluklar" px={12} active={!records} onPress={() => setRecords(null)} />
           <FilterChip testID="verifier-scope-records" label="Yalnız seçili kayıtlar" px={12} active={!!records} onPress={() => setRecords(r => r ?? [])} />
@@ -68,6 +69,8 @@ export default function VerifiersRoute() {
               <FilterChip key={n.id} testID={`verifier-record-${n.id}`} label={n.title} px={12} active={records.includes(n.id)}
                 onPress={() => setRecords(r => (r!.includes(n.id) ? r!.filter(x => x !== n.id) : [...r!, n.id]))} />
             ))}
+            {(open.data ?? []).filter(n => !siteId || n.site_id === siteId).length === 0 && open.data ? <Text style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>Bu şubede seçilebilecek açık kayıt yok.</Text> : null}
+            {records.length === 0 ? <Text testID="verifier-pick-hint" style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>Davet için en az bir kayıt seç. Seçili kayıtlar yeşil görünür; dokununca seçim kalkar.</Text> : null}
           </View>
         ) : null}
         <Text style={type(12, 600, { color: C.t2 })}>Süre</Text>
