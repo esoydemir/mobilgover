@@ -73,7 +73,9 @@ export function SyncChip() {
 }
 
 function BrandHeader() {
-  const { me, company } = useSession();
+  const { me, company, siteId, sites } = useSession();
+  const siteName = sites.find(s => s.id === siteId)?.name;
+  const full = company ? `${company.name}${siteName ? ` · ${siteName}` : ''}` : 'GoverHub';
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, paddingTop: 4, paddingHorizontal: 22, paddingBottom: 14 }}>
       <View style={{ width: 44, height: 44, borderRadius: 15, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 22px rgba(198,255,61,0.28)' }}>
@@ -85,7 +87,11 @@ function BrandHeader() {
           <Text numberOfLines={1} style={[type(11, 500, { color: C.t2 }), { flexShrink: 1 }]}>Merhaba, {me?.displayName ?? ''}</Text>
           <EnvBadge />
         </View>
-        <Text numberOfLines={1} style={[type(16, 700, { ls: -0.015 }), { marginTop: 2 }]}>{company?.name ?? 'GoverHub'}</Text>
+        {/* The whole business and site name stays reachable on a narrow phone: two lines, then the site line; tap = switch site / account. */}
+        <Tap testID="header-context" accessibilityLabel={full} onPress={() => router.push('/more')}>
+          <Text numberOfLines={2} style={[type(16, 700, { ls: -0.015, lh: 1.15 }), { marginTop: 2 }]}>{company?.name ?? 'GoverHub'}</Text>
+          {siteName ? <Text testID="header-site" numberOfLines={1} style={type(11, 500, { color: C.t3 })}>{siteName}</Text> : null}
+        </Tap>
       </View>
       <SyncChip />
       {company ? <NotificationBell companyId={company.id} /> : null}

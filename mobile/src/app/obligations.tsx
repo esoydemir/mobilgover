@@ -16,8 +16,9 @@ export const DECISION: Record<Obligation['decision'], [string, string, string]> 
 };
 
 export default function ObligationsRoute() {
-  const { company } = useSession();
-  const q = useApi<Obligation[]>(company ? `/companies/${company.id}/obligations` : null);
+  const { company, role, siteId } = useSession();
+  // A site manager may read only their own site's obligations; asking for all sites is refused (403).
+  const q = useApi<Obligation[]>(company ? `/companies/${company.id}/obligations${role === 'site_manager' && siteId ? `?siteId=${siteId}` : ''}` : null);
   return (
     <Screen title="Yükümlülükler" titleEn="Obligations" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       {q.stale ? <StaleNote /> : null}

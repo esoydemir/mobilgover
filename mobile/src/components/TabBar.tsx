@@ -9,7 +9,7 @@ import { useSession } from '../api/session';
 import { BellIcon, DocsIcon, GridIcon, HomeIcon, ScanIcon, TasksIcon } from './Icons';
 import { Tap } from './ui';
 
-const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/sync', '/account', '/equipment', '/profile', '/admin', '/team', '/report', '/risk', '/notifications', '/network', '/trainings', '/training', '/verif', '/board'];
+const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/sync', '/account', '/equipment', '/profile', '/admin', '/team', '/report', '/notifications', '/network', '/trainings', '/training', '/verif', '/board'];
 
 type Tab = {
   key: string;
@@ -21,7 +21,7 @@ type Tab = {
 };
 
 const TABS: Tab[] = [
-  { key: 'home', label: 'Ana Sayfa', Icon: HomeIcon, isActive: p => p === '/', go: () => goRoot('/') },
+  { key: 'home', label: 'Ana Sayfa', Icon: HomeIcon, isActive: p => p === '/' || p === '/risk', go: () => goRoot('/') },
   { key: 'tasks', label: 'Görevler', Icon: TasksIcon, isActive: p => p === '/tasks' || p.startsWith('/task/'), go: () => goRoot('/tasks') },
   {
     // Centre action: open the next check that is due.

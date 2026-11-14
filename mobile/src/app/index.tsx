@@ -43,7 +43,7 @@ function HomeScreen() {
   const isStaff = role === 'staff';
   // Staff get only the cases they own or hold an action in (server-side).
   const ncrs = useApi<Ncr[]>(base ? `${base}/nonconformities?status=open` : null);
-  const obligations = useApi<Obligation[]>(base && !isStaff ? `${base}/obligations` : null);
+  const obligations = useApi<Obligation[]>(base && !isStaff ? `${base}/obligations${role === 'site_manager' && siteId ? `?siteId=${siteId}` : ''}` : null);
   const ind = useApi<Indicators>(base && siteId && !isStaff ? `${base}/indicators?siteId=${siteId}&from=${encodeURIComponent(addDays(today, -30).toISOString())}&to=${encodeURIComponent(addDays(today, 1).toISOString())}` : null);
 
   const derived = useMemo(() => {
@@ -83,7 +83,7 @@ function HomeScreen() {
           <GradientFill angle={165} stops={[[0, '#171d09'], [0.55, '#0b0d05'], [1, C.page]]}
             radial={{ cx: 0.88, cy: 0, r: 1, stops: [[0, tint.lime(0.16)], [0.42, tint.lime(0.03)], [0.7, tint.lime(0)]] }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
-            <Ring done={derived.done} total={total} />
+            <Tap testID="home-ring" accessibilityLabel="Bugünün görevleri" onPress={() => router.push('/tasks?filter=today')}><Ring done={derived.done} total={total} /></Tap>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={type(10.5, 600, { ls: 0.13, color: C.t3 })}>BUGÜN · {fmtDate(today.toISOString())} {shortDay(today).toUpperCase()}</Text>
               <Text testID="home-remaining" style={[type(21, 600, { family: 'outfit', ls: -0.03, lh: 1.15 }), { marginTop: 9 }]}>
@@ -176,7 +176,7 @@ function HomeScreen() {
 
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
         <Text style={type(10.5, 600, { ls: 0.12, color: C.t3 })}>BUGÜNÜN GÖREVLERİ</Text>
-        <Tap onPress={() => goRoot('/tasks')} hitSlop={8}><Text style={type(11, 600, { ls: 0.08, color: C.t2 })}>TÜMÜ →</Text></Tap>
+        <Tap testID="home-today-all" onPress={() => goRoot('/tasks?filter=today')} hitSlop={8}><Text style={type(11, 600, { ls: 0.08, color: C.t2 })}>TÜMÜ →</Text></Tap>
       </View>
       {tasks.data && derived.todays.length === 0 ? <Empty title="Bugün için görev yok" body={isStaff ? 'Sana atanmış görev yok. Yöneticin bir kontrolü sana atadığında burada görünür.' : 'Görevler, uygulanan yükümlülüklerden oluşturulur. Profil yanıtlarını ve ekipmanları kontrol et.'} /> : null}
       {derived.todays.map(t => <TaskLine key={t.id} t={t} showAssignee={!isStaff} />)}
