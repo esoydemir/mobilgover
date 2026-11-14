@@ -9,7 +9,7 @@ import { useSession } from '../api/session';
 import { BellIcon, DocsIcon, GridIcon, HomeIcon, ScanIcon, TasksIcon } from './Icons';
 import { Tap } from './ui';
 
-const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/sync', '/account', '/equipment', '/profile', '/admin', '/team', '/report', '/notifications', '/network', '/trainings', '/training', '/verif', '/board'];
+const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/sync', '/account', '/equipment', '/profile', '/admin', '/team', '/report', '/market', '/notifications', '/network', '/trainings', '/training', '/verif', '/board'];
 
 type Tab = {
   key: string;

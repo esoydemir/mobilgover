@@ -14,6 +14,7 @@ export default function MoreRoute() {
   const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
   const verifier = !!company?.grants?.some(g => g.scopes.includes('ncr_verify'));
   const items: Item[] = [
+    { icon: '🛒', label: 'Pazar', sub: 'Uzmanlar / servisler, teklifler, profesyonel akış', href: '/market', show: manager },
     { icon: '₺', label: 'Ceza ve yasal risk', sub: 'Açık risk kalemleri; ceza tutarı modellenmedi', href: '/risk', show: manager },
     { icon: '📊', label: 'Rapor ve denetim dosyası', sub: 'Uyum göstergeleri, PDF denetim dosyası', href: '/report', show: manager },
     { icon: '📋', label: 'Yükümlülükler', sub: 'Neden uygulandığı, kaynak ve kural sürümü', href: '/obligations', show: manager },
