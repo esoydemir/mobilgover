@@ -7,6 +7,7 @@ import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, ExampleBadge, Loading } from '../components/states';
 import { Card, Chevron, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap, Tile } from '../components/ui';
 import { fmtDateTime } from '../features/dates';
+import { PostCard, type Post } from '../features/network';
 import { C, tint, type } from '../theme';
 import { REQ_STATUS } from './services';
 
@@ -16,7 +17,7 @@ type Req = { id: string; title: string; category_name: string; status: string; o
 type Section = 'experts' | 'quotes' | 'feed';
 
 /**
- * Pazar: the three marketplace sections in one place, separate from the "Servis bul" shortcuts that open from a task,
+ * Pazar: the three marketplace sections (Uzmanlar · Servisler ve Teklifler · Profesyonel Akış) in one place, separate from the "Servis bul" shortcuts that open from a task,
  * a nonconformity or a document.
  *  - Uzmanlar / Servisler: approved providers by service category (organic order, no paid placement)
  *  - Teklifler: this business's service requests and the quotes waiting for comparison
@@ -33,9 +34,9 @@ export default function MarketRoute() {
   return (
     <Screen title="Pazar" titleEn="Marketplace" gap={12} onRefresh={() => void reqs.reload()} refreshing={reqs.loading}>
       <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
-        <FilterChip testID="market-tab-experts" label="Uzmanlar / Servisler" px={12} active={section === 'experts'} onPress={() => setSection('experts')} />
-        <FilterChip testID="market-tab-quotes" label={`Teklifler${reqs.data ? ` ${reqs.data.length}` : ''}`} px={12} active={section === 'quotes'} onPress={() => setSection('quotes')} />
-        <FilterChip testID="market-tab-feed" label="Profesyonel akış" px={12} active={section === 'feed'} onPress={() => setSection('feed')} />
+        <FilterChip testID="market-tab-experts" label="Uzmanlar" px={12} active={section === 'experts'} onPress={() => setSection('experts')} />
+        <FilterChip testID="market-tab-quotes" label={`Servisler ve Teklifler${reqs.data ? ` ${reqs.data.length}` : ''}`} px={12} active={section === 'quotes'} onPress={() => setSection('quotes')} />
+        <FilterChip testID="market-tab-feed" label="Profesyonel Akış" px={12} active={section === 'feed'} onPress={() => setSection('feed')} />
       </View>
       {waiting > 0 && section !== 'quotes' ? (
         <Tap testID="market-waiting" onPress={() => setSection('quotes')} style={{ borderWidth: 1, borderColor: tint.lime(0.3), backgroundColor: tint.lime(0.05), borderRadius: 18, padding: 13 }}>
@@ -87,6 +88,7 @@ function Experts() {
             <Pill label={p.verified_credentials > 0 ? `${p.verified_credentials} DOĞRULANMIŞ YETERLİLİK` : 'YETERLİLİK DOĞRULAMASI YOK'} fg={p.verified_credentials > 0 ? C.lime : C.warn} bg={p.verified_credentials > 0 ? tint.lime(0.14) : tint.warn(0.14)} />
             <Pill label={`${p.city}${p.district ? ` · ${p.district}` : ''}`.toUpperCase()} fg={C.t2} bg={C.chip} />
           </View>
+          <GhostButton testID={`market-profile-${p.id}`} label="Profili aç" height={40} size={12.5} onPress={() => router.push(`/pro?view=${p.id}` as Href)} />
           <GhostButton testID={`market-ask-${p.id}`} label="Bu uzmandan teklif iste" height={40} size={12.5} color={C.lime} border={tint.lime(0.35)}
             onPress={() => router.push({ pathname: '/service/new', params: { providerId: p.id, providerName: p.display_name, categories: cat!, category: cat! } })} />
         </View>
@@ -100,6 +102,16 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
   return (
     <>
       <PrimaryButton testID="market-new-request" label="Yeni hizmet talebi" onPress={() => router.push('/service/new')} />
+      {reqs.data ? (
+        <View testID="market-summary" style={{ flexDirection: 'row', gap: 8 }}>
+          {([['Açık talep', reqs.data.filter(r => r.status === 'open').length], ['Karşılaştır', reqs.data.filter(r => r.status === 'open' && r.open_quotes > 0).length], ['İş verildi', reqs.data.filter(r => r.status === 'awarded').length], ['Tamamlanan', reqs.data.filter(r => r.status === 'completed').length]] as const).map(([l, n]) => (
+            <View key={l} style={{ flex: 1, borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 10, gap: 3 }}>
+              <Text style={type(9, 700, { ls: 0.06, color: C.t3 })}>{String(l).toUpperCase()}</Text>
+              <Text style={type(20, 600, { family: 'outfit', ls: -0.03 })}>{n}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {reqs.error ? <ErrorBox message={reqs.error} onRetry={reqs.reload} /> : null}
       {!reqs.data && reqs.loading ? <Loading /> : null}
       {reqs.data?.length === 0 ? <Empty title="Henüz talep yok" body="Bir uzmandan teklif istediğinde talepler ve gelen teklifler burada toplanır." /> : null}
@@ -123,12 +135,35 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
 }
 
 function Feed() {
+  const me = useApi<{ hasProfile: boolean; note: string }>('/network/me');
+  const [scope, setScope] = useState<'all' | 'following'>('all');
+  const feed = useApi<{ label: string; posts: Post[] }>(me.data?.hasProfile ? `/network/feed?scope=${scope}` : null);
   return (
-    <Card style={{ gap: 10 }}>
-      <Eyebrow>PROFESYONEL AKIŞ</Eyebrow>
-      <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Doğrulanmış mesleki profillerden paylaşımlar, vaka paylaşımları ve uzman arama. Kullanıcı içeriğidir; doğrulanmış mevzuat ya da onaylı tavsiye değildir.</Text>
-      <PrimaryButton testID="market-feed-open" label="Akışı aç" height={44} size={13.5} onPress={() => router.push('/network')} />
-      <GhostButton testID="market-feed-search" label="Uzman ara" height={44} size={13.5} onPress={() => router.push('/network/search')} />
-    </Card>
+    <>
+      {me.error ? <ErrorBox message={me.error} onRetry={me.reload} /> : null}
+      {!me.data && me.loading ? <Loading /> : null}
+      {me.data && !me.data.hasProfile ? (
+        <Card style={{ gap: 10 }}>
+          <Eyebrow>PROFİLİNİ OLUŞTUR</Eyebrow>
+          <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Profesyonel akış, profil oluşturmuş kullanıcılara açıktır. {me.data.note}</Text>
+          <PrimaryButton testID="market-feed-profile" label="Profil oluştur" height={44} size={13.5} onPress={() => router.push('/network/profile-edit')} />
+        </Card>
+      ) : null}
+      {me.data?.hasProfile ? (
+        <>
+          <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
+            <FilterChip testID="market-feed-all" label="Tümü" active={scope === 'all'} onPress={() => setScope('all')} />
+            <FilterChip testID="market-feed-following" label="Takip ettiklerim" active={scope === 'following'} onPress={() => setScope('following')} />
+            <GhostButton testID="market-feed-compose" label="Paylaş" height={34} size={12} onPress={() => router.push('/network/compose')} />
+            <GhostButton testID="market-feed-search" label="Uzman ara" height={34} size={12} onPress={() => router.push('/network/search')} />
+          </View>
+          {feed.error ? <ErrorBox message={feed.error} onRetry={feed.reload} /> : null}
+          {!feed.data && feed.loading ? <Loading /> : null}
+          {feed.data?.posts.length === 0 ? <Empty title="Bu akışta paylaşım yok" body={scope === 'following' ? 'Takip ettiğin kimse henüz paylaşım yapmadı.' : 'İlk paylaşımı sen yapabilirsin.'} /> : null}
+          {(feed.data?.posts ?? []).map(p => <PostCard key={p.id} p={p} />)}
+        </>
+      ) : null}
+      <Text style={type(11, 400, { color: C.t3, lh: 1.5 })}>Kullanıcı içeriğidir; doğrulanmış mevzuat ya da onaylı tavsiye değildir. Gönderiye dokununca tam içerik, yorumlar ve paylaşanın profili açılır.</Text>
+    </>
   );
 }

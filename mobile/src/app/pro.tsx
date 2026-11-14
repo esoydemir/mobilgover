@@ -44,9 +44,15 @@ export default function ProRoute() {
 
 function PublicProfile({ id }: { id: string }) {
   const q = useApi<ProfileView>(`/professionals/${id}`);
+  const { companies } = useSession();
+  const cats = q.data?.authorizedCategories ?? [];
   return (
     <Screen title="Uzman profili" titleEn="Professional profile">
       {q.error ? <ErrorBox message={q.error} /> : !q.data ? <Loading /> : <ProfileCard v={q.data} />}
+      {q.data && companies.length > 0 ? (
+        cats.length > 0 ? <PrimaryButton testID="pro-ask-quote" label="Bu uzmandan teklif iste" onPress={() => router.push({ pathname: '/service/new', params: { providerId: q.data!.profile.id, providerName: q.data!.profile.display_name, categories: cats.map(c => c.category_code).join(',') } })} />
+          : <Text style={type(12, 500, { color: C.warn, lh: 1.45 })}>Bu uzmanın şu an onaylı hizmet kategorisi yok; teklif istenemez.</Text>
+      ) : null}
     </Screen>
   );
 }
@@ -56,6 +62,11 @@ function ProfileCard({ v }: { v: ProfileView }) {
     <>
       <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{v.profile.display_name}</Text>
       <Text style={type(13, 400, { color: C.t2 })}>{[v.profile.headline, v.profile.city, v.profile.district].filter(Boolean).join(' · ')}</Text>
+      <Card>
+        <Eyebrow>HAKKINDA · HİZMET BÖLGESİ</Eyebrow>
+        <Text testID="pro-bio" style={[type(12.5, 400, { color: v.profile.bio ? C.t2 : C.t3, lh: 1.5 }), { marginTop: 8 }]}>{v.profile.bio || 'Uzman henüz tanıtım yazısı eklemedi.'}</Text>
+        <Text testID="pro-region" style={[type(12.5, 600), { marginTop: 8 }]}>Bölge: {[v.profile.city, v.profile.district].filter(Boolean).join(' · ')}</Text>
+      </Card>
       <Card>
         <Eyebrow>NE KONTROL EDİLDİ</Eyebrow>
         <Row label="Kimlik" status={v.identity.status} note={v.identity.method} />
