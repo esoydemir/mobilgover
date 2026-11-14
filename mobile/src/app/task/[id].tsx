@@ -6,6 +6,7 @@ import { Platform, Text, View } from 'react-native';
 import { useQueue, type Op } from '../../api/queue';
 import { useSession } from '../../api/session';
 import type { Requirement, TaskDetail, TaskRow } from '../../api/types';
+import { errorText } from '../../api/client';
 import { useApi } from '../../api/useApi';
 import { CameraIcon, WarnIcon } from '../../components/Icons';
 import { Screen } from '../../components/Screen';
@@ -83,6 +84,7 @@ export default function TaskDetailRoute() {
       </Tap>
 
       <TaskWhy t={t} role={role} />
+      <ReportEvidence t={t} base={base} onChanged={q.reload} />
 
       {windowed.data ? (() => {
         const same = bucketTasks(windowed.data).all.filter(x => x.id !== t.id && x.title === t.title && (x.equipment_name ?? null) === (t.equipment?.name ?? null) && new Date(x.due_at) <= new Date());
@@ -173,7 +175,7 @@ export default function TaskDetailRoute() {
       )}
 
       {open && t.progress.missing.length > 0 && local.length === 0 && (
-        <Text style={type(12, 400, { lh: 1.5, color: C.t3 })}>Eksik kanıt: {t.progress.missing.join(' · ')}</Text>
+        <Text testID="task-missing" style={type(12, 400, { lh: 1.5, color: C.t3 })}>Eksik kanıt: {t.progress.missing.join(' · ')}</Text>
       )}
       {open ? (
         <PrimaryButton testID="task-complete" label={canComplete ? 'Görevi tamamla' : 'Kanıt bekleniyor'} disabled={!canComplete}
@@ -187,12 +189,72 @@ export default function TaskDetailRoute() {
 }
 
 const REQ_TEXT = (r: Requirement) => r.kind === 'measurement' ? `${r.quantity === 'temperature' ? 'Sıcaklık' : r.quantity} ölçümü gir (${r.unit})`
-  : r.kind === 'photo' ? `En az ${r.min} fotoğraf ekle` : r.kind === 'document' ? `En az ${r.min} belge ekle`
+  : r.kind === 'photo' ? `En az ${r.min} fotoğraf ekle` : r.kind === 'document' ? `En az ${r.min} belge ekle${r.acceptsServiceReport ? ' ya da incelenmiş servis raporunu seç' : ''}`
   : r.kind === 'checklist' ? `Kontrol listesini yanıtla (${r.items.length} madde)` : r.kind === 'note' ? 'Açıklama yaz' : 'Yetkili onayı al';
 const SEVERITY_RISK = { critical: "Kritik kontrol: süresi geçerse Risk Merkezi'nde kritik kalem olur ve denetimde kayıt eksikliği olarak görülebilir.",
   major: "Önemli kontrol: süresi geçerse gecikmiş kontrol olarak Risk Merkezi'ne düşer.", minor: 'İyileştirme kontrolü: süresi geçerse gecikmiş olarak görünür.' } as const;
 
 /** Why the task exists, its legal basis, dates, who is responsible, what happens if it is not done, what to do and which services were asked for. */
+/**
+ * The rule of this task accepts a service report as its document evidence: choose a reviewed latest version instead of uploading the
+ * file again. Other steps (measurement, note, photo, approval) stay required, so the missing ones are named here. A closed task shows
+ * the version it rested on.
+ */
+function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; onChanged: () => void }) {
+  const { call } = useSession();
+  const { showToast } = useUi();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const re = t.reportEvidence;
+  if (!re || !re.accepted) return null;
+  const open = t.status === 'open';
+  const missing = t.progress.missing;
+  const use = async (o: NonNullable<TaskDetail['reportEvidence']>['options'][number]) => {
+    setBusy(o.documentId); setError(null);
+    try {
+      await call('POST', `${base}/tasks/${t.id}/report-evidence`, { documentId: o.documentId, versionId: o.versionId });
+      showToast('Servis raporu göreve bağlandı', `Sürüm ${o.version} belge kanıtı olarak kullanılacak.`, 'ok');
+      onChanged();
+    } catch (e) { setError(errorText(e)); } finally { setBusy(null); }
+  };
+  const basis = re.links.filter(l => l.completionBasis);
+  return (
+    <View testID="task-report-evidence"><Card radius={22} border={tint.info(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Eyebrow color={C.info}>SERVİS RAPORUNU KANIT OLARAK KULLAN</Eyebrow>
+      {!open ? (
+        basis.length ? basis.map(l => (
+          <Text key={l.id} testID="task-report-basis" style={type(12.5, 500, { lh: 1.45 })}>
+            Görev şu rapor sürümüne dayanarak kapandı: {l.documentTitle} · sürüm {l.version} ({fmtDateTime(l.selectedAt)}, {l.selectedBy} seçti){l.fileSha256 ? ` · özet ${l.fileSha256.slice(0, 12)}…` : ''}
+          </Text>
+        )) : <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görev kendi yüklenen belgesiyle kapandı; servis raporuna dayanmadı.</Text>
+      ) : (
+        <>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görevin kuralı belge kanıtı yerine incelenmiş servis raporunu kabul eder. Yalnız aynı şubenin, bu göreve bağlı servisin, olumlu incelenmiş güncel rapor sürümü seçilebilir; dosyayı yeniden yüklemen gerekmez.</Text>
+          {re.options.length === 0 ? <Text testID="task-report-none" style={type(12, 500, { color: C.t3, lh: 1.45 })}>Bu göreve bağlı servis raporu yok. Servis talebini görevden aç ya da belgeyi kendin yükle.</Text> : null}
+          {re.options.map(o => (
+            <View key={o.documentId} testID={`task-report-option-${o.documentId}`} style={{ gap: 4 }}>
+              <Text style={type(13, 600, { lh: 1.35 })}>{o.requestTitle}</Text>
+              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {o.siteName} · güncel sürüm {o.version}</Text>
+              {o.selected ? <Text testID={`task-report-selected-${o.documentId}`} style={type(12, 600, { color: C.lime })}>Seçili: sürüm {o.version} göreve bağlı</Text>
+                : o.reason ? <Text testID={`task-report-reason-${o.documentId}`} style={type(12, 500, { color: C.warn, lh: 1.45 })}>Seçilemez: {o.reason}</Text>
+                : <PrimaryButton testID={`task-report-use-${o.documentId}`} label="İncelenmiş servis raporunu kanıt olarak kullan" disabled={busy !== null} onPress={() => use(o)} />}
+            </View>
+          ))}
+          {re.links.filter(l => !l.counts && l.reason).map(l => (
+            <Text key={l.id} testID="task-report-stale" style={type(12, 500, { color: C.warn, lh: 1.45 })}>Sürüm {l.version} artık sayılmıyor: {l.reason}</Text>
+          ))}
+          {missing.length > 0 ? (
+            <Text testID="task-report-missing" style={type(12, 600, { color: C.warn, lh: 1.5 })}>
+              Görevin kapanması için kalan adımlar: {missing.join(' · ')}. Servis raporu yalnız belge adımını karşılar.
+            </Text>
+          ) : <Text testID="task-report-ready" style={type(12, 600, { color: C.lime, lh: 1.45 })}>Tüm kanıt adımları tamam; görevi tamamlayabilirsin.</Text>}
+          {error ? <Text testID="task-report-error" style={type(12, 500, { color: C.crit, lh: 1.45 })}>{error}</Text> : null}
+        </>
+      )}
+    </Card></View>
+  );
+}
+
 const REVIEW_TR = { unreviewed: ['İNCELEME BEKLİYOR', C.warn], verified: ['İNCELENDİ', C.lime], rejected: ['KABUL EDİLMEDİ', C.crit] } as const;
 /** Report files the experts delivered for this task's services: site, request, review state, versions; the task stays open until the latest is reviewed. */
 function ServiceReports({ t }: { t: TaskDetail }) {
@@ -217,7 +279,7 @@ function ServiceReports({ t }: { t: TaskDetail }) {
         </View>
       ))}
       <Text testID="task-reports-note" style={type(11.5, 500, { color: sr.blocked ? C.warn : C.lime, lh: 1.45 })}>
-        {sr.blocked ? `Görev açık kalır: ${sr.reason ?? 'rapor dosyası incelenmedi.'} Teslim kabulü dosyanın doğrulandığı anlamına gelmez.` : 'Son rapor sürümü incelendi; görev diğer kanıtlar tamamlanınca kapatılabilir.'}
+        {sr.blocked ? `Görev açık kalır: ${sr.reason ?? 'rapor dosyası incelenmedi.'} Teslim kabulü dosyanın doğrulandığı anlamına gelmez.` : t.status === 'open' ? 'Son rapor sürümü incelendi; görev diğer kanıtlar tamamlanınca kapatılabilir.' : 'Görev kapalı; sonradan gelen rapor revizyonları kapanış kaydını değiştirmez.'}
       </Text>
     </Card></View>
   );

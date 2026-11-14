@@ -7,7 +7,8 @@ import { z } from 'zod';
 export const evidenceRequirementSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('measurement'), quantity: z.string(), unit: z.string() }),
   z.object({ kind: z.literal('photo'), min: z.number().int().min(1) }),
-  z.object({ kind: z.literal('document'), min: z.number().int().min(1) }),
+  // acceptsServiceReport: the rule lets a reviewed service report (latest version) count as this document evidence.
+  z.object({ kind: z.literal('document'), min: z.number().int().min(1), acceptsServiceReport: z.boolean().optional() }),
   z.object({ kind: z.literal('checklist'), items: z.array(z.object({ id: z.string(), label: z.string(), critical: z.boolean() })).min(1) }),
   z.object({ kind: z.literal('note'), requiredWhen: z.enum(['always', 'nonconforming']) }),
   z.object({ kind: z.literal('approval'), role: z.enum(['owner', 'hq_manager', 'site_manager']) }),
@@ -54,6 +55,8 @@ export type CollectedEvidence = {
   checklist: Record<string, 'pass' | 'fail' | 'na'> | null;
   notes: number;
   approvals: string[];
+  /** Reviewed, still-current service report versions the task is tied to (count only for rules that accept them). */
+  serviceReports?: number;
 };
 
 export type Completeness = { complete: boolean; missing: string[]; pending: string[]; nonconforming: string[] };
@@ -74,9 +77,10 @@ export function assessEvidence(reqs: EvidenceRequirement[], ev: CollectedEvidenc
       else if (ms.some(m => !m.withinLimit)) nonconforming.push(`Ölçüm limit dışı: ${qLabel(r.quantity)}`);
     } else if (r.kind === 'photo' || r.kind === 'document') {
       const label = r.kind === 'photo' ? 'Fotoğraf' : 'Belge';
-      const stored = ev.files.filter(f => f.kind === r.kind && f.status === 'stored').length;
+      const viaReport = r.kind === 'document' && r.acceptsServiceReport ? (ev.serviceReports ?? 0) : 0;
+      const stored = ev.files.filter(f => f.kind === r.kind && f.status === 'stored').length + viaReport;
       const waiting = ev.files.filter(f => f.kind === r.kind && f.status === 'pending_upload').length;
-      if (stored < r.min) (waiting ? pending : missing).push(`${label}: ${stored}/${r.min} yüklendi`);
+      if (stored < r.min) (waiting ? pending : missing).push(`${label}: ${stored}/${r.min} ${r.kind === 'document' && r.acceptsServiceReport ? 'yüklendi ya da incelenmiş servis raporu seçildi' : 'yüklendi'}`);
     } else if (r.kind === 'device_record') {
       if (!ev.files.some(f => f.kind === 'device_record' && f.status === 'stored')) missing.push(`Cihaz kaydı: ${r.quantity}`);
     } else if (r.kind === 'checklist') {

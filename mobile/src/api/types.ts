@@ -22,7 +22,8 @@ export type TaskRow = {
 
 export type Requirement =
   | { kind: 'measurement'; quantity: string; unit: string }
-  | { kind: 'photo' | 'document'; min: number }
+  | { kind: 'photo'; min: number }
+  | { kind: 'document'; min: number; acceptsServiceReport?: boolean }
   | { kind: 'checklist'; items: { id: string; label: string; critical: boolean }[] }
   | { kind: 'note'; requiredWhen: 'always' | 'nonconforming' }
   | { kind: 'approval'; role: string }
@@ -37,6 +38,10 @@ export type TaskDetail = {
   rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string };
   legalBasis?: { ref: string; excerpt: string; version_label: string | null; source_title: string; issuer: string | null; is_example: boolean }[];
   lastCompletedAt?: string | null; nextDueAt?: string | null; hazardType?: string;
+  reportEvidence?: { accepted: boolean;
+    links: { id: string; documentId: string; documentTitle: string; version: number; fileSha256: string | null; selectedBy: string; selectedAt: string;
+      status: 'active' | 'replaced' | 'stale'; counts: boolean; completionBasis: boolean; reason: string | null }[];
+    options: { documentId: string; requestId: string; requestTitle: string; siteName: string; versionId: string; version: number; reason: string | null; selected: boolean }[] } | null;
   serviceReports?: { blocked: boolean; reason: string | null; reports: {
     requestId: string; requestTitle: string; jobStatus: string; providerName: string; documentId: string; documentTitle: string; siteName: string;
     latest: { version: number; reviewStatus: 'unreviewed' | 'verified' | 'rejected' };

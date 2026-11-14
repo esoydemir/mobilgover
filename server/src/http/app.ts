@@ -31,7 +31,7 @@ import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profil
 import { auditExport, indicators } from '../services/reporting';
 import { SAMPLE_PROFILES, approve, areaReview, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
-import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, taskDetail, topUpSite } from '../services/tasks';
+import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, selectServiceReportEvidence, taskDetail, topUpSite } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
 
 declare module 'fastify' {
@@ -518,6 +518,12 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     reply.header('content-type', f.mime).header('cache-control', 'private, no-store').header('x-content-sha256', f.sha256)
       .header('content-disposition', 'inline').header('x-content-type-options', 'nosniff');
     return reply.send(f.bytes);
+  });
+  app.post('/companies/:companyId/tasks/:taskId/report-evidence', async (req, reply) => {
+    const companyId = company(req);
+    const { taskId } = z.object({ taskId: uuid }).parse(req.params);
+    const b = z.object({ documentId: uuid, versionId: uuid }).parse(req.body);
+    return mutate(req, reply, companyId, tx => selectServiceReportEvidence(tx, req.principal, companyId, taskId, b));
   });
   app.post('/companies/:companyId/tasks/:taskId/complete', async (req, reply) => {
     const companyId = company(req);

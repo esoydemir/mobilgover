@@ -69,6 +69,60 @@ export const EXAMPLE_RULES: Omit<DraftInput, 'provisionIds'>[] = [
   },
 ];
 
+/**
+ * GM-30 devamı example rules: their document evidence accepts a reviewed service report (latest version) instead of a new upload.
+ * Kept apart from EXAMPLE_RULES so existing demo databases receive them through ensureReportRules, once.
+ */
+export const EXAMPLE_REPORT_RULES: Omit<DraftInput, 'provisionIds'>[] = [
+  {
+    code: 'EX-REPORT-DOC', title: 'Soğutucu servis raporu kaydı (örnek iyi uygulama)', kind: 'good_practice', isExample: true, ambiguityNote: null,
+    condition: { all: [{ fact: 'activity.food_preparation', op: 'eq', value: true }, { fact: 'storage.cold', op: 'eq', value: true }] },
+    obligationTitle: 'Soğutucunun servis raporunu görev kaydına bağla',
+    obligationSummary: 'Örnek iyi uygulama; mevzuat hükmü olarak sunulmaz. Servis uzmanının incelenmiş raporu belge kanıtı olarak kullanılabilir.',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    templates: [{
+      code: 'service_report_doc', title: 'Soğutucu servis raporu kaydı', instructions: 'Servis uzmanının raporu belge kasasında incelendiyse onu kanıt olarak seç; yoksa belgeyi yükle. Sonra kısa bir not ekle.',
+      recurrence: { freq: 'monthly', day: 1, at: '12:00', perEquipmentType: 'refrigerator' },
+      evidence: [{ kind: 'document', min: 1, acceptsServiceReport: true }, { kind: 'note', requiredWhen: 'always' }],
+      limits: [], severity: 'minor', hazardType: 'cold_chain_temperature',
+    }],
+  },
+  {
+    code: 'EX-REPORT-MEAS', title: 'Servis sonrası sıcaklık doğrulaması (örnek iyi uygulama)', kind: 'good_practice', isExample: true, ambiguityNote: null,
+    condition: { all: [{ fact: 'activity.food_preparation', op: 'eq', value: true }, { fact: 'storage.cold', op: 'eq', value: true }] },
+    obligationTitle: 'Servisten sonra sıcaklığı ölç ve servis raporuyla birlikte kaydet',
+    obligationSummary: 'Örnek iyi uygulama; mevzuat hükmü olarak sunulmaz. Rapor tek başına yetmez: ölçüm de gerekir.',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    templates: [{
+      code: 'service_report_meas', title: 'Servis sonrası sıcaklık doğrulaması', instructions: 'Ünitenin iç sıcaklığını ölç ve değeri gir; servis raporu incelendiyse belge kanıtı olarak seç.',
+      recurrence: { freq: 'monthly', day: 1, at: '12:30', perEquipmentType: 'refrigerator' },
+      evidence: [{ kind: 'measurement', quantity: 'temperature', unit: '°C' }, { kind: 'document', min: 1, acceptsServiceReport: true }],
+      limits: [{ quantity: 'temperature', equipmentType: 'refrigerator', unit: '°C', min: 0, max: 4, basis: 'example', note: 'Örnek değer; ürün grubu ve HACCP planına göre belirlenmeli.' }],
+      severity: 'major', hazardType: 'cold_chain_temperature',
+    }],
+  },
+];
+
+/** Publishes the GM-30 devamı example rules once on a database that already holds the platform people (demo deployments only). */
+export async function ensureReportRules(db: Db) {
+  return db.system(async tx => {
+    const who = async (role: string, not?: string) => (await tx.query<{ user_id: string }>(
+      `SELECT user_id FROM platform_roles WHERE role = $1 AND ($2::uuid IS NULL OR user_id <> $2) ORDER BY user_id LIMIT 1`, [role, not ?? null])).rows[0]?.user_id;
+    const author = await who('rule_author'), reviewer = author ? await who('rule_reviewer', author) : undefined, admin = await who('platform_admin');
+    if (!author || !reviewer || !admin) return 0;
+    let added = 0;
+    for (const r of EXAMPLE_REPORT_RULES) {
+      if ((await tx.query(`SELECT 1 FROM rules WHERE code = $1`, [r.code])).rowCount) continue;
+      const d = await createDraft(tx, principal(author, { platformRoles: ['rule_author'] }), { ...r, provisionIds: [] });
+      await submitForReview(tx, principal(author, { platformRoles: ['rule_author'] }), d.id);
+      await approve(tx, principal(reviewer, { platformRoles: ['rule_reviewer'] }), d.id);
+      await publish(tx, principal(admin, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true });
+      added++;
+    }
+    return added;
+  });
+}
+
 export type DemoSeed = {
   companyId: string; siteId: string;
   users: Record<'author' | 'reviewer' | 'admin' | 'owner' | 'manager' | 'staff' | 'expert', { id: string; token: string }>;

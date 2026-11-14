@@ -480,6 +480,18 @@ export async function submitReport(tx: Tx, p: Principal, jobId: string, report: 
       [j.company_id, docVersionId, file.mime, file.sha256, file.sizeBytes, p.userId])).rows[0]!.id;
     await appendAudit(tx, { companyId: j.company_id, actorId: p.userId, eventType: 'document.version_added', entityType: 'document', entityId: d.id as string,
       payload: { versionId: docVersionId, version: next, evidenceId, sha256: file.sha256, source: 'service_report', reportVersion: version } });
+    // A newer revision: open tasks that relied on an earlier version of this report must be re-evaluated (reviewed and chosen again).
+    // Closed tasks keep the version they were closed on (completion_basis).
+    const stale = (await tx.query<{ id: string; task_id: string; version_number: number }>(
+      `UPDATE task_report_evidence l SET status = 'stale', status_changed_at = clock_timestamp(),
+              status_reason = $2
+        FROM tasks t WHERE l.document_id = $1 AND l.status = 'active' AND l.completion_basis = false AND t.id = l.task_id AND t.status = 'open'
+        RETURNING l.id, l.task_id, l.version_number`,
+      [documentId, `Yeni rapor sürümü (${next}) geldi; seçilen sürüm artık güncel değil. Yeni sürüm incelenip yeniden seçilmeli.`])).rows;
+    for (const l of stale) {
+      await appendAudit(tx, { companyId: j.company_id, actorId: p.userId, eventType: 'task.report_evidence_stale', entityType: 'task', entityId: l.task_id,
+        payload: { linkId: l.id, documentId, previousVersion: l.version_number, newVersion: next } });
+    }
   }
   await tx.query(`UPDATE service_jobs SET status = 'report_submitted', report = $2, report_submitted_at = now() WHERE id = $1`, [jobId, report]);
   await tx.query(`INSERT INTO service_job_reports (company_id, job_id, version, report, submitted_by, document_version_id, file_sha256) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -508,7 +520,7 @@ export async function reportEvidenceCompany(tx: Tx, p: Principal, jobId: string,
 export async function taskServiceReports(tx: Tx, companyId: string, taskId: string) {
   const rows = (await tx.query(
     `SELECT sr.id AS request_id, sr.title AS request_title, j.id AS job_id, j.status AS job_status, pp.display_name AS provider_name,
-            d.id AS document_id, d.title AS document_title, s.name AS site_name, v.id AS version_id, v.version, v.review_status, v.review_notes, v.reviewed_at,
+            d.id AS document_id, d.title AS document_title, d.site_id, s.name AS site_name, v.id AS version_id, v.version, v.review_status, v.review_notes, v.reviewed_at,
             v.uploaded_at, rb.display_name AS reviewed_by_name, e.status AS file_status, jr.version AS report_version,
             (v.version = (SELECT max(x.version) FROM document_versions x WHERE x.document_id = d.id)) AS is_latest
        FROM service_requests sr LEFT JOIN nonconformities n ON n.id = sr.ncr_id
@@ -522,8 +534,8 @@ export async function taskServiceReports(tx: Tx, companyId: string, taskId: stri
   const byJob = new Map<string, any>();
   for (const r of rows) {
     const g = byJob.get(r.job_id) ?? { requestId: r.request_id, requestTitle: r.request_title, jobStatus: r.job_status, providerName: r.provider_name, documentId: r.document_id,
-      documentTitle: r.document_title, siteName: r.site_name, versions: [] as any[] };
-    g.versions.push({ version: r.version, reportVersion: r.report_version, reviewStatus: r.review_status, reviewNotes: r.review_notes, reviewedAt: r.reviewed_at, reviewedBy: r.reviewed_by_name,
+      documentTitle: r.document_title, siteId: r.site_id, siteName: r.site_name, versions: [] as any[] };
+    g.versions.push({ versionId: r.version_id, version: r.version, reportVersion: r.report_version, reviewStatus: r.review_status, reviewNotes: r.review_notes, reviewedAt: r.reviewed_at, reviewedBy: r.reviewed_by_name,
       uploadedAt: r.uploaded_at, fileStatus: r.file_status, isLatest: r.is_latest });
     byJob.set(r.job_id, g);
   }
