@@ -69,9 +69,9 @@ function Gate({ children }: { children: ReactNode }) {
     if (!ready) return;
     if (!token && !OPEN_ROUTES.includes(path)) router.replace('/login');
     // No business: a person with a professional profile goes to the provider area; everyone else to business setup.
-    else if (token && me && companies.length === 0 && !providerOnly && !waitingProfile && path !== '/setup' && path !== '/account') router.replace(provider ? '/pro' : '/setup');
+    else if (token && me && companies.length === 0 && !providerOnly && !waitingProfile && path !== '/setup' && path !== '/account') router.replace(provider ? '/pro' : platform ? '/admin' : '/setup');
     else if (token && path === '/login') router.replace('/');
-  }, [ready, token, companies.length, me, path, providerOnly, provider, waitingProfile]);
+  }, [ready, token, companies.length, me, path, providerOnly, provider, waitingProfile, platform]);
   if (!ready) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={C.lime} /></View>;
   if (waitingProfile) return (
     <View testID="gate-waiting-profile" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 }}>
