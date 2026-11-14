@@ -13,7 +13,7 @@ export const TASK_FILTERS: [TaskFilter, string][] = [['today', 'Bugün'], ['todo
 export const FILTER_NOTE: Record<TaskFilter, string> = {
   today: 'Bugün son tarihi olan görevler.',
   todo: 'Henüz tamamlanmamış tüm açık görevler.',
-  critical: 'Önemi kritik olan ya da son tarihi geçmiş açık görevler. Görev tamamlanınca bu listeden çıkar.',
+  critical: 'Son tarihi geçmiş açık görevler ve bugün yapılması gereken kritik önemli görevler. İleri tarihli kritik kontroller yaklaştıkça bu listeye girer; görev tamamlanınca çıkar.',
   late: 'Son tarihi geçmiş açık ve kaçırılmış görevler.',
   upcoming: 'Yarından sonrası için planlanmış kontroller.',
   service: 'Uzman ya da servis talebi açılmış, talebi sürmekte olan görevler (talep tamamlanınca ya da iptal edilince çıkar).',
@@ -32,7 +32,7 @@ export function taskWindowPath(base: string, siteId: string | null) {
 /** Why a task sits in the critical list and what takes it out. */
 export function criticalReason(t: TaskRow, now = new Date()) {
   const late = (t.status === 'open' || t.status === 'missed') && new Date(t.due_at) < now;
-  const why = [t.severity === 'critical' ? 'önemi kritik' : null, late ? `son tarih geçti (${new Date(t.due_at).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })})` : null].filter(Boolean).join(' · ');
+  const why = [t.severity === 'critical' ? 'önemi kritik, bugün yapılmalı' : null, late ? `son tarih geçti (${new Date(t.due_at).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' })})` : null].filter(Boolean).join(' · ');
   return { why, exit: t.status === 'missed' ? 'Kaçırılmış kayıt; sonraki dönem görevi yeni kayıttır.' : 'Görev tamamlanınca listeden çıkar.' };
 }
 
@@ -45,7 +45,7 @@ export function bucketTasks(rows: TaskRow[], now = new Date()): Record<TaskFilte
     today: all.filter(t => dayKey(new Date(t.due_at)) === key),
     late: all.filter(t => (t.status === 'open' || t.status === 'missed') && new Date(t.due_at) < now),
     todo: all.filter(t => t.status === 'open'),
-    critical: all.filter(t => (t.status === 'open' || t.status === 'missed') && (t.severity === 'critical' || new Date(t.due_at) < now)),
+    critical: all.filter(t => (t.status === 'open' || t.status === 'missed') && (new Date(t.due_at) < now || (t.severity === 'critical' && dayKey(new Date(t.due_at)) === key))),
     service: all.filter(t => t.status === 'open' && (t.open_services ?? 0) > 0),
     upcoming: all.filter(t => t.status === 'open' && new Date(t.due_at) >= addDays(today, 1)),
     done: all.filter(t => t.status === 'done').reverse(),
