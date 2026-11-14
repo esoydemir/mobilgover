@@ -22,7 +22,7 @@ import { RISK } from '../ncrs';
  */
 export default function NcrRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { company, me } = useSession();
+  const { company, me, role } = useSession();
   const { enqueue, ops } = useQueue();
   const { showToast } = useUi();
   const base = `/companies/${company?.id}/nonconformities/${id}`;
@@ -93,7 +93,8 @@ export default function NcrRoute() {
 
       <AssignmentCard key={`a${assignNudge}-${n.owner?.id}-${n.due_at}`} n={n} base={base} reload={q.reload} initialOpen={assignNudge > 0} />
       <CauseCard n={n} base={base} reload={q.reload} />
-      <SupportCard n={n} base={base} reload={q.reload} onFollowUp={() => setFormKind('follow_up')} onAssign={() => setAssignNudge(x => x + 1)} />
+      {/* Suggestions lead to the business's own screens; an outside verifier (no role here) cannot open them. */}
+      {role ? <SupportCard n={n} base={base} reload={q.reload} onFollowUp={() => setFormKind('follow_up')} onAssign={() => setAssignNudge(x => x + 1)} /> : null}
       <TrainingCard n={n} />
       <LinkedRecords n={n} />
       <ActionsCard n={n} base={base} reload={q.reload} me={me?.userId ?? null} formKind={formKind} setFormKind={setFormKind} />

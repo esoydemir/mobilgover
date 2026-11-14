@@ -1,8 +1,7 @@
 import type { Db } from '../db/pool';
-import { localDay } from '../domain/schedule';
 import { scanDocumentExpiry } from './documents';
 import { scanDeadlines } from './notifications';
-import { generateTasks } from './tasks';
+import { topUpSite } from './tasks';
 
 /**
  * Keeps every site's task list filled for the coming days. Runs when the API starts
@@ -15,10 +14,9 @@ export async function topUpAllSites(db: Db, days: number, now = new Date()) {
   let created = 0;
   const failed: { siteId: string; error: string }[] = [];
   for (const s of sites) {
-    const from = localDay(now, s.timezone);
-    const to = localDay(new Date(now.getTime() + days * 86_400_000), s.timezone);
     try {
-      const r = await db.tenant(s.company_id, tx => generateTasks(tx, s.company_id, s.id, from, to));
+      // topUpSite also computes the decisions of a site that has none yet (e.g. added before they were computed for new sites).
+      const r = await db.tenant(s.company_id, tx => topUpSite(tx, s.company_id, s.id, days, null, now));
       created += r.created;
     } catch (e) {
       failed.push({ siteId: s.id, error: (e as Error).message });

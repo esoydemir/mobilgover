@@ -31,7 +31,7 @@ import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profil
 import { auditExport, indicators } from '../services/reporting';
 import { SAMPLE_PROFILES, approve, areaReview, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
-import { addEvidence, assignableMembers, assignTask, completeTask, generateTasks, listTasks, recordMeasurement, taskDetail } from '../services/tasks';
+import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, taskDetail, topUpSite } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
 
 declare module 'fastify' {
@@ -296,8 +296,14 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
       const id = await recordFact(tx, req.principal, companyId, body);
       const sites = body.siteId ? [body.siteId] : (await tx.query<{ id: string }>(`SELECT id FROM sites WHERE company_id = $1`, [companyId])).rows.map(r => r.id);
       const recomputed = [];
-      for (const s of sites) recomputed.push({ siteId: s, ...(await recomputeSite(tx, companyId, s, req.principal.userId)) });
-      return { id, recomputed };
+      let createdTasks = 0;
+      for (const s of sites) {
+        const r = await recomputeSite(tx, companyId, s, req.principal.userId);
+        recomputed.push({ siteId: s, ...r });
+        // A check that now applies gets its tasks right away (not only at the next hourly top-up). Re-running adds nothing twice.
+        if (r.changed.some(c => c.to === 'applies')) createdTasks += (await topUpSite(tx, companyId, s, 14, req.principal.userId)).created;
+      }
+      return { id, recomputed, createdTasks };
     }, 201);
   });
 
@@ -311,7 +317,9 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
         [companyId, b.siteId, b.type, b.name, b.serial ?? null, b.calibratedUntil ?? null])).rows[0]!.id;
       await syncEquipmentTypes(tx, companyId, b.siteId);
       await recomputeSite(tx, companyId, b.siteId, req.principal.userId);
-      return { id };
+      // Per-unit checks (e.g. a fridge's temperature) exist only once the unit exists: create them now, not at the next top-up.
+      const createdTasks = (await topUpSite(tx, companyId, b.siteId, 14, req.principal.userId)).created;
+      return { id, createdTasks };
     }, 201);
   });
 
@@ -454,7 +462,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ siteId: uuid, fromDay: z.iso.date(), toDay: z.iso.date() }).parse(req.body);
     if (!can(req.principal, 'task.generate', { companyId, siteId: b.siteId }).ok) throw forbidden();
     if (b.toDay < b.fromDay || (Date.parse(b.toDay) - Date.parse(b.fromDay)) / 86400000 > 62) throw new AppError(422, 'INVALID', 'Aralık en fazla 62 gün olabilir.');
-    return mutate(req, reply, companyId, tx => generateTasks(tx, companyId, b.siteId, b.fromDay, b.toDay));
+    return mutate(req, reply, companyId, async tx => { await ensureDecisions(tx, companyId, b.siteId, req.principal.userId); return generateTasks(tx, companyId, b.siteId, b.fromDay, b.toDay); });
   });
   app.get('/companies/:companyId/tasks', async req => {
     const companyId = company(req);

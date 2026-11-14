@@ -9,7 +9,7 @@ import { Card, Chevron, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, T
 import { fmtDateTime } from '../features/dates';
 import { C, tint, type } from '../theme';
 
-type Ncr = { id: string; title: string; risk_level: string; depth: string; status: string; detected_at: string; due_at: string | null;
+type Ncr = { id: string; site_id?: string | null; title: string; risk_level: string; depth: string; status: string; detected_at: string; due_at: string | null;
   owner_id: string | null; owner_name: string | null; overdue: boolean; source: 'task' | 'manual'; iteration: number; reopened_count: number };
 type Queue = { nonconformities: { id: string; title: string; owner_name: string; due_at: string | null }[];
   actions: { id: string; ncr_id: string; description: string; ncr_title: string; owner_name: string; due_at: string | null }[];
@@ -55,7 +55,7 @@ export default function NcrsRoute() {
             <Chevron />
           </View>
           <Text style={type(11.5, 400, { color: n.overdue ? C.crit : C.t3 })}>
-            {n.owner_name ?? 'Sorumlu yok'}{n.due_at && n.status !== 'closed' ? ` · termin ${fmtDateTime(n.due_at)}` : ''} · tespit {fmtDateTime(n.detected_at)}
+            {(company?.sites.length ?? 0) > 1 && n.site_id ? `${company!.sites.find(s => s.id === n.site_id)?.name ?? 'Şube'} · ` : ''}{n.owner_name ?? 'Sorumlu yok'}{n.due_at && n.status !== 'closed' ? ` · termin ${fmtDateTime(n.due_at)}` : ''} · tespit {fmtDateTime(n.detected_at)}
           </Text>
         </Tap>
       ))}

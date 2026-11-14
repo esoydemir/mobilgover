@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { goRoot } from '../state/app';
 import { C } from '../theme';
 import { GradientFill } from './Gradient';
-import { DocsIcon, GridIcon, HomeIcon, ScanIcon, TasksIcon } from './Icons';
+import { useSession } from '../api/session';
+import { BellIcon, DocsIcon, GridIcon, HomeIcon, ScanIcon, TasksIcon } from './Icons';
 import { Tap } from './ui';
 
 const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/sync', '/account', '/equipment', '/profile', '/admin', '/team'];
@@ -31,9 +32,17 @@ const TABS: Tab[] = [
   { key: 'more', label: 'Daha', Icon: GridIcon, isActive: p => MORE_PREFIXES.some(m => p === m || p.startsWith(m + '/') || p.startsWith(m + 's')), go: () => goRoot('/more') },
 ];
 
+/** An outside verifier (access grant, no role in the business) can use only these two screens; the rest would be dead ends. */
+const VERIFIER_TABS: Tab[] = [
+  { key: 'verify', label: 'Doğrulama', Icon: TasksIcon, isActive: p => p === '/verify-queue' || p.startsWith('/ncr/'), go: () => goRoot('/verify-queue') },
+  { key: 'notes', label: 'Bildirimler', Icon: BellIcon, isActive: p => p === '/notifications', go: () => goRoot('/notifications') },
+];
+
 export function TabBar() {
   const path = usePathname();
   const insets = useSafeAreaInsets();
+  const { company, role } = useSession();
+  const tabs = company && !role && company.grants?.some(g => g.scopes.includes('ncr_verify')) ? VERIFIER_TABS : TABS;
   const bottom = Math.max(26, insets.bottom);
   return (
     <>
@@ -41,7 +50,7 @@ export function TabBar() {
         <GradientFill angle={0} stops={[[0, C.bg], [0.42, C.bg], [0.72, 'rgba(5,5,5,0.8)'], [1, 'rgba(5,5,5,0)']]} />
       </View>
       <View accessibilityRole="tablist" style={[styles.bar, { bottom }]}>
-        {TABS.map(({ key, label, Icon, big, isActive, go }) => {
+        {tabs.map(({ key, label, Icon, big, isActive, go }) => {
           const active = isActive(path);
           const d = big ? 60 : 52;
           return (

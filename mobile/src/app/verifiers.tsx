@@ -33,6 +33,9 @@ export default function VerifiersRoute() {
   const [documents, setDocuments] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const blocked = records && records.length === 0 ? 'hiç vaka seçili değil; yukarıdan en az bir vaka seç.'
+    : !email.includes('@') ? 'geçerli bir e-posta yaz.'
+    : note.trim().length < 5 ? '"Neden davet ediyorsun?" alanına en az 5 karakter yaz.' : null;
   const invite = async () => {
     setBusy(true); setError(null);
     try {
@@ -52,22 +55,28 @@ export default function VerifiersRoute() {
       <Card style={{ gap: 10 }}>
         <Eyebrow>DAVET ET</Eyebrow>
         <Field label="E-posta" testID="verifier-email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" placeholder="uzman@ornek.com" />
-        <Text style={type(12, 600, { color: C.t2 })}>Kapsam</Text>
+        <Text style={type(12, 600, { color: C.t2 })}>Şube</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           {(company?.sites ?? []).map(s => <FilterChip key={s.id} testID={`verifier-site-${s.id}`} label={`Yalnız ${s.name}`} px={12} active={siteId === s.id} onPress={() => setSiteId(s.id)} />)}
           <FilterChip testID="verifier-site-all" label="Tüm şubeler" px={12} active={siteId === null} onPress={() => setSiteId(null)} />
         </View>
+        <Text style={type(12, 600, { color: C.t2 })}>Hangi kayıtlar</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           <FilterChip testID="verifier-scope-all" label="Tüm uygunsuzluklar" px={12} active={!records} onPress={() => setRecords(null)} />
           <FilterChip testID="verifier-scope-records" label="Yalnız seçili kayıtlar" px={12} active={!!records} onPress={() => setRecords(r => r ?? [])} />
         </View>
         {records ? (
           <View style={{ gap: 6 }}>
+            <Text testID="verifier-selected-summary" style={type(12, 600, { color: records.length ? C.lime : C.warn, lh: 1.45 })}>
+              {records.length ? `Seçili ${records.length} vaka: ${(open.data ?? []).filter(n => records.includes(n.id)).map(n => n.title).join(' · ') || 'yükleniyor…'}` : 'Seçili vaka yok'}
+            </Text>
             <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Doğrulayıcı yalnız seçtiğin kayıtları ve onları doğrulamak için gereken kanıtları görür; belge kasasına erişemez.</Text>
             {(open.data ?? []).filter(n => !siteId || n.site_id === siteId).map(n => (
               <FilterChip key={n.id} testID={`verifier-record-${n.id}`} label={n.title} px={12} active={records.includes(n.id)}
                 onPress={() => setRecords(r => (r!.includes(n.id) ? r!.filter(x => x !== n.id) : [...r!, n.id]))} />
             ))}
+            {(open.data ?? []).filter(n => !siteId || n.site_id === siteId).length === 0 && open.data ? <Text style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>Bu şubede seçilebilecek açık kayıt yok.</Text> : null}
+            {records.length === 0 ? <Text testID="verifier-pick-hint" style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>Davet için en az bir kayıt seç. Seçili kayıtlar yeşil görünür; dokununca seçim kalkar.</Text> : null}
           </View>
         ) : null}
         <Text style={type(12, 600, { color: C.t2 })}>Süre</Text>
@@ -81,7 +90,8 @@ export default function VerifiersRoute() {
         <Field label="Neden davet ediyorsun?" testID="verifier-note" value={note} onChangeText={setNote} multiline placeholder="ör. Tek yöneticiliyiz; yüksek riskli kayıtların bağımsız doğrulaması için." />
         <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Doğrulayıcı yalnızca uygunsuzlukları görür ve "yapıldı" beyanlarını ve kapanışları doğrular{documents ? '; belgeleri inceler' : ''}. Aksiyon ekleyemez, atama yapamaz, görev ve ekip verisini göremez. Kendi katkısı olan aksiyonu ya da kendi verdiği hizmeti doğrulayamaz.</Text>
         {error ? <ErrorBox message={error} /> : null}
-        <PrimaryButton testID="verifier-invite" label={busy ? 'Gönderiliyor…' : 'Davet et'} disabled={busy || !email.includes('@') || note.trim().length < 5 || (!!records && records.length === 0)} onPress={invite} />
+        {blocked ? <Text testID="verifier-blocked-reason" style={type(11.5, 600, { color: C.warn, lh: 1.45 })}>Davet et neden pasif: {blocked}</Text> : null}
+        <PrimaryButton testID="verifier-invite" label={busy ? 'Gönderiliyor…' : 'Davet et'} disabled={busy || !!blocked} onPress={invite} />
       </Card>
       <Eyebrow>İZİNLER</Eyebrow>
       {!q.data && q.loading ? <Loading /> : null}

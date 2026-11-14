@@ -8,7 +8,7 @@ import { documentsForTask } from './documents';
 import { appendAudit } from './audit';
 import { relatedCourses } from './training';
 import { createFromTask } from './nonconformities';
-import { currentObligations } from './obligations';
+import { currentObligations, recomputeSite } from './obligations';
 
 /** Device clocks may drift a little; anything further in the future is rejected. */
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -55,6 +55,23 @@ export async function generateTasks(tx: Tx, companyId: string, siteId: string, f
     await appendAudit(tx, { companyId, actorId: null, eventType: 'tasks.generated', entityType: 'site', entityId: siteId, payload: { fromDay, toDay, created } });
   }
   return { created, existing };
+}
+
+/**
+ * Fills a site's next `days` days. Re-evaluates the site's obligations first when it has none yet
+ * (a site added before decisions were computed for new sites), so such a site heals itself.
+ * Idempotent: an existing period is never created twice.
+ */
+export async function ensureDecisions(tx: Tx, companyId: string, siteId: string, actorId: string | null = null, now = new Date()) {
+  const hasDecisions = (await tx.query(`SELECT 1 FROM obligations WHERE company_id = $1 AND site_id = $2 LIMIT 1`, [companyId, siteId])).rowCount;
+  if (!hasDecisions) await recomputeSite(tx, companyId, siteId, actorId, now);
+}
+
+export async function topUpSite(tx: Tx, companyId: string, siteId: string, days = 14, actorId: string | null = null, now = new Date()) {
+  const site = (await tx.query<{ timezone: string }>(`SELECT timezone FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
+  if (!site) throw notFound('Şube');
+  await ensureDecisions(tx, companyId, siteId, actorId, now);
+  return generateTasks(tx, companyId, siteId, localDay(now, site.timezone), localDay(new Date(now.getTime() + days * 86_400_000), site.timezone));
 }
 
 async function loadTask(tx: Tx, p: Principal, companyId: string, taskId: string, action: 'task.read' | 'task.execute') {

@@ -37,7 +37,7 @@ export default function TeamRoute() {
         <View key={m.membership_id} style={[s.row, { borderRadius: 18, padding: 14, flexWrap: 'wrap', gap: 8 }]}>
           <View style={{ flex: 1, minWidth: 160 }}>
             <Text style={type(14, 600, { color: m.status === 'active' ? C.t1 : C.t3 })}>{m.email ?? m.display_name}</Text>
-            <Text style={[type(11.5, 400, { color: m.status === 'suspended' ? C.crit : C.t3 }), { marginTop: 2 }]}>{ROLE[m.role]}{STATUS(m)}</Text>
+            <Text style={[type(11.5, 400, { color: m.status === 'suspended' ? C.crit : C.t3 }), { marginTop: 2 }]}>{ROLE[m.role]}{(company?.sites.length ?? 0) > 1 ? ` · ${m.site_id ? company!.sites.find(s => s.id === m.site_id)?.name ?? 'Şube' : 'Tüm şubeler'}` : ''}{STATUS(m)}</Text>
           </View>
           {m.role !== 'owner' && m.id !== me?.userId ? (
             m.status === 'active' ? <GhostButton label="Pasifleştir" height={32} size={11} disabled={reason.trim().length < 5} color={C.crit} border={tint.crit(0.35)} onPress={() => act(m, 'suspend')} />
