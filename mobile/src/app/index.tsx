@@ -9,8 +9,10 @@ import { GradientFill } from '../components/Gradient';
 import { WarnIcon } from '../components/Icons';
 import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Loading, StaleNote } from '../components/states';
-import { Bar, Card, Eyebrow, PrimaryButton, SevPill, Tap, TimelineRow } from '../components/ui';
+import { Bar, Card, Eyebrow, GhostButton, PrimaryButton, SevPill, Tap, TimelineRow } from '../components/ui';
 import { addDays, dayKey, fmtDate, fmtTime, shortDay, startOfDay } from '../features/dates';
+import { KIND_LABEL, useRiskItems } from '../features/risk';
+import { bucketTasks, taskWindowPath } from '../features/work';
 import { goRoot } from '../state/app';
 import { C, tint, type } from '../theme';
 
@@ -36,7 +38,8 @@ function HomeScreen() {
   const base = company ? `/companies/${company.id}` : null;
   const today = startOfDay();
   const weekFrom = addDays(today, -6);
-  const tasks = useApi<Task[]>(base && siteId ? `${base}/tasks?siteId=${siteId}&from=${encodeURIComponent(weekFrom.toISOString())}&to=${encodeURIComponent(addDays(today, 8).toISOString())}` : null);
+  // Same window and same buckets as the task list, so a count here is the length of the list it opens.
+  const tasks = useApi<Task[]>(base && siteId ? taskWindowPath(base, siteId) : null);
   const isStaff = role === 'staff';
   // Staff get only the cases they own or hold an action in (server-side).
   const ncrs = useApi<Ncr[]>(base ? `${base}/nonconformities?status=open` : null);
@@ -44,11 +47,12 @@ function HomeScreen() {
   const ind = useApi<Indicators>(base && siteId && !isStaff ? `${base}/indicators?siteId=${siteId}&from=${encodeURIComponent(addDays(today, -30).toISOString())}&to=${encodeURIComponent(addDays(today, 1).toISOString())}` : null);
 
   const derived = useMemo(() => {
-    const all = (tasks.data ?? []).filter(t => t.status !== 'cancelled');
+    const b = bucketTasks(tasks.data ?? []);
+    const all = b.all;
     const todayKey = dayKey(today);
-    const todays = all.filter(t => dayKey(new Date(t.due_at)) === todayKey);
-    const overdue = all.filter(t => t.status === 'open' && new Date(t.due_at) < new Date());
-    const upcoming = all.filter(t => t.status === 'open' && new Date(t.due_at) > addDays(today, 1)).slice(0, 4);
+    const todays = b.today;
+    const overdue = b.late;
+    const upcoming = b.upcoming.slice(0, 4);
     const week = Array.from({ length: 7 }, (_, i) => {
       const d = addDays(weekFrom, i);
       const k = dayKey(d);
@@ -59,8 +63,11 @@ function HomeScreen() {
     return { todays, overdue, upcoming, week, done: todays.filter(t => t.status === 'done').length };
   }, [tasks.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const reload = () => { void tasks.reload(); void ncrs.reload(); void obligations.reload(); void ind.reload(); };
+  const risk = useRiskItems('site');
+  const reload = () => { void tasks.reload(); void ncrs.reload(); void obligations.reload(); void ind.reload(); risk.reload(); };
   const critical = (ncrs.data ?? []).find(n => n.risk_level === 'high' || n.risk_level === 'critical');
+  // The one thing that matters most: the first critical risk item (any kind), not only a nonconformity.
+  const topRisk = risk.items.find(i => i.sev === 'crit');
   const needsInfo = (obligations.data ?? []).filter(o => o.decision === 'needs_info' || o.decision === 'needs_review');
   const total = derived.todays.length;
   const remaining = total - derived.done;
@@ -85,6 +92,7 @@ function HomeScreen() {
               <Text style={[type(13, 400, { lh: 1.4, color: C.t2 }), { marginTop: 5 }]}>
                 {derived.overdue.length ? `${derived.overdue.length} gecikmiş kontrol var.` : 'Gecikmiş kontrol yok.'}
               </Text>
+              {derived.overdue.length ? <Tap testID="home-late" hitSlop={8} onPress={() => router.push('/tasks?filter=late')}><Text style={[type(11.5, 700, { ls: 0.06, color: C.warn }), { marginTop: 6 }]}>GECİKENLERİ AÇ →</Text></Tap> : null}
             </View>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginTop: 22, paddingTop: 20, borderTopWidth: 1, borderTopColor: C.bd }}>
@@ -115,15 +123,31 @@ function HomeScreen() {
             <Bar pct={(ind.data?.score ?? 0) / 100} height={5} track={C.track} color={ind.data ? STATUS_TEXT[ind.data.status][1] : C.t3} style={{ marginTop: 14 }} />
             <Text style={[type(11, 600, { color: ind.data ? STATUS_TEXT[ind.data.status][1] : C.t3 }), { marginTop: 9 }]}>{ind.data ? STATUS_TEXT[ind.data.status][0] : 'Hesaplanıyor'}</Text>
           </Tap>
-          <Tap onPress={() => router.push('/ncrs')} style={{ flex: 1, borderWidth: 1, borderColor: (ncrs.data?.length ?? 0) ? tint.crit(0.22) : C.bd, borderRadius: 26, backgroundColor: C.card, paddingVertical: 17, paddingHorizontal: 18 }}>
-            <Eyebrow>AÇIK UYGUNSUZLUK</Eyebrow>
-            <Text style={[type(34, 600, { family: 'outfit', ls: -0.04, color: (ncrs.data?.length ?? 0) ? C.crit : C.t1 }), { marginTop: 12 }]}>{ncrs.data?.length ?? '—'}</Text>
-            <Text style={[type(11, 400, { color: C.t3 }), { marginTop: 9 }]}>{critical ? 'Yüksek riskli kayıt var' : 'Yüksek riskli kayıt yok'}</Text>
+          <Tap testID="home-risk" onPress={() => router.push('/risk')} style={{ flex: 1, borderWidth: 1, borderColor: risk.counts.crit ? tint.crit(0.22) : C.bd, borderRadius: 26, backgroundColor: C.card, paddingVertical: 17, paddingHorizontal: 18 }}>
+            <Eyebrow>CEZA VE YASAL RİSK</Eyebrow>
+            <Text testID="home-risk-count" style={[type(34, 600, { family: 'outfit', ls: -0.04, color: risk.counts.crit ? C.crit : C.t1 }), { marginTop: 12 }]}>{risk.ready ? risk.counts.all : '—'}</Text>
+            <Text style={[type(11, 400, { color: C.t3, lh: 1.35 }), { marginTop: 9 }]}>
+              {risk.ready ? `${risk.counts.all} açık kalem${risk.counts.crit ? ` · ${risk.counts.crit} kritik` : ''} · tutar modellenmedi` : 'Hesaplanıyor'}
+            </Text>
           </Tap>
         </View>
       )}
 
-      {critical ? (
+      {!isStaff && topRisk ? (
+        <View testID="home-top-risk" style={{ borderWidth: 1, borderColor: tint.crit(0.3), borderRadius: 26, overflow: 'hidden', paddingTop: 18, paddingHorizontal: 19, paddingBottom: 16, marginTop: 5 }}>
+          <GradientFill angle={160} stops={[[0, '#1a0b0b'], [0.45, '#110d0d'], [1, C.card]]} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <WarnIcon />
+            <Text style={type(10, 700, { ls: 0.11, color: C.crit })}>KRİTİK · {KIND_LABEL[topRisk.kind]}</Text>
+          </View>
+          <Text style={[type(16.5, 600, { ls: -0.015, lh: 1.3 }), { marginTop: 9 }]}>{topRisk.title}</Text>
+          <Text style={[type(13, 400, { lh: 1.45, color: C.t2 }), { marginTop: 6 }]}>{topRisk.sub} · {topRisk.basis}</Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+            {topRisk.service ? <PrimaryButton testID="home-risk-service" label="Servis bul" onPress={() => router.push(topRisk.service!)} height={44} size={13.5} style={{ flex: 1 }} /> : null}
+            <GhostButton testID="home-risk-open" label={topRisk.service ? 'Detay' : 'Aç'} onPress={() => router.push(topRisk.href)} height={44} size={13.5} style={{ flex: topRisk.service ? 0 : 1 }} />
+          </View>
+        </View>
+      ) : isStaff && critical ? (
         <View style={{ borderWidth: 1, borderColor: tint.crit(0.3), borderRadius: 26, overflow: 'hidden', paddingTop: 18, paddingHorizontal: 19, paddingBottom: 16, marginTop: 5 }}>
           <GradientFill angle={160} stops={[[0, '#1a0b0b'], [0.45, '#110d0d'], [1, C.card]]} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
