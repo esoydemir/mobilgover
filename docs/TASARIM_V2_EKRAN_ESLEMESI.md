@@ -1,9 +1,7 @@
 # Tasarım v2 · Ekran eşlemesi
 
-Kaynak: `GoverHub Mobile Standalone.dc.html` (görsel referans; çelişkide koyu tema + lime vurgusu esas). İşlev gereksinimi dosyası
-(`Yapıştırılan markdown(20261114-102710).md`) **bulunamadı**; sahibinin kararıyla yalnız HTML'e göre başlandı. Referansta olup elde
-karşılığı olmayan her şey `TASARIM_V2_GELISTIRME_MADDELERI.md` içinde ayrı madde olarak kayıtlıdır.
-Dal: `feat/tasarim-v2-ilk-teslim` (başlangıç: pilot düzeltmeleri `f65ceee`). Test ortamı: 8091 yığını.
+Kaynak (2. tur, 14.11.2026): `GoverHub Mobile Standalone.dc.html` (görsel referans; çelişkide koyu tema + lime vurgusu esas; "…dc(2).html" ve "Yapıştırılan markdown…" adlı ekler diskte bulunamadı, ekli `dc.html` ile aynı) ve işlev gereksinimi olarak **`GoverHub_GoverUp_Hizmet_Ekosistemi_ve_CAPA_Master_Gereksinimleri.md`** (Downloads; §6 keşif, §7 uygunsuzluktan talebe, §8 teklif, §9 sıralama, §15 işletme mobil ekranları). Bu md'nin ayrı bir "Ceza ve Yasal Risk Merkezi" bölümü yoktur; Risk Merkezi referans HTML'deki "Ceza riski" kartından türetilmiştir. Referansta olup elde karşılığı olmayan her şey `TASARIM_V2_GELISTIRME_MADDELERI.md` içinde ayrı maddedir.
+Dal: `feat/tasarim-v2-ilk-teslim` (PR #3, taban `fix/pilot-d21e647-bulgular` = PR #1). Test ortamı: 8091 yığını.
 
 Durum: **TAMAM** = bu teslimde uygulandı/değişti · **VAR** = uygulamada zaten karşılığı var, referansla uyumlu · **KISMİ** = karşılık var, referanstan eksikleri var · **YOK** = karşılık yok (geliştirme maddesi).
 
@@ -11,7 +9,7 @@ Durum: **TAMAM** = bu teslimde uygulandı/değişti · **VAR** = uygulamada zate
 
 | # | Referans ekranı | Uygulamadaki ekran | Rol | Kullanılan veri | Tıklama sonucu | Durum |
 |---|---|---|---|---|---|---|
-| 1 | Ana ekran · Komuta merkezi | `/` (`app/index.tsx`) | owner, hq_manager, site_manager (personel için sade sürüm) | `tasks` (ortak pencere −14…+15 gün), `indicators`, risk kalemleri (`features/risk.ts`), `obligations` | Halka/“GECİKENLERİ AÇ” → `/tasks?filter=late` · Uyum tile → `/report` · **Ceza ve yasal risk tile → `/risk`** · Kritik kart: Servis bul → `/service/new` (öntanımlı), Detay → kaydın kendisi · Bugünün görevleri TÜMÜ → `/tasks` · Profil eksik → `/profile` | **TAMAM** |
+| 1 | Ana ekran · Komuta merkezi | `/` (`app/index.tsx`) | owner, hq_manager, site_manager (personel için sade sürüm) | `tasks` (ortak pencere −14…+15 gün), `indicators`, risk kalemleri (`features/risk.ts`), `obligations` (site müdüründe şubeye daraltılmış) | Üst başlık: işletme + **şube adı** (iki satır, dokununca Daha'da şube seçimi) · Halka → `/tasks?filter=today` · “GECİKENLERİ AÇ” → `/tasks?filter=late` · Uyum tile → `/report` · **Ceza ve yasal risk tile → `/risk`** · Kritik kart: Servis bul → `/service/new` (öntanımlı), Detay → kaydın kendisi · Bugünün görevleri TÜMÜ → `/tasks` · Profil eksik → `/profile` | **TAMAM** |
 | 2 | Kurulum + OCR akışı | `/setup` | yeni kullanıcı | profil soruları, ekipman, görev üretimi | adım adım; belge okutma yok | KISMİ (OCR yok → GM-01) |
 | 3 | Görev + kanıt yakalama | `/task/[id]` | herkes (atanan) | `tasks/:id`, ölçüm/fotoğraf/not kanıtları, çevrimdışı kuyruk | Ölçüm+fotoğraf → “Görevi tamamla”; limit dışı → uygunsuzluk açılır; **Geçmiş kartı eklendi** (aynı kontrolün son 14 günü) | **TAMAM** |
 | 4 | Uygunsuzluk → servis köprüsü | `/task/[id]` → `/ncr/[id]` → `/service/new?ncrId=` | owner/manager | NCR + hizmet talebi | “Hizmet talebi aç / Servis bul” ncrId ile açılır | VAR (pazar girişi 2) |
@@ -38,7 +36,9 @@ Durum: **TAMAM** = bu teslimde uygulandı/değişti · **VAR** = uygulamada zate
 | owner / hq_manager / site_manager | Ana Sayfa · Görevler · Sıradaki kontrol (orta) · **Belgeler** · Daha | Rapor, Risk, Uzman bul Daha'da |
 | staff (personel) | Ana Sayfa · Görevler · Sıradaki kontrol · **Eğitim** · Daha | Referanstaki “kendi belgelerim” için personel belge ekranı yok → GM-13 |
 | uzman (işletmesiz) | **Uzman alanı · Ağ · Hesap** | |
-| platform yetkilisi (işletmesiz) | **Yönetim · Daha** | |
+| platform yetkilisi (işletmesiz) | **Yönetim · Daha** | giriş artık `/admin`'e iner |
+
+Not: Risk Merkezi açıkken alt çubukta **Ana Sayfa** seçili görünür (ekrana ana ekran kartından girilir); önceki sürümde “Daha” seçiliydi (düzeltildi).
 | dış doğrulayıcı | Doğrulama · Bildirimler | önceki turdan |
 
 ## 3. Pazarın üç girişi
@@ -55,3 +55,29 @@ Durum: **TAMAM** = bu teslimde uygulandı/değişti · **VAR** = uygulamada zate
 | QR (Tara) | “Sıradaki kontrol” en yakın açık görevi açar; ekipman kartı | Kamera ile QR okuma, ekipmana özgü QR üretimi, uzman giriş QR'ı (GM-04) |
 | Belge kasası | Tam belge kasası: sürüm, inceleme, süre hatırlatması, paylaşım | OCR ile tarih/numara okuma (GM-02), “Eksik” filtresi (GM-03) |
 | AI Asistan | Yok | Kaynaklı asistan (GM-11) |
+
+## 5. Pazar (referans: Uzman bul · Teklifler · İçerik akışı; md §6–§9) — `/market`
+
+“Servis bul” kısayollarından (görev, uygunsuzluk, belge) **ayrı** bölüm. Giriş: Daha → Pazar.
+
+| Bölüm | Referans ekranı | Uygulamadaki ekran | Rol | Kullanılan veri | Tıklama sonucu | Durum |
+|---|---|---|---|---|---|---|
+| Uzmanlar / Servisler | Uzman bul (arama, uzman kartları) | `/market` → Uzmanlar sekmesi | owner, hq, site_manager | `/service-categories`, `/companies/:id/providers?category=` (yalnız geçerli onayı olan uzmanlar) | Kategori → uzman kartı (doğrulanmış yeterlilik sayısı, şehir) → “Bu uzmandan teklif iste” → `/service/new` (yalnız o uzmana) · “Herkese açık talep aç” | KISMİ: **fiyat/mesafe/geliş saati gösterilmez** (referanstakiler uydurma; md §6 “tahmini fiyat bağlayıcı gibi gösterilmez”); serbest metin arama, bölge/dil/müsaitlik filtresi yok (GM-18) |
+| Teklifler | Teklif karşılaştırma + Daha “Teklifler (3 yanıt bekliyor)” | `/market` → Teklifler sekmesi → `/service/[id]` | owner, hq, site_manager | `service-requests` (+ teklif sayısı) | “N talepte teklif karşılaştırmayı bekliyor” → liste → karşılaştırma → “Bu teklifi kabul et” → iş + giriş kodu | **TAMAM** (zincir gerçek hesapla çalıştırıldı) |
+| Profesyonel akış | Uzman içerik akışı | `/market` → Profesyonel akış → `/network`, `/network/search` | herkes (profilli) | `network/feed` | akış / uzman ara | VAR (akış önizlemesi Pazar içinde yok → GM-19) |
+
+## 6. Daha menüsü karşılaştırması (işletme sahibi)
+
+| Referans satırı | Uygulama |
+|---|---|
+| Personel | Ekip (`/team`) |
+| Ekipman & bakım | Ekipmanlar (`/equipment`) |
+| Formlar | YOK (GM-05) |
+| Uygunsuzluklar | Uygunsuzluklar (`/ncrs`) |
+| Eğitim | Eğitimler (`/trainings`) |
+| Resmî süreç yol haritası | YOK (GM-06) |
+| Teklifler | **Pazar → Teklifler** |
+| Servis geçmişi | Pazar → Teklifler (tamamlanan işler); kanıt zinciri görünümü GM-08 |
+| Uzman içerikleri | Pazar → Profesyonel akış |
+| Rapor al | Rapor ve denetim dosyası (`/report`) |
+| Ayarlar | Hesap ve güvenlik (`/account`) |

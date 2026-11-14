@@ -1,7 +1,7 @@
 # Tasarım v2 · Ayrı geliştirme maddeleri
 
 Referans HTML'de olup uygulamada karşılığı olmayan ya da kısmi olan her şey. Hiçbiri gizlenmedi; hiçbiri “tamam” sayılmadı.
-Kaynak gereksinim dosyası bulunamadığından öncelik ve kapsam **sahibinin onayını bekler**.
+Güncelleme 14.11.2026 (2. tur): işlev gereksinimi olarak `GoverHub_GoverUp_Hizmet_Ekosistemi_ve_CAPA_Master_Gereksinimleri.md` kullanıldı (ek dosyalar diskte bulunamadı). Sıra beklemeden çalışıldı; aşağıdaki sıra yalnız öneridir, onay gerektirmez.
 
 | ID | Madde | Neden eksik / bağımlılık |
 |---|---|---|
@@ -22,3 +22,11 @@ Kaynak gereksinim dosyası bulunamadığından öncelik ve kapsam **sahibinin on
 | GM-15 | Uzman: paket/fiyat vitrini, hakediş, yetki belgesi yenileme uyarısı | ödeme/escrow yok |
 | GM-16 | Platform: mevzuat tarayıcı, soru motoru, ödeme/escrow ekranları | ilgili sunucu özellikleri yok |
 | GM-17 | iPhone Safari gerçek cihaz denemesi (fotoğraf, PDF, bağlantı kopması) | fiziksel cihaz erişimi yok |
+| GM-18 | Uzman keşfi: serbest metin/doğal dil arama, bölge, dil, müsaitlik, uzaktan/yerinde filtreleri (md §6) | sağlayıcı verisinde bu alanlar ve arama uç noktası yok |
+| GM-19 | Pazar içinde profesyonel akış önizlemesi ve uzman kartından profil sayfası (şu an yalnız “Teklif iste”) | işletme tarafı uzman kimliği ile ağ profili kimliği farklı; eşleme gerekir |
+| GM-20 | Uzmana “Mesaj gönder” ve “Profil bildir” (md §6) | mesajlaşma yok; profil şikâyeti ağ tarafında var, pazar kartına bağlanmadı |
+| GM-21 | Aynı talebi birden çok seçili sağlayıcıya göndermek; “açık pazara yayınla” ile “seçili sağlayıcıya gönder” ayrımı (md §8) | şu an ya tek uzman ya kategori geneli |
+| GM-22 | Uzman kartında doğrulanmış değerlendirme sayısı/dağılımı ve yanıt süresi (md §6, §9) | veri modeli ve yeterli örneklem yok; uydurma gösterilmez |
+
+## Öneri sırası (onay beklemez)
+1. GM-03, GM-09, GM-07 (küçük, arayüz); 2. GM-08, GM-19 (veri var, ekran yok); 3. GM-18, GM-21 (pazar derinliği); 4. GM-04, GM-14, GM-13; 5. OCR/AI/ödeme/SMS bağımlı olanlar (GM-01, 02, 10, 11, 15, 16) sağlayıcı kararı sonrası; GM-12 doğrulanmış ceza tablosu gelince; GM-17 fiziksel cihaz.
