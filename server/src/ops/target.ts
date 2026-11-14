@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 /**
  * Where encrypted backups live. It must be a different location from the
@@ -25,7 +25,8 @@ export class DirTarget implements BackupTarget {
   get description() { return `klasör ${this.root}`; }
   private path(name: string) {
     const p = resolve(this.root, name);
-    if (!p.startsWith(this.root + '/')) throw new Error('geçersiz nesne adı');
+    const rel = relative(this.root, p); // platform separator aware (Windows backslash)
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('geçersiz nesne adı');
     return p;
   }
   async put(name: string, localFile: string) {

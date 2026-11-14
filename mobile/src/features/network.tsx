@@ -10,7 +10,7 @@ import { fmtDateTime } from './dates';
 
 export type Post = { id: string; authorId: string; authorName: string; authorTitle: string; authorPhoto: boolean; kind: 'post' | 'case'; status: 'draft' | 'published';
   body: string | null; caseSnapshot: any; createdAt: string; publishedAt: string | null; editedAt: string | null; hidden: boolean; hiddenReason: string | null;
-  commentCount: number; mine: boolean; label: string; reapprovalNeeded?: boolean; withdrawn?: { reason: string; at: string } | null };
+  commentCount: number; mine: boolean; label: string; helpfulCount?: number; helpfulByMe?: boolean; savedByMe?: boolean; reapprovalNeeded?: boolean; withdrawn?: { reason: string; at: string } | null };
 
 export const USER_CONTENT = 'Kullanıcı paylaşımı · doğrulanmış mevzuat ya da platform onaylı içerik değildir.';
 export const REPORT_REASONS: [string, string][] = [['misleading', 'Yanıltıcı / mevzuat gibi sunulmuş'], ['personal_data', 'Kişisel veri'], ['commercial_data', 'Ticari bilgi'],
@@ -48,20 +48,45 @@ export function CaseBox({ s }: { s: any }) {
   );
 }
 
+/** "Faydalı bul" (counted) and "Kaydet" (private) on a published post. Both persist on the server; the card shows the stored state. */
+export function Reactions({ p }: { p: Post }) {
+  const { call } = useSession();
+  const [s, setS] = useState({ helpfulCount: p.helpfulCount ?? 0, helpfulByMe: !!p.helpfulByMe, savedByMe: !!p.savedByMe });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (p.status !== 'published' || p.hidden) return null;
+  const toggle = async (kind: 'helpful' | 'saved') => {
+    setBusy(true); setErr(null);
+    const on = kind === 'helpful' ? !s.helpfulByMe : !s.savedByMe;
+    try { setS(await call<typeof s>('POST', `/network/posts/${p.id}/reactions`, { kind, on })); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      {!p.mine ? <GhostButton testID={`net-helpful-${p.id}`} label={`${s.helpfulByMe ? '✓ Faydalı buldun' : 'Faydalı bul'}${s.helpfulCount ? ` · ${s.helpfulCount}` : ''}`} height={34} size={12} disabled={busy} onPress={() => toggle('helpful')} />
+        : <Text testID={`net-helpful-count-${p.id}`} style={type(11.5, 500, { color: C.t3 })}>{s.helpfulCount} kişi faydalı buldu</Text>}
+      <GhostButton testID={`net-save-${p.id}`} label={s.savedByMe ? '✓ Kaydedildi' : 'Kaydet'} height={34} size={12} disabled={busy} onPress={() => toggle('saved')} />
+      {err ? <Text style={type(11, 500, { color: C.crit })}>{err}</Text> : null}
+    </View>
+  );
+}
+
 export function PostCard({ p, onPress }: { p: Post; onPress?: () => void }) {
   return (
     <Tap testID={`net-post-${p.id}`} onPress={onPress ?? (() => router.push(`/network/post/${p.id}`))} style={{ borderWidth: 1, borderColor: p.status === 'draft' ? tint.warn(0.35) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 9 }}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+        <Tap testID={`net-author-${p.id}`} accessibilityLabel={`${p.authorName} profili`} onPress={() => router.push(`/network/p/${p.authorId}`)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flex: 1 }}>
         <Avatar userId={p.authorId} has={p.authorPhoto} name={p.authorName} size={36} />
         <View style={{ flex: 1 }}>
           <Text style={type(13.5, 600)}>{p.authorName}</Text>
           <Text style={type(11, 400, { color: C.t3 })}>{p.authorTitle ? `${p.authorTitle} · ` : ''}{fmtDateTime(p.publishedAt ?? p.createdAt)}{p.editedAt ? ' · düzenlendi' : ''}</Text>
         </View>
+        </Tap>
         {p.status === 'draft' ? <Text style={type(10, 700, { ls: 0.08, color: C.warn })}>TASLAK · YALNIZ SEN</Text> : null}
       </View>
       {p.hidden ? <Text style={type(12, 600, { color: C.crit, lh: 1.45 })}>Moderasyonla gizlendi: {p.hiddenReason}</Text> : null}
       {p.kind === 'case' ? <CaseBox s={p.caseSnapshot} /> : null}
       {p.body ? <Text style={type(13.5, 400, { lh: 1.55 })}>{p.body}</Text> : null}
+      <Reactions p={p} />
       <Text style={type(10.5, 500, { color: C.t3, lh: 1.4 })}>{USER_CONTENT}{p.status === 'published' ? ` · ${p.commentCount} yorum` : ''}</Text>
     </Tap>
   );

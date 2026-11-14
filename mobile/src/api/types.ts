@@ -17,12 +17,13 @@ export type Company = {
 export type TaskRow = {
   id: string; site_id: string; status: 'open' | 'done' | 'missed' | 'cancelled'; outcome: 'conforming' | 'nonconforming' | null;
   due_at: string; period_key: string; review_flag: string | null; title: string; severity: 'minor' | 'major' | 'critical'; equipment_name: string | null;
-  assignee_id: string | null; assignee_name: string | null;
+  assignee_id: string | null; assignee_name: string | null; open_services?: number;
 };
 
 export type Requirement =
   | { kind: 'measurement'; quantity: string; unit: string }
-  | { kind: 'photo' | 'document'; min: number }
+  | { kind: 'photo'; min: number }
+  | { kind: 'document'; min: number; acceptsServiceReport?: boolean }
   | { kind: 'checklist'; items: { id: string; label: string; critical: boolean }[] }
   | { kind: 'note'; requiredWhen: 'always' | 'nonconforming' }
   | { kind: 'approval'; role: string }
@@ -34,7 +35,18 @@ export type TaskDetail = {
   id: string; status: TaskRow['status']; outcome: TaskRow['outcome']; dueAt: string; reviewFlag: string | null;
   title: string; instructions: string; severity: TaskRow['severity'];
   equipment: { id: string; name: string; type: string } | null;
-  rule: { version: number; kind: string; isExample: boolean };
+  rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string };
+  legalBasis?: { ref: string; excerpt: string; version_label: string | null; source_title: string; issuer: string | null; is_example: boolean }[];
+  lastCompletedAt?: string | null; nextDueAt?: string | null; hazardType?: string;
+  reportEvidence?: { accepted: boolean;
+    links: { id: string; documentId: string; documentTitle: string; version: number; fileSha256: string | null; selectedBy: string; selectedAt: string;
+      status: 'active' | 'replaced' | 'stale'; counts: boolean; completionBasis: boolean; reason: string | null }[];
+    options: { documentId: string; requestId: string; requestTitle: string; siteName: string; versionId: string; version: number; reason: string | null; selected: boolean }[] } | null;
+  serviceReports?: { blocked: boolean; reason: string | null; reports: {
+    requestId: string; requestTitle: string; jobStatus: string; providerName: string; documentId: string; documentTitle: string; siteName: string;
+    latest: { version: number; reviewStatus: 'unreviewed' | 'verified' | 'rejected' };
+    versions: { version: number; reportVersion: number | null; reviewStatus: 'unreviewed' | 'verified' | 'rejected'; reviewNotes: string | null; reviewedBy: string | null; uploadedAt: string; fileStatus: string | null; isLatest: boolean }[] }[] };
+  services?: { id: string; title: string; status: string; created_at: string }[];
   obligationId: string; requirements: Requirement[];
   limits: { quantity: string; equipmentType: string; unit: string; min: number | null; max: number | null; basis: string; note?: string }[];
   emergencyInstruction: string | null;

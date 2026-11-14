@@ -11,6 +11,12 @@ import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
 import { addSite, board, relate } from '../services/board';
+import { bulkAssignApply, bulkAssignPreview } from '../services/bulk-assign';
+import * as depth from '../services/market-depth';
+import * as qr from '../services/qr';
+import * as extraction from '../services/extraction';
+import { ask as askAssistant } from '../services/assistant';
+import * as padmin from '../services/platform-admin';
 import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
@@ -31,7 +37,7 @@ import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profil
 import { auditExport, indicators } from '../services/reporting';
 import { SAMPLE_PROFILES, approve, areaReview, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
-import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, taskDetail, topUpSite } from '../services/tasks';
+import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, selectServiceReportEvidence, taskDetail, topUpSite } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
 
 declare module 'fastify' {
@@ -470,6 +476,19 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
       status: z.enum(['open', 'done', 'missed', 'cancelled']).optional() }).parse(req.query);
     return db.tenant(companyId, tx => listTasks(tx, req.principal, companyId, q));
   });
+  // Bulk assignment: preview names the affected sites and people; apply needs the preview's count.
+  const bulkScope = z.object({ userId: uuid, siteIds: z.array(uuid).max(200).optional(), templateCode: z.string().max(80).optional(),
+    from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }), onlyUnassigned: z.boolean().optional() });
+  app.post('/companies/:companyId/tasks/bulk-assign/preview', async req => {
+    const companyId = company(req);
+    const b = bulkScope.parse(req.body);
+    return db.tenant(companyId, async tx => { const { taskIds: _t, ...v } = await bulkAssignPreview(tx, req.principal, companyId, b); return v; });
+  });
+  app.post('/companies/:companyId/tasks/bulk-assign', async (req, reply) => {
+    const companyId = company(req);
+    const b = bulkScope.extend({ expectedTotal: z.number().int().min(0), reason: z.string().max(500).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => bulkAssignApply(tx, req.principal, companyId, b));
+  });
   app.get('/companies/:companyId/tasks/:taskId', async req => {
     const companyId = company(req);
     const { taskId } = z.object({ taskId: uuid }).parse(req.params);
@@ -518,6 +537,12 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     reply.header('content-type', f.mime).header('cache-control', 'private, no-store').header('x-content-sha256', f.sha256)
       .header('content-disposition', 'inline').header('x-content-type-options', 'nosniff');
     return reply.send(f.bytes);
+  });
+  app.post('/companies/:companyId/tasks/:taskId/report-evidence', async (req, reply) => {
+    const companyId = company(req);
+    const { taskId } = z.object({ taskId: uuid }).parse(req.params);
+    const b = z.object({ documentId: uuid, versionId: uuid }).parse(req.body);
+    return mutate(req, reply, companyId, tx => selectServiceReportEvidence(tx, req.principal, companyId, taskId, b));
   });
   app.post('/companies/:companyId/tasks/:taskId/complete', async (req, reply) => {
     const companyId = company(req);
@@ -723,9 +748,24 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return institutionView(q);
   });
   app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
-  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); await db.system(tx => approve(tx, req.principal, rvId(req))); return { ok: true }; });
+  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason ?? null)); return { ok: true }; });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
-  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules })); });
+  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason ?? null })); });
+
+  // ── Platform administration: overview, audit trail, platform roles ──
+  app.get('/admin/overview', async req => { platformGate(req); return db.system(tx => padmin.overview(tx, req.principal)); });
+  app.get('/admin/audit', async req => {
+    platformGate(req);
+    const q = z.object({ companyId: uuid.optional(), scope: z.enum(['platform', 'all']).optional(), eventType: z.string().max(60).optional(), actorId: uuid.optional(),
+      before: z.coerce.number().int().positive().optional(), limit: z.coerce.number().int().min(1).max(200).optional() }).parse(req.query);
+    return db.system(tx => padmin.listAudit(tx, req.principal, q));
+  });
+  app.get('/admin/platform-users', async req => { platformGate(req); const { q } = z.object({ q: z.string().max(80).optional() }).parse(req.query); return db.system(tx => padmin.listPlatformUsers(tx, req.principal, q)); });
+  app.post('/admin/platform-roles', async req => {
+    platformGate(req);
+    const b = z.object({ userId: uuid, role: z.enum(['rule_author', 'rule_reviewer', 'platform_admin', 'marketplace_reviewer', 'network_moderator']), grant: z.boolean(), reason: z.string().max(500) }).parse(req.body);
+    return db.system(tx => padmin.setPlatformRole(tx, req.principal, b));
+  });
 
   // ── Marketplace: categories and public profiles ──
   app.get('/service-categories', async () => db.system(async tx => (await tx.query(`SELECT * FROM service_categories ORDER BY name`)).rows));
@@ -777,8 +817,16 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   app.post('/pro/jobs/:id/report', async (req, reply) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const { report } = z.object({ report: z.string().max(8000) }).parse(req.body);
-    return userMutate(req, reply, async tx => { await mk.submitReport(tx, req.principal, id, report); return { ok: true }; });
+    const { report, file } = z.object({ report: z.string().max(8000),
+      file: z.object({ mime: z.string(), sha256: z.string(), sizeBytes: z.number().int().positive().max(config.maxUploadBytes) }).nullable().optional() }).parse(req.body);
+    return userMutate(req, reply, tx => mk.submitReport(tx, req.principal, id, report, file ?? null));
+  });
+  // The expert's file for the report they registered: same hash/type checks as every evidence file; never readable by anyone outside the business.
+  app.put('/pro/jobs/:id/report/:evidenceId/content', async req => {
+    const { id, evidenceId } = z.object({ id: uuid, evidenceId: uuid }).parse(req.params);
+    if (!Buffer.isBuffer(req.body)) throw new AppError(415, 'UNSUPPORTED_MEDIA', `Dosya gövdesi şu türlerden biri olmalı: ${ALLOWED_MIME.join(', ')}`);
+    const companyId = await db.system(tx => mk.reportEvidenceCompany(tx, req.principal, id, evidenceId));
+    return uploadContent(db, store, req.principal, companyId, evidenceId, req.body);
   });
 
   // ── Marketplace: review (platform) ──
@@ -799,20 +847,138 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   // ── Marketplace: business side ──
   app.get('/companies/:companyId/providers', async req => {
     company(req);
-    const { category } = z.object({ category: z.string() }).parse(req.query);
-    return db.system(tx => mk.providersFor(tx, category));
+    const q = z.object({ category: z.string(), q: z.string().max(100).optional(), city: z.string().max(60).optional(), district: z.string().max(60).optional(),
+      minCredentials: z.coerce.number().int().min(0).max(10).optional(), reviewedOnly: z.enum(['true', 'false']).optional() }).parse(req.query);
+    return db.system(tx => mk.providersFor(tx, q.category, { ...q, reviewedOnly: q.reviewedOnly === 'true' }));
   });
   app.post('/companies/:companyId/service-requests', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().trim().min(3).max(200), description: z.string().trim().min(5).max(4000),
-      ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false),
-      invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
+      ncrId: uuid.nullable().optional(), taskId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false),
+      invitedProfileId: uuid.nullable().default(null), invitedProfileIds: z.array(uuid).max(5).default([]) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.createRequest(tx, req.principal, companyId, b), 201);
+  });
+  // Appointments (both sides) and request-linked messages.
+  const apptBody = z.object({ startsAt: z.iso.datetime({ offset: true }), endsAt: z.iso.datetime({ offset: true }), note: z.string().max(500).nullable().optional() });
+  app.get('/companies/:companyId/jobs/:jobId/appointments', async req => {
+    const companyId = company(req);
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => depth.jobAppointments(tx, req.principal, jobId));
+  });
+  app.post('/companies/:companyId/jobs/:jobId/appointments', async (req, reply) => {
+    const companyId = company(req);
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, tx => depth.proposeAppointment(tx, req.principal, jobId, apptBody.parse(req.body)), 201);
+  });
+  app.post('/companies/:companyId/appointments/:id/decision', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ accept: z.boolean(), reason: z.string().max(500).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => depth.decideAppointment(tx, req.principal, id, b));
+  });
+  app.post('/companies/:companyId/appointments/:id/cancel', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ reason: z.string().max(500) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => depth.cancelAppointment(tx, req.principal, id, b.reason));
+  });
+  app.get('/companies/:companyId/service-requests/:id/messages', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const { profileId } = z.object({ profileId: uuid }).parse(req.query);
+    return db.tenant(companyId, tx => depth.businessThread(tx, req.principal, companyId, id, profileId));
+  });
+  app.post('/companies/:companyId/service-requests/:id/messages', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ profileId: uuid, body: z.string().max(2000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => depth.businessSend(tx, req.principal, companyId, id, b.profileId, b.body), 201);
+  });
+  // Provider side (system mode: every query filters by the provider's own profile).
+  app.get('/pro/calendar', async req => {
+    const q = z.object({ from: z.iso.datetime({ offset: true }).default(() => new Date().toISOString()), to: z.iso.datetime({ offset: true }).default(() => new Date(Date.now() + 60 * 864e5).toISOString()) }).parse(req.query);
+    return db.system(tx => depth.providerCalendar(tx, req.principal, q));
+  });
+  app.get('/pro/jobs/:jobId/appointments', async req => db.system(tx => depth.jobAppointments(tx, req.principal, z.object({ jobId: uuid }).parse(req.params).jobId)));
+  app.post('/pro/jobs/:jobId/appointments', async (req, reply) => {
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => depth.proposeAppointment(tx, req.principal, jobId, apptBody.parse(req.body)), 201);
+  });
+  app.post('/pro/appointments/:id/decision', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ accept: z.boolean(), reason: z.string().max(500).nullable().optional() }).parse(req.body);
+    return userMutate(req, reply, tx => depth.decideAppointment(tx, req.principal, id, b));
+  });
+  app.post('/pro/appointments/:id/cancel', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => depth.cancelAppointment(tx, req.principal, id, z.object({ reason: z.string().max(500) }).parse(req.body).reason));
+  });
+  app.get('/pro/requests/:id/messages', async req => db.system(tx => depth.providerThread(tx, req.principal, z.object({ id: uuid }).parse(req.params).id)));
+  app.post('/pro/requests/:id/messages', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => depth.providerSend(tx, req.principal, id, z.object({ body: z.string().max(2000) }).parse(req.body).body), 201);
+  });
+  // ── QR codes bound to records; a scan is checked against the scanner's own rights on the server ──
+  const baseUrl = z.string().max(200).regex(/^https?:\/\/[^\s]+$/);
+  app.post('/companies/:companyId/qr', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ kind: z.enum(['equipment', 'document', 'site']), refId: uuid, label: z.string().max(120).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => qr.createQr(tx, req.principal, companyId, b), 201);
+  });
+  app.get('/companies/:companyId/qr', async req => {
+    const companyId = company(req);
+    const q = z.object({ kind: z.enum(['equipment', 'document', 'site']).optional(), refId: uuid.optional() }).parse(req.query);
+    return db.tenant(companyId, tx => qr.listQr(tx, req.principal, companyId, q));
+  });
+  app.post('/companies/:companyId/qr/:id/active', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ active: z.boolean(), reason: z.string().max(300).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => qr.setQrActive(tx, req.principal, companyId, id, b));
+  });
+  app.get('/companies/:companyId/qr/:id/image', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const { base } = z.object({ base: baseUrl }).parse(req.query);
+    return db.tenant(companyId, tx => qr.qrImage(tx, req.principal, companyId, id, base));
+  });
+  app.get('/qr/resolve', async req => {
+    const { token } = z.object({ token: z.string().min(20).max(80).regex(/^[A-Za-z0-9_-]+$/) }).parse(req.query);
+    return db.system(tx => qr.resolveQr(tx, req.principal, token));
+  });
+
+  // ── Reading fields from document text: proposals a person reviews and confirms ──
+  app.get('/ocr/status', async () => extraction.ocrStatus());
+  app.get('/companies/:companyId/documents/:id/extractions', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => extraction.listExtractions(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/documents/:id/versions/:versionId/extractions', async (req, reply) => {
+    const companyId = company(req);
+    const { id, versionId } = z.object({ id: uuid, versionId: uuid }).parse(req.params);
+    const b = z.object({ text: z.string().max(20000), source: z.enum(['device_text', 'typed_text']).default('typed_text') }).parse(req.body);
+    return mutate(req, reply, companyId, tx => extraction.createExtraction(tx, req.principal, companyId, id, versionId, b), 201);
+  });
+  app.post('/companies/:companyId/extractions/:id/decision', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
+    const b = z.object({ confirm: z.boolean(), fields: z.object({ docType: z.string().max(40).nullable().optional(), issuer: z.string().max(200).nullable().optional(),
+      documentNo: z.string().max(100).nullable().optional(), validFrom: date, validUntil: date }).optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => extraction.decideExtraction(tx, req.principal, companyId, id, b));
+  });
+
+  // ── Assistant: answers only from this business's own records and published rules; says so when the sources fall short ──
+  app.post('/companies/:companyId/assistant/ask', async req => {
+    const companyId = company(req);
+    const b = z.object({ question: z.string().max(600), siteId: uuid.nullable().optional() }).parse(req.body);
+    return db.tenant(companyId, tx => askAssistant(tx, req.principal, companyId, b));
   });
   app.post('/companies/:companyId/service-requests/preview', async req => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().max(200), description: z.string().max(4000), city: z.string().max(60),
-      ncrId: uuid.nullable().optional(), shareNcrSummary: z.boolean().default(false), invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
+      ncrId: uuid.nullable().optional(), shareNcrSummary: z.boolean().default(false), invitedProfileId: uuid.nullable().default(null), invitedProfileIds: z.array(uuid).max(5).default([]) }).parse(req.body);
     return db.tenant(companyId, tx => mk.requestPreview(tx, req.principal, companyId, b));
   });
   app.post('/companies/:companyId/service-requests/:id/cancel', async (req, reply) => {
@@ -891,7 +1057,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return db.system(async (tx): Promise<object> => op === 'follow' || op === 'unfollow' ? net.follow(tx, req.principal, userId, op === 'follow') : net.block(tx, req.principal, userId, op === 'block'));
   });
   app.get('/network/feed', async req => {
-    const q = z.object({ scope: z.enum(['all', 'following', 'mine']).default('all'), authorId: uuid.optional() }).parse(req.query);
+    const q = z.object({ scope: z.enum(['all', 'following', 'mine', 'saved']).default('all'), authorId: uuid.optional() }).parse(req.query);
     return db.system(tx => net.feed(tx, req.principal, q));
   });
   app.post('/network/posts', async (req, reply) => {
@@ -903,6 +1069,11 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ body: z.string().max(5000).optional(), op: z.enum(['publish', 'delete']).optional() }).parse(req.body);
     await db.system(tx => net.updatePost(tx, req.principal, id, b)); return { ok: true };
+  });
+  app.post('/network/posts/:id/reactions', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ kind: z.enum(['helpful', 'saved']), on: z.boolean() }).parse(req.body);
+    return userMutate(req, reply, tx => net.react(tx, req.principal, id, b.kind, b.on));
   });
   app.post('/network/posts/:id/comments', async (req, reply) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
@@ -1051,7 +1222,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   const isoDate = z.iso.date().nullable();
   app.get('/companies/:companyId/documents', async req => {
     const companyId = company(req);
-    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional(), filter: z.enum(['expiring', 'expired', 'pending_review', 'rejected']).optional() }).parse(req.query);
+    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional(), filter: z.enum(['expiring', 'expired', 'pending_review', 'rejected', 'no_file']).optional() }).parse(req.query);
     return db.tenant(companyId, tx => docs.listDocuments(tx, req.principal, companyId, q));
   });
   app.post('/companies/:companyId/documents', async (req, reply) => {

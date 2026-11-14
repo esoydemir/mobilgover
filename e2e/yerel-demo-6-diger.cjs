@@ -152,7 +152,7 @@ console.log(`Çalıştırma ${RUN} · işletme ${CO}`);
   await choose(id('doc-file-pick'), pdf2); await wait(800);
   await id('doc-valid-until').fill(day(400)); await id('doc-version-save').click(); await wait(3500);
   let t = await body();
-  check('Yeni sürüm kendi incelemesini bekliyor; eski sürüm geçerli kalıyor', t.includes('İNCELENMEDİ') && t.includes('KURUM İÇİ İNCELENDİ'));
+  check('Yeni sürüm kendi incelemesini bekliyor; eski sürüm geçerli kalıyor', t.includes('İNCELEME BEKLİYOR') && t.includes('KURUM İÇİ İNCELENDİ'));
   await as(E.manager);
   await p.goto(`${WEB}/documents/${doc}`); await wait(3000);
   await id('doc-review-open-2').click(); await id('doc-review-notes-2').fill('Yeni ruhsat aslıyla karşılaştırıldı.'); await id('doc-review-ok-2').click(); await wait(3000);

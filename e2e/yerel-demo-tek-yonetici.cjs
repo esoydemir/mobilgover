@@ -179,7 +179,7 @@ console.log(`Çalıştırma ${RUN} · tek yöneticili işletme ${CO} · doğrula
   check('Seçilen dosyanın adı, türü ve boyutu görünüyor', (await body()).includes('ruhsat.pdf · PDF'));
   await id('doc-version-save').click(); await wait(3500);
   t = await body();
-  check('Yüklendi: "İNCELENMEDİ" ve resmî doğrulama olmadığı açıklaması', t.includes('İNCELENMEDİ') && t.includes('geçerli olduğu anlamına gelmez'));
+  check('Yüklendi: "İNCELEME BEKLİYOR" ve resmî doğrulama olmadığı açıklaması', t.includes('İNCELEME BEKLİYOR') && t.includes('geçerli olduğu anlamına gelmez'));
   const [dl] = await Promise.all([p.waitForEvent('download'), id('doc-file-download-1').click()]);
   check('Dosya indirilebiliyor (aynı bayt)', fs.readFileSync(await dl.path()).equals(fs.readFileSync(pdf)));
   await shot('belge-incelenmedi');

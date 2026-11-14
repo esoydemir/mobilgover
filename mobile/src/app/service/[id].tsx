@@ -8,6 +8,7 @@ import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
 import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
+import { AppointmentCard, MessageThread } from '../../features/ServiceExtras';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
 import { REQ_STATUS } from '../services';
@@ -19,8 +20,9 @@ type Job = { id: string; status: string; checkin_code: string; checked_in_at: st
   business_note: string | null; payment_status: string; cancel_reason: string | null };
 type Review = { id: string; quality: number; timeliness: number; communication: number; comment: string | null; show_on_profile: boolean; created_at: string };
 type Detail = { request: { id: string; title: string; description: string; category_name: string; status: string; ncr_id: string | null; created_at: string; cancel_reason: string | null };
-  quotes: Quote[]; job: Job | null; review?: Review | null; canReview?: boolean; canCancel: boolean; mode: 'direct' | 'open'; modeNote: string;
+  quotes: Quote[]; job: Job | null; review?: Review | null; canReview?: boolean; canCancel: boolean; mode: 'direct' | 'open' | 'selected'; modeNote: string; invitedProviders?: { profileId: string; name: string }[];
   comparison: { key: string; label: string }[] | null; jobProviderStatus: Quote['providerStatus'] | null;
+  reportDocuments?: { document_id: string; version_id: string; version: number; review_status: string; is_latest: boolean; site_name: string; task_title: string | null }[];
   reports: { version: number; report: string; submitted_at: string; decision: string | null; decision_note: string | null; decided_at: string | null; decided_by_name: string | null }[];
   history: { event_type: string; payload: any; occurred_at: string; actor_name: string | null }[] };
 
@@ -44,6 +46,7 @@ export default function ServiceDetailRoute() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [threadWith, setThreadWith] = useState<string | null>(null);
   const d = q.data;
   if (!d) return <Screen title="Hizmet talebi" titleEn="Service request">{q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : <Loading />}</Screen>;
   const act = async (fn: () => Promise<unknown>, msg: string) => {
@@ -56,7 +59,7 @@ export default function ServiceDetailRoute() {
     <Screen title="Hizmet talebi" titleEn="Service request" onRefresh={q.reload} refreshing={q.loading}>
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <Pill label={REQ_STATUS[d.request.status]![0]} fg={REQ_STATUS[d.request.status]![1]} bg={REQ_STATUS[d.request.status]![2]} />
-        <Pill label={d.mode === 'direct' ? 'DOĞRUDAN TEK UZMAN' : 'ÇOK TEKLİFLİ'} fg={C.info} bg={tint.info(0.12)} />
+        <Pill label={d.mode === 'direct' ? 'DOĞRUDAN TEK UZMAN' : d.mode === 'selected' ? 'SEÇİLİ UZMANLAR' : 'ÇOK TEKLİFLİ'} fg={C.info} bg={tint.info(0.12)} />
       </View>
       <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{d.request.title}</Text>
       <Text style={type(13.5, 400, { color: C.t2, lh: 1.5 })}>{d.request.description}</Text>
@@ -88,6 +91,19 @@ export default function ServiceDetailRoute() {
               {r.decision ? <Text style={type(11.5, 500, { color: r.decision === 'accepted' ? C.lime : C.warn, lh: 1.45 })}>{r.decision === 'accepted' ? 'Kabul edildi' : 'Revizyon istendi'} · {r.decided_by_name} · {r.decision_note}</Text> : null}
             </View>
           ))}
+          {d.reportDocuments?.length ? (
+            <View testID="job-report-docs" style={{ marginTop: 12, gap: 6, borderWidth: 1, borderColor: tint.info(0.3), borderRadius: 16, padding: 12 }}>
+              <Text style={type(11, 600, { ls: 0.1, color: C.info })}>RAPOR DOSYASI · BELGE KASASI</Text>
+              <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Şube: {d.reportDocuments[0]!.site_name}{d.reportDocuments[0]!.task_title ? ` · Görev: ${d.reportDocuments[0]!.task_title}` : ''}</Text>
+              {d.reportDocuments.map(v => (
+                <Text key={v.version_id} style={type(12, v.is_latest ? 600 : 400, { color: v.is_latest ? C.t1 : C.t3, lh: 1.45 })}>
+                  Sürüm {v.version}{v.is_latest ? ' · SON SÜRÜM' : ' · önceki'} · {({ unreviewed: 'İNCELEME BEKLİYOR', verified: 'İNCELENDİ', rejected: 'KABUL EDİLMEDİ' } as Record<string, string>)[v.review_status]}
+                </Text>
+              ))}
+              <GhostButton testID="job-report-doc-open" label="Raporu belge kasasında aç" height={36} size={12} onPress={() => router.push(`/documents/${d.reportDocuments![0]!.document_id}` as never)} />
+              <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Teslimi kabul etmek dosyayı doğrulamaz; dosyayı belge kasasında ayrıca inceleyen kişi doğrular. Bağlı görev o zamana kadar açık kalır.</Text>
+            </View>
+          ) : null}
           {d.job.status === 'report_submitted' ? (
             <View style={{ marginTop: 12, gap: 10 }}>
               <Field testID="job-note" value={note} onChangeText={setNote} multiline placeholder="Raporu okudun mu, işi kontrol ettin mi? Revizyon istiyorsan neyin eksik olduğunu yaz." />
@@ -110,6 +126,8 @@ export default function ServiceDetailRoute() {
           <Text style={[type(11, 400, { color: C.t3, lh: 1.45 }), { marginTop: 12 }]}>Ödeme: bu aşamada uygulama dışında. QR/kod girişi işin yapıldığını kanıtlamaz; rapor ve teslim kabulü ayrıdır.</Text>
         </Card>
       ) : null}
+
+      {d.job && d.job.status !== 'cancelled' ? <AppointmentCard jobId={d.job.id} editable={d.job.status === 'scheduled'} /> : null}
 
       <Eyebrow>TEKLİFLER ({d.quotes.length})</Eyebrow>
       {d.quotes.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz teklif gelmedi. Yalnızca bu kategoride onaylı uzmanlar teklif verebilir.</Text> : null}
@@ -163,6 +181,21 @@ export default function ServiceDetailRoute() {
         ) : <Text testID="svc-cancel-open" onPress={() => setCancelOpen(true)} style={type(12, 500, { color: C.crit })}>{d.job ? 'İşi gerekçeyle iptal et' : 'Talebi gerekçeyle iptal et'}</Text>
       ) : null}
       {error ? <ErrorBox message={error} /> : null}
+      {(() => {
+        const people = new Map<string, string>();
+        for (const x of d.invitedProviders ?? []) people.set(x.profileId, x.name);
+        for (const x of d.quotes) people.set(x.provider_profile_id, x.display_name);
+        if (!people.size || d.request.status === 'cancelled') return null;
+        return (
+          <View style={{ gap: 8 }}>
+            <Eyebrow>YAZIŞMA</Eyebrow>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+              {[...people].map(([pid, name]) => <GhostButton key={pid} testID={`msg-with-${pid}`} label={`${name} ile yaz`} height={36} size={12} onPress={() => setThreadWith(threadWith === pid ? null : pid)} />)}
+            </View>
+            {threadWith ? <MessageThread requestId={d.request.id} profileId={threadWith} /> : null}
+          </View>
+        );
+      })()}
       {d.history.length ? (
         <Card style={{ gap: 5 }}>
           <Eyebrow>GEÇMİŞ</Eyebrow>

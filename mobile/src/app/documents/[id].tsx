@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { errorText } from '../../api/client';
@@ -6,9 +6,10 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
+import { ExtractionCard, QrCard } from '../../features/Group4';
 import { DOC_STATUS, DOC_TYPE, ISSUER_METHOD, STATUS_NOTE, fmtDay, issuerLine, type IssuerCheck } from '../../features/documents';
 import { ACCEPTED, TYPE_LABEL, fileMeta, fmtSize, openEvidence, pickFile, uploadBytes, type Picked } from '../../features/files';
 import { C, tint, type } from '../../theme';
@@ -17,15 +18,16 @@ type Version = { id: string; version: number; valid_from: string | null; valid_u
   review_notes: string | null; reviewed_at: string | null; reviewed_by_name: string | null; uploaded_by_name: string; uploaded_at: string;
   issuer_check_method: string | null; issuer_check_ref: string | null; issuer_check_notes: string | null; issuer_checked_at: string | null; issuer_checked_by_name: string | null;
   evidence_id: string | null; file_status: string | null; mime: string | null; size_bytes: number | null; declared_sha256: string | null; file_rejection: string | null;
-  canReview: boolean; reviewBlockedReason: string | null; canRecordIssuerCheck: boolean; canRetryUpload: boolean };
+  canReview: boolean; reviewBlockedReason: string | null; canRecordIssuerCheck: boolean; canRetryUpload: boolean; isLatest: boolean };
+type Origin = { requestId: string; requestTitle: string; requestStatus: string; jobStatus: string; siteName: string; providerName: string; taskId: string | null; taskTitle: string | null; taskDueAt: string | null; taskStatus: string | null };
 type DocDetail = { id: string; docType: string; title: string; issuer: string | null; documentNo: string | null; siteId: string | null; siteName: string | null; equipmentName: string | null;
   issuerCheck: IssuerCheck; status: string; expiring: boolean; notYetValid: boolean; currentVersionId: string | null; validFrom: string | null; validUntil: string | null; expiryWarningDays: number;
   maxUploadBytes: number; shares: { id: string; site_id: string; site_name: string }[]; versions: Version[];
-  permissions: { write: boolean; review: boolean; share: boolean };
+  permissions: { write: boolean; review: boolean; share: boolean }; origin: Origin | null;
   uses: { id: string; kind: string; kindLabel: string; name: string; purpose: string; createdBy: string }[] };
 
 const isDay = (v: string) => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v);
-const REVIEW: Record<string, [string, string]> = { unreviewed: ['İNCELENMEDİ', C.warn], verified: ['KURUM İÇİ İNCELENDİ', C.info], rejected: ['REDDEDİLDİ', C.crit] };
+const REVIEW: Record<string, [string, string]> = { unreviewed: ['İNCELEME BEKLİYOR', C.warn], verified: ['KURUM İÇİ İNCELENDİ', C.info], rejected: ['REDDEDİLDİ', C.crit] };
 const typesText = ACCEPTED.document.map(m => TYPE_LABEL[m]).join(', ');
 const fileName = (d: DocDetail, v: Version) => `${d.title} - surum ${v.version}${v.mime === 'application/pdf' ? '.pdf' : v.mime === 'image/png' ? '.png' : '.jpg'}`;
 
@@ -63,17 +65,49 @@ export default function DocumentRoute() {
               <Text style={type(13, 500, { lh: 1.5 })}>İncelenen sürüme göre {fmtDay(d.validFrom)} – {fmtDay(d.validUntil)}. Bitişe {d.expiryWarningDays} gün kala ve bitince yöneticilere hatırlatma gider.</Text>
             ) : null}
           </Card>
+          {d.origin ? <OriginCard o={d.origin} /> : null}
           {!d.permissions.write && !d.siteId ? <Text style={type(11.5, 400, { color: C.t3 })}>Bu işletme geneli belge şubenle paylaşıldı: yalnız okuyabilirsin.</Text> : null}
+          {(d.status === 'expired' || d.expiring || d.status === 'no_file' || d.status === 'rejected') && d.permissions.write ? (
+            <Card style={{ gap: 8 }}>
+              <Eyebrow>UZMAN DESTEĞİ</Eyebrow>
+              <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Bu belgeyi yenilemek ya da eksiğini tamamlamak için doğrulanmış uzmandan teklif iste. Teklif kabul etmeden iş başlamaz.</Text>
+              <PrimaryButton testID="doc-find-service" label="Servis bul" height={44} size={13.5} onPress={() => router.push(`/service/new?title=${encodeURIComponent(`${d.title} · yenileme / uygunluk desteği`)}` as Href)} />
+            </Card>
+          ) : null}
           {err ? <ErrorBox message={err} /> : null}
           <UsesCard d={d} onDone={q.reload} />
           {d.permissions.share ? <ShareCard d={d} onDone={q.reload} /> : null}
           {d.permissions.write ? <NewVersion docId={d.id} maxBytes={d.maxUploadBytes} onDone={q.reload} /> : null}
+          {d.permissions.write ? <QrCard kind="document" refId={d.id} /> : null}
+          {d.permissions.write ? <ExtractionCard documentId={d.id} versionId={d.versions.find(v => v.isLatest)?.id ?? null} reviewed={(d.versions.find(v => v.isLatest)?.review_status ?? 'unreviewed') !== 'unreviewed'} onApplied={q.reload} /> : null}
           <Eyebrow>SÜRÜMLER</Eyebrow>
           {d.versions.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz dosya yok.</Text> : null}
           {d.versions.map(v => <VersionRow key={v.id} v={v} d={d} current={v.id === d.currentVersionId} onOpen={open} onDone={q.reload} />)}
         </>
       )}
     </Screen>
+  );
+}
+
+const JOB_TR: Record<string, string> = { scheduled: 'Planlandı', checked_in: 'Uzman girişi yapıldı', report_submitted: 'Rapor geldi, teslim kabulü bekliyor', revision_requested: 'Revizyon istendi',
+  accepted: 'Teslim kabul edildi', cancelled: 'İptal' };
+/** A service report in the vault says which site, task and service request it belongs to. */
+function OriginCard({ o }: { o: Origin }) {
+  return (
+    <View testID="doc-origin"><Card border={tint.info(0.3)} style={{ gap: 6 }}>
+      <Eyebrow color={C.info}>SERVİS RAPORU · BAĞLAM</Eyebrow>
+      <Text testID="doc-origin-site" style={type(12.5, 600)}>Şube: {o.siteName}</Text>
+      {o.taskId ? (
+        <Tap testID="doc-origin-task" onPress={() => router.push(`/task/${o.taskId}` as Href)}>
+          <Text style={type(12.5, 600, { color: C.info })}>Görev: {o.taskTitle ?? 'bağlı görev'}{o.taskDueAt ? ` · son tarih ${fmtDateTime(o.taskDueAt)}` : ''} →</Text>
+        </Tap>
+      ) : <Text style={type(12.5, 400, { color: C.t2 })}>Görev: bağlı görev yok</Text>}
+      <Tap testID="doc-origin-request" onPress={() => router.push(`/service/${o.requestId}` as Href)}>
+        <Text style={type(12.5, 600, { color: C.info })}>Servis talebi: {o.requestTitle} →</Text>
+      </Tap>
+      <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Uzman: {o.providerName} · {JOB_TR[o.jobStatus] ?? o.jobStatus}</Text>
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Teslimi kabul etmek bu dosyayı doğrulamaz: dosyayı yüklemeyen biri incelemeli. Bağlı görev dosya doğrulanana kadar açık kalır.</Text>
+    </Card></View>
   );
 }
 
@@ -205,7 +239,7 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
   return (
     <View testID={`doc-version-${v.version}`} style={{ borderWidth: 1, borderColor: current ? tint.lime(0.35) : v.canReview ? tint.warn(0.35) : C.bd, borderRadius: 16, padding: 12, gap: 5 }}>
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={[type(12.5, 600), { flex: 1 }]}>Sürüm {v.version}{current ? ' · esas alınan sürüm' : ''}</Text>
+        <Text testID={`doc-version-title-${v.version}`} style={[type(12.5, 600), { flex: 1 }]}>Sürüm {v.version}{v.isLatest && (d.versions.length > 1 || d.origin) ? ' · SON SÜRÜM' : ''}{!v.isLatest ? ' · önceki sürüm' : ''}{current ? ' · esas alınan sürüm' : ''}</Text>
         <Text style={type(10, 700, { ls: 0.08, color: v.issuer_check_method ? C.lime : color })}>
           {v.file_status !== 'stored' && v.review_status === 'unreviewed' ? (v.file_status === 'rejected' ? 'DOSYA REDDEDİLDİ' : 'DOSYA YÜKLENMEDİ') : v.issuer_check_method ? 'KURUMDAN DOĞRULANDI' : label}
         </Text>

@@ -136,7 +136,7 @@ async function apiLogin(email) {
   await id('doc-valid-until').fill(until);
   await id('doc-version-save').click(); await wait(4000);
   t = await body();
-  check('Yüklenen belge "incelenmedi" (geçerli sayılmaz); yükleyen inceleyemiyor', t.includes('İNCELENMEDİ') && t.includes('geçerli olduğu anlamına gelmez') && t.includes('Belgeyi sen yükledin'));
+  check('Yüklenen belge "incelenmedi" (geçerli sayılmaz); yükleyen inceleyemiyor', t.includes('İNCELEME BEKLİYOR') && t.includes('geçerli olduğu anlamına gelmez') && t.includes('Belgeyi sen yükledin'));
   await shot('belge-inceleme-bekliyor');
   const docUrl = p.url();
   await logout();

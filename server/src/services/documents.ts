@@ -88,12 +88,13 @@ const VERSIONS_SQL = `SELECT v.id, v.document_id, v.version, v.valid_from::text 
    FROM document_versions v JOIN users uu ON uu.id = v.uploaded_by LEFT JOIN users ru ON ru.id = v.reviewed_by LEFT JOIN users iu ON iu.id = v.issuer_checked_by
    LEFT JOIN LATERAL (SELECT * FROM evidence x WHERE x.document_version_id = v.id ORDER BY x.created_at DESC LIMIT 1) e ON true`;
 
-export type DocFilter = 'expiring' | 'expired' | 'pending_review' | 'rejected';
-/** Vault filters: soon to run out, ran out, waiting for review (also a newer version on a valid document), rejected. */
+export type DocFilter = 'expiring' | 'expired' | 'pending_review' | 'rejected' | 'no_file';
+/** Vault filters: soon to run out, ran out, waiting for review (also a newer version on a valid document), rejected, missing (no file uploaded yet). */
 export function matchesFilter(d: { status: DocStatus; expiring: boolean; pendingReview: boolean; latestRejected?: boolean }, f: DocFilter) {
   if (f === 'expiring') return d.expiring && d.status !== 'expired';
   if (f === 'expired') return d.status === 'expired';
   if (f === 'pending_review') return d.pendingReview;
+  if (f === 'no_file') return d.status === 'no_file';
   return d.status === 'rejected' || !!d.latestRejected;
 }
 
@@ -112,6 +113,8 @@ async function listOut(tx: Tx, p: Principal, companyId: string, docs: any[]) {
   if (!docs.length) return [];
   const versions = (await tx.query(`${VERSIONS_SQL} WHERE v.document_id = ANY($1)`, [docs.map(d => d.id)])).rows;
   const today = day(new Date());
+  const origins = new Map<string, Awaited<ReturnType<typeof serviceOrigin>>>();
+  for (const id of new Set(docs.map(d => d.service_job_id).filter(Boolean) as string[])) origins.set(id, await serviceOrigin(tx, id));
   return docs.map(d => {
     const vs = versions.filter(v => v.document_id === d.id);
     const st = documentStatus(vs, today);
@@ -120,7 +123,8 @@ async function listOut(tx: Tx, p: Principal, companyId: string, docs: any[]) {
       sharedReadOnly: !can(p, 'document.read', { companyId, siteId: d.site_id }).ok,
       validUntil: st.current?.valid_until ?? null, validFrom: st.current?.valid_from ?? null, versionCount: vs.length, pendingReview: !!st.pending || st.status === 'unreviewed',
       latestRejected: [...vs].sort((a, b) => b.version - a.version)[0]?.review_status === 'rejected',
-      issuerCheck: issuerCheckOf(st.current) };
+      issuerCheck: issuerCheckOf(st.current),
+      serviceOrigin: d.service_job_id ? origins.get(d.service_job_id) ?? null : null };
   });
 }
 
@@ -167,9 +171,10 @@ export async function getDocument(tx: Tx, p: Principal, companyId: string, id: s
     status: st.status, expiring: st.expiring, notYetValid: st.notYetValid,
     issuerCheck: issuerCheckOf(st.current),
     currentVersionId: st.current?.id ?? null, validFrom: st.current?.valid_from ?? null, validUntil: st.current?.valid_until ?? null,
+    origin: await serviceOrigin(tx, d.service_job_id),
     shares, maxUploadBytes: MAX_UPLOAD_BYTES.value, uses: await documentUses(tx, id),
     expiryWarningDays: EXPIRY_WARNING_DAYS,
-    versions: versions.map(v => ({ ...v,
+    versions: versions.map(v => ({ ...v, isLatest: v.version === versions[0]?.version,
       canRecordIssuerCheck: review && v.review_status === 'verified' && !v.issuer_check_method,
       canRetryUpload: write && v.file_status === 'pending_upload' && v.uploaded_by === p.userId,
       canReview: review && v.review_status === 'unreviewed' && v.file_status === 'stored' && v.uploaded_by !== p.userId,
@@ -177,6 +182,18 @@ export async function getDocument(tx: Tx, p: Principal, companyId: string, id: s
         : review && v.review_status === 'unreviewed' && v.file_status !== 'stored' ? 'Dosya henüz yüklenmedi.' : null })),
     permissions: { write, review, share: write && !d.site_id },
   };
+}
+
+/** A document that came from a service report names the request, task, site and expert it belongs to. */
+export async function serviceOrigin(tx: Tx, jobId: string | null) {
+  if (!jobId) return null;
+  const r = (await tx.query(
+    `SELECT sr.id AS request_id, sr.title AS request_title, sr.status AS request_status, j.status AS job_status, s.name AS site_name, pp.display_name AS provider_name,
+            sr.task_id, tt.title AS task_title, tk.due_at AS task_due_at, tk.status AS task_status
+       FROM service_jobs j JOIN service_requests sr ON sr.id = j.request_id JOIN sites s ON s.id = sr.site_id JOIN professional_profiles pp ON pp.id = j.provider_profile_id
+       LEFT JOIN tasks tk ON tk.id = sr.task_id LEFT JOIN task_templates tt ON tt.id = tk.template_id WHERE j.id = $1`, [jobId])).rows[0];
+  return r ? { requestId: r.request_id, requestTitle: r.request_title, requestStatus: r.request_status, jobStatus: r.job_status, siteName: r.site_name, providerName: r.provider_name,
+    taskId: r.task_id, taskTitle: r.task_title, taskDueAt: r.task_due_at, taskStatus: r.task_status } : null;
 }
 
 export type VersionInput = { validFrom: string | null; validUntil: string | null; notes: string | null; file: { mime: string; sha256: string; sizeBytes: number } };

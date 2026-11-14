@@ -1,0 +1,57 @@
+{
+ "personel.rt1@demo.goverhub.test": "GET /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Görev bulunamadı.\"}}",
+ "personel.rt1@demo.goverhub.test sec": "POST /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa/report-evidence -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Görev bulunamadı.\"}}",
+ "mudur2.rt1@demo.goverhub.test": "GET /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Görev bulunamadı.\"}}",
+ "mudur2.rt1@demo.goverhub.test sec": "POST /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa/report-evidence -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Görev bulunamadı.\"}}",
+ "dogrulayici2.rt1@demo.goverhub.test": "GET /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Görev bulunamadı.\"}}",
+ "dogrulayici2.rt1@demo.goverhub.test sec": "POST /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa/report-evidence -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Görev bulunamadı.\"}}",
+ "uzman@demo.goverhub.test": "GET /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"İşletme bulunamadı.\"}}",
+ "uzman@demo.goverhub.test sec": "POST /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa/report-evidence -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"İşletme bulunamadı.\"}}",
+ "mudur.rt1@demo.goverhub.test": {
+  "reportEvidence": {
+   "accepted": true,
+   "links": [
+    {
+     "id": "6b7ee41a-5513-4e11-aa3b-db729d1cca81",
+     "documentId": "3a1d578e-a3b3-41b0-9cc4-59feaa5eb4de",
+     "documentTitle": "Servis raporu · GM31-B soğutucu servisi · Servis sonrası sıcaklık doğrulaması",
+     "version": 2,
+     "fileSha256": "684431d55a9cff00f9ce353efb36a3c4696ab3d369761dcdfe714c0e8bc9f157",
+     "selectedBy": "Ahmet (işletme sahibi)",
+     "selectedAt": "2026-11-14T18:45:10.209Z",
+     "status": "active",
+     "counts": true,
+     "completionBasis": false,
+     "reason": null
+    },
+    {
+     "id": "fccd05e8-188c-4fe6-8497-e5205e7c415e",
+     "documentId": "3a1d578e-a3b3-41b0-9cc4-59feaa5eb4de",
+     "documentTitle": "Servis raporu · GM31-B soğutucu servisi · Servis sonrası sıcaklık doğrulaması",
+     "version": 1,
+     "fileSha256": "84cff38c80bb790ed32eb4e149ddbdf0e7e5596a691fc8fa348a6688e73153a3",
+     "selectedBy": "Ahmet (işletme sahibi)",
+     "selectedAt": "2026-11-14T18:42:58.623Z",
+     "status": "stale",
+     "counts": false,
+     "completionBasis": false,
+     "reason": "Yeni rapor sürümü (2) geldi; seçilen sürüm artık güncel değil. Yeni sürüm incelenip yeniden seçilmeli."
+    }
+   ],
+   "options": [
+    {
+     "documentId": "3a1d578e-a3b3-41b0-9cc4-59feaa5eb4de",
+     "requestId": "b80b7661-1863-4707-b118-1c151921ae38",
+     "requestTitle": "GM31-B soğutucu servisi · Servis sonrası sıcaklık doğrulaması",
+     "siteName": "Kadıköy Moda",
+     "versionId": "4f71d9d2-1e78-46eb-b074-e617ebea350c",
+     "version": 2,
+     "reason": null,
+     "selected": true
+    }
+   ]
+  },
+  "serviceReports": 1
+ },
+ "mudur.rt1@demo.goverhub.test sec": "POST /companies/7203c7b7-eb61-48d8-ac3b-57ffc9262835/tasks/613a7171-5c02-49c9-8a17-e4919cd9c6aa/report-evidence -> 404 {\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Rapor sürümü bulunamadı.\"}}"
+}

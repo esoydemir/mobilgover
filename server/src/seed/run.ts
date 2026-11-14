@@ -1,7 +1,7 @@
 import { loadConfig } from '../config';
 import { Db } from '../db/pool';
 import { topUpAllSites } from '../services/horizon';
-import { seedDemoCompany, seedDemoProvider, seedPlatform } from './demo';
+import { ensureReportRules, seedDemoCompany, seedDemoProvider, seedPlatform } from './demo';
 
 /**
  * Loads demo data into a demo deployment (DEMO_MODE=true only). Runs once:
@@ -36,6 +36,9 @@ try {
     console.log('Demo verisi yüklendi. Giriş adresleri (kod demo kutusundan alınır):');
     for (const [role, email] of Object.entries({ ...DEMO_EMAILS, provider: 'uzman@demo.goverhub.test' })) console.log(`  ${role.padEnd(15)} ${email}`);
   }
+  // GM-30 devamı: example rules whose document evidence accepts a reviewed service report. Added once; existing data is untouched.
+  const reportRules = await ensureReportRules(db);
+  if (reportRules) console.log(`Demo: ${reportRules} örnek servis raporu kuralı yayımlandı.`);
   // On every start: top up the next 30 days of tasks (adds missing ones; never changes or deletes).
   const r = await topUpAllSites(db, 30);
   console.log(`Demo görevleri: ${r.created} yeni görev eklendi (${r.sites} şube, önümüzdeki 30 gün).`);

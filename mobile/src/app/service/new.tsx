@@ -10,11 +10,11 @@ import { Card, Eyebrow, PrimaryButton, Tap } from '../../components/ui';
 import { C, tint, type } from '../../theme';
 
 type Category = { code: string; name: string; description: string; is_example: boolean };
-type Provider = { id: string; display_name: string; headline: string; city: string; verified_credentials: number };
+type Provider = { id: string; display_name: string; headline: string; city: string; district?: string | null; verified_credentials: number; reviewed_jobs?: number; rating?: number | null };
 
 /** The user describes the problem in their own words; the category is a routing choice, not a diagnosis. */
 export default function NewServiceRoute() {
-  const params = useLocalSearchParams<{ ncrId?: string; title?: string; category?: string; providerId?: string; providerName?: string; categories?: string }>();
+  const params = useLocalSearchParams<{ ncrId?: string; taskId?: string; title?: string; category?: string; providerId?: string; providerName?: string; categories?: string }>();
   const only = params.categories ? params.categories.split(',') : null;
   const { company, siteId, call } = useSession();
   const cats = useApi<Category[]>('/service-categories');
@@ -25,6 +25,10 @@ export default function NewServiceRoute() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [shareNcr, setShareNcr] = useState(false);
+  const [pickMany, setPickMany] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [fq, setFq] = useState('');
+  const [fcity, setFcity] = useState('');
   // Plain words → a suggested category (shown with the words it rests on; the user decides).
   const [sugg, setSugg] = useState<{ code: string; name: string; why: string }[]>([]);
   useEffect(() => {
@@ -36,22 +40,22 @@ export default function NewServiceRoute() {
   // What a specialist will see, built by the server from exactly these fields.
   type Preview = { audience: string; shown: { label: string; value: string }[]; afterAward: string[]; never: string[] };
   const [preview, setPreview] = useState<{ key: string; data: Preview } | null>(null);
-  const pkey = JSON.stringify([cat, title.trim(), description.trim(), city.trim(), shareNcr]);
+  const pkey = JSON.stringify([cat, title.trim(), description.trim(), city.trim(), shareNcr, chosen]);
   useEffect(() => {
     if (!company || !cat || title.trim().length < 3 || description.trim().length < 5 || city.trim().length < 2) { setPreview(null); return; }
     const t = setTimeout(() => {
       call<Preview>('POST', `/companies/${company.id}/service-requests/preview`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(),
-        ncrId: params.ncrId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null }).then(d => setPreview({ key: pkey, data: d })).catch(() => setPreview(null));
+        ncrId: params.ncrId ?? null, taskId: params.taskId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null, invitedProfileIds: chosen }).then(d => setPreview({ key: pkey, data: d })).catch(() => setPreview(null));
     }, 300);
     return () => clearTimeout(t);
   }, [pkey, company, siteId, call]); // eslint-disable-line react-hooks/exhaustive-deps
   const previewReady = preview?.key === pkey;
-  const providers = useApi<Provider[]>(company && cat ? `/companies/${company.id}/providers?category=${cat}` : null);
+  const providers = useApi<Provider[]>(company && cat ? `/companies/${company.id}/providers?category=${cat}${fq.trim() ? `&q=${encodeURIComponent(fq.trim())}` : ''}${fcity.trim() ? `&city=${encodeURIComponent(fcity.trim())}` : ''}` : null);
 
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await call<{ id: string }>('POST', `/companies/${company!.id}/service-requests`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(), ncrId: params.ncrId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null });
+      const r = await call<{ id: string }>('POST', `/companies/${company!.id}/service-requests`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(), invitedProfileIds: chosen, ncrId: params.ncrId ?? null, taskId: params.taskId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null });
       router.replace(`/service/${r.id}`);
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };
@@ -85,6 +89,37 @@ export default function NewServiceRoute() {
         </Tap>
       ))}
       {cat && providers.data && !params.providerId ? <Text style={type(12, 500, { color: providers.data.length ? C.t2 : C.warn })}>{providers.data.length ? `Bu kategoride onaylı ${providers.data.length} uzman var.` : 'Bu kategoride henüz onaylı uzman yok; talep yine de açılır.'}</Text> : null}
+      {cat && !params.providerId ? (
+        <Card style={{ gap: 8 }}>
+          <Eyebrow>KİMDEN TEKLİF İSTENSİN?</Eyebrow>
+          <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
+            <Tap testID="svc-to-open" onPress={() => { setPickMany(false); setChosen([]); }} style={{ paddingHorizontal: 13, height: 36, borderRadius: 999, justifyContent: 'center', borderWidth: 1, borderColor: !pickMany ? tint.lime(0.5) : C.bd }}>
+              <Text style={type(12, 600, { color: !pickMany ? C.lime : C.t2 })}>Açık pazara yayınla</Text>
+            </Tap>
+            <Tap testID="svc-to-selected" onPress={() => setPickMany(true)} style={{ paddingHorizontal: 13, height: 36, borderRadius: 999, justifyContent: 'center', borderWidth: 1, borderColor: pickMany ? tint.lime(0.5) : C.bd }}>
+              <Text style={type(12, 600, { color: pickMany ? C.lime : C.t2 })}>Seçtiğim uzmanlara gönder</Text>
+            </Tap>
+          </View>
+          {pickMany ? (
+            <>
+              <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>2 ile 5 uzman seç; yalnız onlar talebi görür ve teklifler aynı sırayla karşılaştırılır. Dil ve müsaitlik bilgisi uzman profillerinde henüz tutulmuyor.</Text>
+              <Field label="Ara (ad, başlık, tanıtım)" testID="svc-pf-q" value={fq} onChangeText={setFq} />
+              <Field label="Şehir ile daralt" testID="svc-pf-city" value={fcity} onChangeText={setFcity} />
+              {(providers.data ?? []).map(p => {
+                const on = chosen.includes(p.id);
+                return (
+                  <Tap key={p.id} testID={`svc-pick-${p.id}`} onPress={() => setChosen(c => on ? c.filter(x => x !== p.id) : c.length < 5 ? [...c, p.id] : c)}
+                    style={{ borderWidth: 1, borderColor: on ? tint.lime(0.5) : C.bd, borderRadius: 16, padding: 11, gap: 2 }}>
+                    <Text style={type(13, 600, { color: on ? C.lime : C.t1 })}>{on ? '✓ ' : ''}{p.display_name}</Text>
+                    <Text style={type(11.5, 400, { color: C.t2 })}>{p.headline} · {[p.city, p.district].filter(Boolean).join(' / ')} · {p.verified_credentials} doğrulanmış belge{p.reviewed_jobs ? ` · ${p.reviewed_jobs} değerlendirilmiş iş (${p.rating})` : ''}</Text>
+                  </Tap>
+                );
+              })}
+              <Text testID="svc-chosen-count" style={type(12, 600, { color: chosen.length === 1 ? C.warn : C.t2 })}>{chosen.length === 1 ? 'Bir uzman seçtin; tek uzman için profilinden "Teklif iste" kullan ya da en az 2 seç.' : `${chosen.length} uzman seçildi`}</Text>
+            </>
+          ) : null}
+        </Card>
+      ) : null}
       <Field label="Şehir" value={city} onChangeText={setCity} />
       <Card style={{ gap: 8 }}>
         <Eyebrow>UZMANLARLA NE PAYLAŞILIR?</Eyebrow>
@@ -106,7 +141,7 @@ export default function NewServiceRoute() {
         </Card></View>
       ) : cat && title.trim().length >= 3 && description.trim().length >= 5 ? <Text style={type(11.5, 400, { color: C.t3 })}>Önizleme hazırlanıyor… Bağlantı yoksa talep gönderilemez.</Text> : null}
       {error ? <ErrorBox message={error} /> : null}
-      <PrimaryButton testID="svc-submit" label={busy ? 'Gönderiliyor…' : 'Önizlemeyi gördüm · talebi aç'} disabled={busy || !cat || title.trim().length < 3 || description.trim().length < 5 || !previewReady} onPress={submit} />
+      <PrimaryButton testID="svc-submit" label={busy ? 'Gönderiliyor…' : 'Önizlemeyi gördüm · talebi aç'} disabled={busy || !cat || title.trim().length < 3 || description.trim().length < 5 || !previewReady || (pickMany && chosen.length < 2)} onPress={submit} />
     </Screen>
   );
 }

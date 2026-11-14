@@ -14,7 +14,7 @@ export const DOC_TYPE: Record<string, string> = {
 export const DOC_STATUS: Record<string, [string, string, string]> = {
   no_file: ['DOSYA YOK', C.t2, tint.white(0.08)],
   file_pending: ['DOSYA YÜKLENMEDİ', C.warn, tint.warn(0.14)],
-  unreviewed: ['İNCELENMEDİ', C.warn, tint.warn(0.14)],
+  unreviewed: ['İNCELEME BEKLİYOR', C.warn, tint.warn(0.14)],
   internally_reviewed: ['KURUM İÇİ İNCELENDİ', C.info, tint.info(0.14)],
   issuer_verified: ['KURUMDAN DOĞRULANDI · KİŞİ KAYDI', C.lime, tint.lime(0.14)],
   rejected: ['REDDEDİLDİ', C.crit, tint.crit(0.14)],

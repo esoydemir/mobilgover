@@ -14,6 +14,9 @@ export default function MoreRoute() {
   const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
   const verifier = !!company?.grants?.some(g => g.scopes.includes('ncr_verify'));
   const items: Item[] = [
+    { icon: '🛒', label: 'Pazar', sub: 'Uzmanlar / servisler, teklifler, profesyonel akış', href: '/market', show: manager },
+    { icon: '₺', label: 'Ceza ve yasal risk', sub: 'Açık risk kalemleri; ceza tutarı modellenmedi', href: '/risk', show: manager },
+    { icon: '📊', label: 'Rapor ve denetim dosyası', sub: 'Uyum göstergeleri, PDF denetim dosyası', href: '/report', show: manager },
     { icon: '📋', label: 'Yükümlülükler', sub: 'Neden uygulandığı, kaynak ve kural sürümü', href: '/obligations', show: manager },
     { icon: '🧭', label: 'Bugün · yönetici ekranı', sub: 'Kritik riskler, gecikmeler, doğrulama, belge süreleri, tekrarlar', href: '/board', show: manager },
     { icon: '📌', label: 'Bana atananlar', sub: 'Açık aksiyonların, geciken kontrollerin, sorumlusu olduğun kayıtlar', href: '/board', show: role === 'staff' },
@@ -22,11 +25,13 @@ export default function MoreRoute() {
     { icon: '🎓', label: 'Eğitimler', sub: 'Atanan eğitimler, içerikler, sahada etkinlik', href: '/trainings', show: !!role },
     { icon: '⚠️', label: 'Uygunsuzluklar', sub: 'Sorun bildir, sorumlu ve termin, neden, aksiyon, doğrulama', href: '/ncrs' },
     { icon: '🗂️', label: 'Belge kasası', sub: 'Ruhsat, sertifika, rapor; sürüm, inceleme ve süre hatırlatması', href: '/documents', show: manager },
-    { icon: '🧑‍🔧', label: 'Hizmet talepleri', sub: 'Uzman bul, teklif karşılaştır, teslim kabul', href: '/services', show: manager },
+    { icon: '🧑‍🔧', label: 'Uzman bul · hizmet talepleri', sub: 'Talep aç, teklifleri karşılaştır, teslim kabul', href: '/services', show: manager },
     { icon: '🏢', label: 'İşletme profili', sub: 'Yükümlülükleri belirleyen yanıtlar', href: '/profile', show: role === 'owner' || role === 'hq_manager' },
     { icon: '🧭', label: 'Dış doğrulayıcılar', sub: 'Sınırlı ve süreli bağımsız doğrulama izni', href: '/verifiers', show: role === 'owner' || role === 'hq_manager' },
     { icon: '👥', label: 'Ekip', sub: 'Şube yöneticisi ve personel ekle', href: '/team', show: role === 'owner' || role === 'hq_manager' },
     { icon: '🧊', label: 'Ekipmanlar', sub: 'Soğutucular ve ölçüm cihazları', href: '/equipment', show: manager },
+    { icon: '📷', label: 'QR kodu okut', sub: 'Ekipman ya da belge kodunu gir; yalnız yetkin olan kayıt açılır', href: '/scan' },
+    { icon: '💬', label: 'Kaynaklı asistan', sub: 'Belge, görev ve yükümlülüklerinden kaynak göstererek yanıt', href: '/assistant', show: !!role },
     { icon: '🔄', label: 'Eşitleme', sub: 'Cihazda bekleyen kayıtlar', href: '/sync', badge: ops.length },
     { icon: '🤝', label: 'Mesleki ağ', sub: 'Profil, uzman arama, takip, paylaşım ve yorum', href: '/network' },
     { icon: '🚩', label: 'Ağ moderasyonu', sub: 'Şikâyetler, gerekçeli kararlar', href: '/moderation', show: !!me?.platformRoles.includes('network_moderator') },

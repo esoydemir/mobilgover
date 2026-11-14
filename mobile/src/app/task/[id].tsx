@@ -5,7 +5,9 @@ import { useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useQueue, type Op } from '../../api/queue';
 import { useSession } from '../../api/session';
-import type { Requirement, TaskDetail } from '../../api/types';
+import type { Requirement, TaskDetail, TaskRow } from '../../api/types';
+import { errorText } from '../../api/client';
+import { quantityLabel, quantityTitle } from '../../features/quantity-label';
 import { useApi } from '../../api/useApi';
 import { CameraIcon, WarnIcon } from '../../components/Icons';
 import { Screen } from '../../components/Screen';
@@ -13,6 +15,7 @@ import { ErrorBox, ExampleBadge, Field, Loading, StaleNote } from '../../compone
 import { Card, Chevron, Eyebrow, GhostButton, PrimaryButton, Rise, SevPill, Tap } from '../../components/ui';
 import { AssignCard } from '../../features/AssignCard';
 import { fmtDateTime } from '../../features/dates';
+import { bucketTasks, taskWindowPath } from '../../features/work';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
 
@@ -35,6 +38,8 @@ export default function TaskDetailRoute() {
   const base = `/companies/${company?.id}`;
   const q = useApi<TaskDetail>(company ? `${base}/tasks/${id}` : null);
   const instruments = useApi<Instrument[]>(company && siteId && role !== 'staff' ? `${base}/sites/${siteId}/equipment` : null);
+  // History of the same check (same title and unit) in the shared task window: done / nonconforming / late.
+  const windowed = useApi<TaskRow[]>(company && siteId ? taskWindowPath(base, siteId) : null);
   const t = q.data;
   const local = ops.filter(o => o.taskId === id);
   const completing = local.find(o => o.path.endsWith('/complete'));
@@ -78,6 +83,23 @@ export default function TaskDetailRoute() {
         </View>
         <Chevron size={14} />
       </Tap>
+
+      <TaskWhy t={t} role={role} />
+      <ReportEvidence t={t} base={base} onChanged={q.reload} />
+
+      {windowed.data ? (() => {
+        const same = bucketTasks(windowed.data).all.filter(x => x.id !== t.id && x.title === t.title && (x.equipment_name ?? null) === (t.equipment?.name ?? null) && new Date(x.due_at) <= new Date());
+        const bad = same.filter(x => x.outcome === 'nonconforming').length;
+        const late = same.filter(x => x.status === 'missed' || (x.status === 'open' && new Date(x.due_at) < new Date())).length;
+        return (
+          <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
+            <Eyebrow>GEÇMİŞ · SON 14 GÜN</Eyebrow>
+            <Text testID="task-history" style={type(12.5, 500, { color: bad || late ? C.warn : C.t2, lh: 1.45 })}>
+              {same.length === 0 ? 'Bu kontrol için önceki kayıt yok.' : `${same.length} önceki kayıt · ${bad} uygunsuz · ${late} gecikmiş/kaçırılmış${bad >= 2 ? ' · tekrar eden uygunsuzluk' : ''}`}
+            </Text>
+          </Card>
+        );
+      })() : null}
 
       {t.status === 'done' && (
         <Card border={t.outcome === 'nonconforming' ? tint.crit(0.35) : tint.lime(0.3)}>
@@ -154,7 +176,7 @@ export default function TaskDetailRoute() {
       )}
 
       {open && t.progress.missing.length > 0 && local.length === 0 && (
-        <Text style={type(12, 400, { lh: 1.5, color: C.t3 })}>Eksik kanıt: {t.progress.missing.join(' · ')}</Text>
+        <Text testID="task-missing" style={type(12, 400, { lh: 1.5, color: C.t3 })}>Eksik kanıt: {t.progress.missing.join(' · ')}</Text>
       )}
       {open ? (
         <PrimaryButton testID="task-complete" label={canComplete ? 'Görevi tamamla' : 'Kanıt bekleniyor'} disabled={!canComplete}
@@ -164,6 +186,154 @@ export default function TaskDetailRoute() {
       ) : null}
       {open ? <Text style={[type(11.5, 400, { color: C.t3 }), { textAlign: 'center' }]}>Zorunlu kanıt eksikse sunucu görevi kapatmaz.</Text> : null}
     </Screen>
+  );
+}
+
+const REQ_TEXT = (r: Requirement) => r.kind === 'measurement' ? `${quantityTitle(r.quantity)} ölçümü gir (${r.unit})`
+  : r.kind === 'photo' ? `En az ${r.min} fotoğraf ekle` : r.kind === 'document' ? `En az ${r.min} belge ekle${r.acceptsServiceReport ? ' ya da incelenmiş servis raporunu seç' : ''}`
+  : r.kind === 'checklist' ? `Kontrol listesini yanıtla (${r.items.length} madde)` : r.kind === 'note' ? 'Açıklama yaz' : 'Yetkili onayı al';
+const SEVERITY_RISK = { critical: "Kritik kontrol: süresi geçerse Risk Merkezi'nde kritik kalem olur ve denetimde kayıt eksikliği olarak görülebilir.",
+  major: "Önemli kontrol: süresi geçerse gecikmiş kontrol olarak Risk Merkezi'ne düşer.", minor: 'İyileştirme kontrolü: süresi geçerse gecikmiş olarak görünür.' } as const;
+
+/** Why the task exists, its legal basis, dates, who is responsible, what happens if it is not done, what to do and which services were asked for. */
+/**
+ * The rule of this task accepts a service report as its document evidence: choose a reviewed latest version instead of uploading the
+ * file again. Other steps (measurement, note, photo, approval) stay required, so the missing ones are named here. A closed task shows
+ * the version it rested on.
+ */
+function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; onChanged: () => void }) {
+  const { call } = useSession();
+  const { showToast } = useUi();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const re = t.reportEvidence;
+  if (!re || !re.accepted) return null;
+  const open = t.status === 'open';
+  const missing = t.progress.missing;
+  const use = async (o: NonNullable<TaskDetail['reportEvidence']>['options'][number]) => {
+    setBusy(o.documentId); setError(null);
+    try {
+      await call('POST', `${base}/tasks/${t.id}/report-evidence`, { documentId: o.documentId, versionId: o.versionId });
+      showToast('Servis raporu göreve bağlandı', `Sürüm ${o.version} belge kanıtı olarak kullanılacak.`, 'ok');
+      onChanged();
+    } catch (e) { setError(errorText(e)); } finally { setBusy(null); }
+  };
+  const basis = re.links.filter(l => l.completionBasis);
+  return (
+    <View testID="task-report-evidence"><Card radius={22} border={tint.info(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Eyebrow color={C.info}>SERVİS RAPORUNU KANIT OLARAK KULLAN</Eyebrow>
+      {!open ? (
+        basis.length ? basis.map(l => (
+          <Text key={l.id} testID="task-report-basis" style={type(12.5, 500, { lh: 1.45 })}>
+            Görev şu rapor sürümüne dayanarak kapandı: {l.documentTitle} · sürüm {l.version} ({fmtDateTime(l.selectedAt)}, {l.selectedBy} seçti){l.fileSha256 ? ` · özet ${l.fileSha256.slice(0, 12)}…` : ''}
+          </Text>
+        )) : <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görev kendi yüklenen belgesiyle kapandı; servis raporuna dayanmadı.</Text>
+      ) : (
+        <>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görevin kuralı belge kanıtı yerine incelenmiş servis raporunu kabul eder. Yalnız aynı şubenin, bu göreve bağlı servisin, olumlu incelenmiş güncel rapor sürümü seçilebilir; dosyayı yeniden yüklemen gerekmez.</Text>
+          {re.options.length === 0 ? <Text testID="task-report-none" style={type(12, 500, { color: C.t3, lh: 1.45 })}>Bu göreve bağlı servis raporu yok. Servis talebini görevden aç ya da belgeyi kendin yükle.</Text> : null}
+          {re.options.map(o => (
+            <View key={o.documentId} testID={`task-report-option-${o.documentId}`} style={{ gap: 4 }}>
+              <Text style={type(13, 600, { lh: 1.35 })}>{o.requestTitle}</Text>
+              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {o.siteName} · güncel sürüm {o.version}</Text>
+              {o.selected ? <Text testID={`task-report-selected-${o.documentId}`} style={type(12, 600, { color: C.lime })}>Seçili: sürüm {o.version} göreve bağlı</Text>
+                : o.reason ? <Text testID={`task-report-reason-${o.documentId}`} style={type(12, 500, { color: C.warn, lh: 1.45 })}>Seçilemez: {o.reason}</Text>
+                : <PrimaryButton testID={`task-report-use-${o.documentId}`} label="İncelenmiş servis raporunu kanıt olarak kullan" disabled={busy !== null} onPress={() => use(o)} />}
+            </View>
+          ))}
+          {re.links.filter(l => !l.counts && l.reason).map(l => (
+            <Text key={l.id} testID="task-report-stale" style={type(12, 500, { color: C.warn, lh: 1.45 })}>Sürüm {l.version} artık sayılmıyor: {l.reason}</Text>
+          ))}
+          {missing.length > 0 ? (
+            <Text testID="task-report-missing" style={type(12, 600, { color: C.warn, lh: 1.5 })}>
+              Görevin kapanması için kalan adımlar: {missing.join(' · ')}. Servis raporu yalnız belge adımını karşılar.
+            </Text>
+          ) : <Text testID="task-report-ready" style={type(12, 600, { color: C.lime, lh: 1.45 })}>Tüm kanıt adımları tamam; görevi tamamlayabilirsin.</Text>}
+          {error ? <Text testID="task-report-error" style={type(12, 500, { color: C.crit, lh: 1.45 })}>{error}</Text> : null}
+        </>
+      )}
+    </Card></View>
+  );
+}
+
+const REVIEW_TR = { unreviewed: ['İNCELEME BEKLİYOR', C.warn], verified: ['İNCELENDİ', C.lime], rejected: ['KABUL EDİLMEDİ', C.crit] } as const;
+/** Report files the experts delivered for this task's services: site, request, review state, versions; the task stays open until the latest is reviewed. */
+function ServiceReports({ t }: { t: TaskDetail }) {
+  const sr = t.serviceReports;
+  if (!sr || sr.reports.length === 0) return null;
+  return (
+    <View testID="task-reports"><Card radius={22} border={sr.blocked ? tint.warn(0.3) : tint.lime(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Eyebrow color={sr.blocked ? C.warn : C.lime}>SERVİS RAPORU</Eyebrow>
+      {sr.reports.map(r => (
+        <View key={r.documentId} testID={`task-report-${r.documentId}`} style={{ gap: 4 }}>
+          <Text style={type(13, 600, { lh: 1.35 })}>{r.requestTitle}</Text>
+          <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {r.siteName} · Uzman: {r.providerName}</Text>
+          {r.versions.map(v => (
+            <Text key={v.version} style={type(11.5, v.isLatest ? 600 : 400, { color: v.isLatest ? C.t1 : C.t3, lh: 1.45 })}>
+              Sürüm {v.version}{v.isLatest ? ' · SON SÜRÜM' : ' · önceki'} · <Text style={{ color: REVIEW_TR[v.reviewStatus][1] }}>{REVIEW_TR[v.reviewStatus][0]}</Text>{v.reviewNotes ? ` · ${v.reviewNotes}` : ''}
+            </Text>
+          ))}
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <GhostButton testID={`task-report-open-${r.documentId}`} label="Raporu belge kasasında aç" height={36} size={12} onPress={() => router.push(`/documents/${r.documentId}` as never)} />
+            <GhostButton label="Servis talebi" height={36} size={12} onPress={() => router.push(`/service/${r.requestId}` as never)} />
+          </View>
+        </View>
+      ))}
+      <Text testID="task-reports-note" style={type(11.5, 500, { color: sr.blocked ? C.warn : C.lime, lh: 1.45 })}>
+        {sr.blocked ? `Görev açık kalır: ${sr.reason ?? 'rapor dosyası incelenmedi.'} Teslim kabulü dosyanın doğrulandığı anlamına gelmez.` : t.status === 'open' ? 'Son rapor sürümü incelendi; görev diğer kanıtlar tamamlanınca kapatılabilir.' : 'Görev kapalı; sonradan gelen rapor revizyonları kapanış kaydını değiştirmez.'}
+      </Text>
+    </Card></View>
+  );
+}
+
+function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
+  const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
+  const hasLimit = t.requirements.some(r => r.kind === 'measurement');
+  return (
+    <>
+      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
+        <Eyebrow>NEDEN GEREKLİ</Eyebrow>
+        <Text testID="task-why" style={type(13, 600, { lh: 1.4 })}>{t.rule.title ?? t.title}</Text>
+        {t.rule.summary ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{t.rule.summary}</Text> : null}
+        <Text testID="task-legal" style={type(11.5, 500, { color: t.legalBasis?.length ? C.t2 : C.warn, lh: 1.45 })}>
+          {t.legalBasis?.length ? t.legalBasis.map(p => `${p.source_title}${p.issuer ? ` (${p.issuer})` : ''} · ${p.ref}${p.is_example ? ' · ÖRNEK KAYNAK' : ''}`).join(' · ')
+            : 'Doğrulanmış yasal dayanak kaydı yok (örnek kural); bu görev yasal zorunluluk olarak sunulmaz.'}
+        </Text>
+      </Card>
+      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+        <Eyebrow>TARİHLER VE SORUMLU</Eyebrow>
+        <Text testID="task-dates" style={type(12.5, 500, { color: C.t2, lh: 1.55 })}>
+          {`Son tamamlanma: ${t.lastCompletedAt ? fmtDateTime(t.lastCompletedAt) : 'henüz tamamlanmadı'}
+Bu kontrolün son tarihi: ${fmtDateTime(t.dueAt)}
+Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonraki yok'}`}
+        </Text>
+        <Text testID="task-owner" style={type(12.5, 600, { color: t.assignee ? C.t1 : C.warn })}>{t.assignee ? `Sorumlu: ${t.assignee.name ?? 'atanan kişi'}` : `Sorumlu atanmadı${t.seriesResponsible ? ` · seri sorumlusu: ${t.seriesResponsible.name}` : ''}`}</Text>
+      </Card>
+      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+        <Eyebrow>YAPILACAKLAR</Eyebrow>
+        {t.requirements.map((r, i) => <Text key={i} style={type(12.5, 500, { color: C.t2, lh: 1.45 })}>{i + 1}. {REQ_TEXT(r)}</Text>)}
+        <Text style={type(12.5, 500, { color: C.t2, lh: 1.45 })}>{t.requirements.length + 1}. Görevi tamamla; kanıt eksikse sunucu kapatmaz.</Text>
+      </Card>
+      <Card radius={22} border={tint.warn(0.25)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+        <Eyebrow color={C.warn}>TAMAMLANMAZSA</Eyebrow>
+        <Text testID="task-risk" style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>{SEVERITY_RISK[t.severity]}{hasLimit ? ' Ölçüm limit dışı çıkarsa uygunsuzluk açılır ve takip gerekir.' : ''}</Text>
+        <Text style={type(11.5, 500, { color: C.t3 })}>Olası ceza tutarı: modellenmedi (doğrulanmış ceza tablosu yok).</Text>
+      </Card>
+      <ServiceReports t={t} />
+      {manager || (t.services?.length ?? 0) > 0 ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+          <Eyebrow>SERVİS</Eyebrow>
+          {(t.services ?? []).length === 0 ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Bu görev için servis talebi yok.</Text> : null}
+          {(t.services ?? []).map(sv => (
+            <Tap key={sv.id} testID={`task-service-${sv.id}`} onPress={() => router.push(`/service/${sv.id}`)}>
+              <Text style={type(12.5, 600, { color: C.info })}>{sv.title} · {({ open: 'teklif bekliyor', awarded: 'iş verildi', completed: 'tamamlandı', cancelled: 'iptal' } as Record<string, string>)[sv.status] ?? sv.status} ›</Text>
+            </Tap>
+          ))}
+          {manager && t.status === 'open' ? <GhostButton testID="task-find-service" label="Servis bul" height={40} size={12.5} color={C.lime} border={tint.lime(0.35)}
+            onPress={() => router.push(`/service/new?taskId=${t.id}&title=${encodeURIComponent(`${t.title}${t.equipment ? ` · ${t.equipment.name}` : ''}`)}` as never)} /> : null}
+        </Card>
+      ) : null}
+    </>
   );
 }
 
@@ -188,7 +358,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>ÖLÇÜM · ZORUNLU</Eyebrow>
-        <Text style={[type(13, 600), { marginTop: 10 }]}>{r.quantity === 'temperature' ? 'Ölçülen sıcaklık' : r.quantity} ({r.unit})</Text>
+        <Text style={[type(13, 600), { marginTop: 10 }]}>Ölçülen {quantityLabel(r.quantity)} ({r.unit})</Text>
         <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 3 }]}>
           {limit ? `Kabul aralığı: ${limit.min ?? '—'} … ${limit.max ?? '—'} ${limit.unit}${limit.basis === 'example' ? ' · ÖRNEK LİMİT, doğrulanmadı' : ''}` : 'Bu ekipman için limit tanımlı değil; sunucu kaydı reddeder.'}
         </Text>
