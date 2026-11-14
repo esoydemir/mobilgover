@@ -45,7 +45,7 @@ export default function RiskRoute() {
         <Eyebrow color={r.counts.crit ? C.crit : undefined}>AÇIK RİSK KALEMİ</Eyebrow>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
           <Text testID="risk-total" style={type(40, 600, { family: 'outfit', ls: -0.04, color: r.counts.crit ? C.crit : C.t1 })}>{r.ready ? r.counts.all : '—'}</Text>
-          <Text style={type(13, 500, { color: C.t2 })}>{r.counts.crit ? `${r.counts.crit} kritik` : 'kritik yok'}</Text>
+          <Text style={type(13, 500, { color: C.t2 })}>{r.counts.crit ? `${r.counts.crit} kritik` : 'kritik kalem yok'}</Text>
         </View>
         <Text testID="risk-penalty-note" style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>{PENALTY_NOTE}</Text>
       </Card>

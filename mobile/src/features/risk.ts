@@ -65,7 +65,7 @@ export function useRiskItems(scope: 'site' | 'all' = 'site') {
       const sev: RiskSev = t.severity === 'critical' ? 'crit' : t.severity === 'major' ? 'imp' : 'low';
       out.push({ key: `task-${t.id}`, kind: 'task', sev, title: t.title, basis: 'Zamanında yapılmamış kontrol', siteId: t.site_id,
         sub: `${t.equipment_name ? `${t.equipment_name} · ` : ''}${t.status === 'missed' ? 'kaçırıldı' : 'gecikmiş'} · son tarih ${fmtDate(t.due_at)}`,
-        href: `/task/${t.id}`, rank: SEV_RANK[sev] });
+        href: `/task/${t.id}`, service: t.equipment_name ? svc(`${t.title} · ${t.equipment_name}`) : undefined, rank: SEV_RANK[sev] });
     }
     for (const d of docs.data ?? []) {
       if (site && d.siteId && d.siteId !== site) continue;
