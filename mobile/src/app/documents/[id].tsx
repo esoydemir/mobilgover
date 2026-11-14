@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { errorText } from '../../api/client';
@@ -64,6 +64,13 @@ export default function DocumentRoute() {
             ) : null}
           </Card>
           {!d.permissions.write && !d.siteId ? <Text style={type(11.5, 400, { color: C.t3 })}>Bu işletme geneli belge şubenle paylaşıldı: yalnız okuyabilirsin.</Text> : null}
+          {(d.status === 'expired' || d.expiring || d.status === 'no_file' || d.status === 'rejected') && d.permissions.write ? (
+            <Card style={{ gap: 8 }}>
+              <Eyebrow>UZMAN DESTEĞİ</Eyebrow>
+              <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Bu belgeyi yenilemek ya da eksiğini tamamlamak için doğrulanmış uzmandan teklif iste. Teklif kabul etmeden iş başlamaz.</Text>
+              <PrimaryButton testID="doc-find-service" label="Servis bul" height={44} size={13.5} onPress={() => router.push(`/service/new?title=${encodeURIComponent(`${d.title} · yenileme / uygunluk desteği`)}` as Href)} />
+            </Card>
+          ) : null}
           {err ? <ErrorBox message={err} /> : null}
           <UsesCard d={d} onDone={q.reload} />
           {d.permissions.share ? <ShareCard d={d} onDone={q.reload} /> : null}
