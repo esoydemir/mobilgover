@@ -16,6 +16,7 @@ import * as depth from '../services/market-depth';
 import * as qr from '../services/qr';
 import * as extraction from '../services/extraction';
 import { ask as askAssistant } from '../services/assistant';
+import * as padmin from '../services/platform-admin';
 import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
@@ -747,9 +748,24 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return institutionView(q);
   });
   app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
-  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); await db.system(tx => approve(tx, req.principal, rvId(req))); return { ok: true }; });
+  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason ?? null)); return { ok: true }; });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
-  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules })); });
+  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason ?? null })); });
+
+  // ── Platform administration: overview, audit trail, platform roles ──
+  app.get('/admin/overview', async req => { platformGate(req); return db.system(tx => padmin.overview(tx, req.principal)); });
+  app.get('/admin/audit', async req => {
+    platformGate(req);
+    const q = z.object({ companyId: uuid.optional(), scope: z.enum(['platform', 'all']).optional(), eventType: z.string().max(60).optional(), actorId: uuid.optional(),
+      before: z.coerce.number().int().positive().optional(), limit: z.coerce.number().int().min(1).max(200).optional() }).parse(req.query);
+    return db.system(tx => padmin.listAudit(tx, req.principal, q));
+  });
+  app.get('/admin/platform-users', async req => { platformGate(req); const { q } = z.object({ q: z.string().max(80).optional() }).parse(req.query); return db.system(tx => padmin.listPlatformUsers(tx, req.principal, q)); });
+  app.post('/admin/platform-roles', async req => {
+    platformGate(req);
+    const b = z.object({ userId: uuid, role: z.enum(['rule_author', 'rule_reviewer', 'platform_admin', 'marketplace_reviewer', 'network_moderator']), grant: z.boolean(), reason: z.string().max(500) }).parse(req.body);
+    return db.system(tx => padmin.setPlatformRole(tx, req.principal, b));
+  });
 
   // ── Marketplace: categories and public profiles ──
   app.get('/service-categories', async () => db.system(async tx => (await tx.query(`SELECT * FROM service_categories ORDER BY name`)).rows));

@@ -47,3 +47,21 @@ Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESL
 
 **Grup 4 kanıtı:** tam sunucu takımı 37 dosya, 312 test geçti (backup-restore hariç); sunucu ve mobil `tsc` temiz.
 **Açık kalan (Grup 4):** kamerayla QR okuma cihaz gerektirir, doğrulanmadı (kod/bağlantı girişi var). Pilotta OCR motoru yok: metin yapıştırılır ya da cihaz metninden gelir; sunucu yalnız öneri çıkarır. Asistan geri getirme tabanlıdır, dil modeli yok.
+
+## Grup 5 — Platform yönetimi ve ödeme
+| Madde | Senaryo | Kabul ölçütü | Durum |
+|---|---|---|---|
+| Süper yönetici ekranı (mevcut rol yapısı üzerinde) | `/admin`: genel durum, platform rolleri, denetim kaydı | Genel durum herhangi bir platform rolüne; rol yönetimi ve denetim okuma yalnız `platform_admin`; şirket kullanıcısı 403; MFA kapısı aynı | tamam — `platform-admin.test.ts` (6) |
+| Platform rolü ver/kaldır | Kullanıcı ara, rol seç, gerekçe yaz | Gerekçe ≥10 karakter (422); kendi rolünü değiştiremez (403); son platform yöneticisi kaldırılamaz (409); aynı değişiklik tekrar edilirse etkisiz; platform zincirine `platform.role_granted/revoked` | tamam |
+| Kim, ne zaman, ne yaptı, neden | Denetim kaydı: platform zinciri + tüm işletme zincirleri, olay önekiyle süzülür | Aktör adı, zaman, işletme, **gerekçe**; gerekçe yoksa "Gerekçe kaydedilmemiş" yazar, uydurulmaz | tamam |
+| Kural kararlarında gerekçe | Alan incelemesi, onay, yayın | Gerekçe denetim kaydına yazılır. **Onay/yayında gerekçe isteğe bağlı**: mevcut istemciler gövdesiz çağırıyor; ekran not alanını gönderiyor | kısmi (açık madde) |
+| Ödeme | — | Sağlayıcı seçilmedi; ürün kararı "ödeme uygulama dışında, kart verisi tutulmaz" (`payment_status = not_in_scope`) | **açık — sağlayıcı kararı bekliyor** |
+
+**Grup 5 kanıtı:** `platform-admin.test.ts` 6/6; sunucu ve mobil `tsc` temiz; migrasyon 022 yalnızca `platform_roles` için `DELETE` yetkisi veriyor.
+**Ödeme — gerçek bağlantı koşulları (yapılmadı, uydurulmadı):**
+1. Sağlayıcı seçimi (sahibin kararı); test ortamı ancak sağlayıcı hesabı ve test anahtarıyla doğrulanabilir. Sağlayıcı seçilmeden "test ortamında doğrulandı" denemez; bu turda hiçbir sağlayıcıya bağlanılmadı.
+2. Tüzel kişi/ticari hesap, canlı anahtar ve harcama yetkisi sahibe aittir.
+3. Karar verilmesi gereken: ödeme yalnız tahsilat mı, emanet/hakediş mi; komisyon; fatura; iade/uyuşmazlık. `not_in_scope` kısıtı ve "GoverHub ödeme almaz" metni kalkmadan arayüze ödeme eklenmez.
+4. Sağlayıcı seçilince yapılacaklar: webhook imza doğrulaması ve idempotent olay defteri, sandbox'ta başarılı/başarısız/iade senaryoları, kart verisinin yalnızca sağlayıcı sayfasında girilmesi.
+
+**Not (tam takım):** Grup 5 sonrası tam takım ilk koşuda tek bir sıralama dalgalanması gösterdi (`market-depth`: aynı milisaniyede yazılan iki randevu satırı); sıralamaya `decided_at` ikinci anahtar olarak eklendi. Sonraki tam koşu 38/38 dosya geçti.

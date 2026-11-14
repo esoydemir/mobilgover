@@ -8,6 +8,7 @@ import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, SectionLabel } from '../components/states';
 import { Card, FilterChip, GhostButton, PrimaryButton } from '../components/ui';
 import { credentialLabel } from '../features/labels';
+import { AuditTrail, PlatformOverview, PlatformRoles } from '../features/PlatformAdmin';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
@@ -43,6 +44,7 @@ export default function AdminRoute() {
         </View>
       ) : null}
       {error ? <ErrorBox message={error} /> : null}
+      {!mfaMissing && roles.length > 0 ? <PlatformOverview /> : null}
       <Field label="Not / gerekçe (inceleme ve kararlar için)" value={note} onChangeText={setNote} placeholder="ör. Kaynak metinle karşılaştırıldı" />
 
       {rules.data || rules.error ? (
@@ -68,11 +70,11 @@ export default function AdminRoute() {
                       onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/area-review`, { area: a, decision: 'approved', notes: note.trim() }), 'Alan incelemesi kaydedildi')} />
                   ))}
                   <PrimaryButton label="Kuralı onayla" height={42} size={12.5} glow={false} disabled={r.pendingAreaReviews.length > 0}
-                    onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/approve`), 'Kural onaylandı')} />
+                    onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/approve`, { reason: note.trim() || null }), 'Kural onaylandı')} />
                 </View>
               ) : null}
               {r.status === 'approved' ? (
-                <PrimaryButton label="Yayınla" height={42} size={12.5} glow={false} onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/publish`), 'Yayınlandı; işletmeler yeniden değerlendirildi')} />
+                <PrimaryButton label="Yayınla" height={42} size={12.5} glow={false} onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/publish`, { reason: note.trim() || null }), 'Yayınlandı; işletmeler yeniden değerlendirildi')} />
               ) : null}
             </Card>
           ))}
@@ -112,6 +114,7 @@ export default function AdminRoute() {
           ))}
         </>
       ) : null}
+      {!mfaMissing && roles.includes('platform_admin') ? <><PlatformRoles /><AuditTrail /></> : null}
       {roles.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Platform rolün yok.</Text> : null}
     </Screen>
   );

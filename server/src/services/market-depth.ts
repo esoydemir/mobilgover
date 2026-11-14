@@ -106,7 +106,7 @@ const apptView = (a: any) => ({ id: a.id, jobId: a.job_id, startsAt: a.starts_at
 export async function jobAppointments(tx: Tx, p: Principal, jobId: string) {
   const j = await jobFor(tx, jobId);
   const side = await sideOf(tx, p, j);
-  const rows = (await tx.query(`SELECT * FROM service_appointments WHERE job_id = $1 ORDER BY created_at`, [jobId])).rows;
+  const rows = (await tx.query(`SELECT * FROM service_appointments WHERE job_id = $1 ORDER BY created_at, decided_at NULLS LAST`, [jobId])).rows;
   const live = rows.find(r => ['proposed', 'confirmed'].includes(r.status)) ?? null;
   return { side, live: live ? apptView(live) : null, history: rows.map(apptView), canAnswer: !!live && live.status === 'proposed' && live.proposed_side !== side };
 }
