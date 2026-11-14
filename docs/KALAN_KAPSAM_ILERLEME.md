@@ -15,3 +15,24 @@ Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESL
 
 **Grup 1 kanıtı:** yerelde (Windows) tam sunucu takımı 280 test; 8091'de Task B eksik metni "Ölçüm: sıcaklık (°C)", `?filter=no_file` yalnız dosyasız belgeyi döndürdü. Ekran görüntüsü bu grupta alınmadı (metin ve filtre değişikliği API ile doğrulandı); Chromium/WebKit taraması en sonda.
 **Açık kalan (Grup 1):** belge önizlemesi tarayıcıda yeni sekmede açılır, uygulama içi gömülü önizleme yok; fiziksel iPhone Safari PDF indirme beklemede (GM-17).
+
+## Grup 2 — Çok şubeli kullanım ve rol ekranları
+| Madde | Senaryo | Kabul ölçütü | Durum |
+|---|---|---|---|
+| Toplu görev atamada önizleme | Sahip/merkez 14 günlük açık görevleri bir kişiye atar | Etkilenecek şube, görev sayısı, görev alınacak kişiler ve atlanacak şubeler onaydan önce görünür; uygulama gösterilen sayıyı ister (`BULK_PREVIEW_STALE`); tek audit olayı | tamam — `bulk-assign.test.ts` (3), mobil `/tasks-bulk` |
+| Şube yöneticisi yalnız kendi şubesini görür | Şube yöneticisi önizleme açar | Diğer şube adı bile dönmez; başka şube hedeflenirse 422; personel 403 | tamam |
+| Kart sayıları = filtreli liste = detay | Merkez karşılaştırma satırı ↔ şubeye filtreli pano ↔ vaka detayı | Sayılar eşit, her kart vaka detayı olarak açılır, şube yöneticisi kümesi sahibin şube filtresiyle aynı | tamam — `role-matrix.test.ts` |
+| Rol/menü erişimi (sunucu) | Sahip, merkez, şube yöneticisi, personel, uzman, dış doğrulayıcı, platform yöneticisi | 9 uç nokta × 7 rol matrisi sabitlendi; personel/uzman/doğrulayıcı 200 alsa da veri boş (kendi işi) | tamam — `role-matrix.test.ts` |
+| Menülerin rol başına görünürlüğü (ekran) | `more.tsx` kuralları | Sunucu matrisiyle uyumlu; tarayıcıda rol rol ekran taraması **sona bırakıldı** | kısmi |
+
+## Grup 3 — Uzman pazarı ve profesyonel akış
+| Madde | Senaryo | Kabul ölçütü | Durum |
+|---|---|---|---|
+| Arama/filtre (GM-18) | Sağlayıcıları metin, şehir/ilçe, doğrulanmış belge, değerlendirilmiş iş ile süz | `%` joker çalışmaz; dil/müsaitlik/uzaktan **modelde yok → filtre sunulmadı** | kısmi (mevcut alanlar) |
+| Birden çok sağlayıcıdan teklif (GM-21) | 2–5 uzman seç, teklifleri karşılaştır | Seçilmeyen uzman gelen kutusunda görmez, teklif veremez (404), yazışma 404; mod "selected", karşılaştırma tablosu | tamam — `market-depth.test.ts` |
+| Randevu (GM-34) | Teklif kabulünden sonra iki taraf zaman önerir | Öneren kendi önerisini onaylayamaz; değişiklik eski zamanı `superseded` olarak saklar; ret/iptal gerekçeli; check-in sonrası 409; audit | tamam |
+| Uzman takvimi (GM-28 kısmi) | `/pro/calendar` | Yalnız kendi işleri; yanıt bekleyen işaretli | tamam (liste; ay görünümü yok) |
+| Talebe bağlı mesajlaşma (GM-20) | İşletme ↔ sağlayıcı ileti dizisi | Dizi talep+sağlayıcıya özel; ödeme öncesi işletme adı gizli; personel 404; bildirim | tamam |
+| Değerlendirme (GM-22) | Kabul edilmiş işe bağlı | Kabulden önce 422; dağılım yalnız profilde gösterilmesine izin verilmiş işler; **yanıt süresi ölçülmüyor → boş, uydurulmadı** | kısmi |
+| Faydalı bul / Kaydet (GM-32) | Akış kartı | Kalıcı, kişiye özel kayıt, geri alınır, idempotent; taslak/gizli yazıya 404; "Kaydedilenler" sekmesi | tamam |
+| Talep→teklif→randevu→rapor→görev uçtan uca | `market-depth` + `report-evidence-link` | Zincir testlerle ayrı ayrı; tek akışta ekran taraması 8091'de | bkz. grup kanıtı |

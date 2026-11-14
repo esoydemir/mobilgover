@@ -9,6 +9,7 @@ import { ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../compone
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../components/ui';
 import { addDays, fmtDate, fmtDateTime } from '../features/dates';
 import { Invitations } from '../features/Invitations';
+import { AppointmentCard, MessageThread } from '../features/ServiceExtras';
 import { goRoot } from '../state/app';
 import { TYPE_LABEL, fileMeta, fmtSize, pickFile, uploadReportBytes, type Picked } from '../features/files';
 import { QUOTE_STATUS, RISK_LABEL, credentialLabel } from '../features/labels';
@@ -217,6 +218,7 @@ function MyProfessionalArea() {
 
       <SectionLabel>İŞLERİM</SectionLabel>
       {inbox.data && inbox.data.jobs.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz işin yok. Teklifin kabul edilince iş burada görünür.</Text> : null}
+      <ProCalendar />
       {(inbox.data?.jobs ?? []).map(j => <JobCard key={j.id} j={j} onDone={() => inbox.reload()} />)}
       {companies.length === 0 ? <GhostButton testID="pro-to-setup" label="Kendi işletmemi de kurmak istiyorum" onPress={() => router.push('/setup')} /> : null}
     </Screen>
@@ -226,6 +228,7 @@ function MyProfessionalArea() {
 function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () => void }) {
   const { call } = useSession();
   const [open, setOpen] = useState(false);
+  const [chat, setChat] = useState(false);
   const [f, setF] = useState({ scope: '', exclusions: '', priceNet: '', vatRate: '20', materials: '', durationText: '', warrantyText: '', deliverable: '' });
   const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (v: string) => setF(x => ({ ...x, [k]: v }));
@@ -235,6 +238,8 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
       <Text style={type(14.5, 600)}>{r.title}</Text>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{r.description}</Text>
       {r.shared_ncr ? <Text style={type(12, 500, { color: C.warn, lh: 1.45 })}>İşletmenin paylaştığı uygunsuzluk: {r.shared_ncr.title} · risk {RISK_LABEL[r.shared_ncr.riskLevel] ?? r.shared_ncr.riskLevel}</Text> : null}
+      <GhostButton testID={`pro-chat-${r.id}`} label={chat ? 'Yazışmayı kapat' : 'İşletmeyle yaz'} height={34} size={12} onPress={() => setChat(v => !v)} />
+      {chat ? <MessageThread provider requestId={r.id} /> : null}
       {r.my_quote_status ? <Text style={type(12, 600, { color: C.lime })}>Teklifin: {QUOTE_STATUS[r.my_quote_status] ?? r.my_quote_status}</Text> : !open ? (
         <GhostButton testID="quote-open" label="Teklif ver" height={40} size={12.5} onPress={() => setOpen(true)} />
       ) : (
@@ -260,6 +265,25 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
             }} />
         </View>
       )}
+    </Card></View>
+  );
+}
+
+type CalItem = { id: string; startsAt: string; endsAt: string; status: string; title: string; city: string; companyName: string; siteName: string; awaitingMyAnswer: boolean };
+/** The provider's own calendar: live appointments of awarded jobs (proposed ones are marked as waiting for an answer). */
+function ProCalendar() {
+  const q = useApi<{ items: CalItem[] }>('/pro/calendar');
+  if (!q.data) return null;
+  return (
+    <View testID="pro-calendar"><Card style={{ gap: 6 }}>
+      <Eyebrow>TAKVİM · YAKLAŞAN RANDEVULAR</Eyebrow>
+      {q.data.items.length === 0 ? <Text testID="pro-calendar-empty" style={type(12.5, 400, { color: C.t2 })}>Planlanmış randevu yok.</Text> : null}
+      {q.data.items.map(i => (
+        <View key={i.id} style={{ gap: 2 }}>
+          <Text style={type(13, 600)}>{fmtDateTime(i.startsAt)} · {i.title}</Text>
+          <Text style={type(11.5, 400, { color: i.awaitingMyAnswer ? C.warn : C.t2 })}>{i.companyName} · {i.siteName}{i.status === 'confirmed' ? ' · onaylandı' : i.awaitingMyAnswer ? ' · yanıtını bekliyor' : ' · işletmenin yanıtı bekleniyor'}</Text>
+        </View>
+      ))}
     </Card></View>
   );
 }
@@ -295,6 +319,7 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
   };
   return (
     <View testID={`pro-job-${j.id}`}><Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
+      {j.status === 'scheduled' ? <AppointmentCard provider jobId={j.id} editable /> : null}
       <Text style={type(14.5, 600)}>{j.title}</Text>
       <Text style={type(12, 400, { color: C.t2 })}>{j.company_name} · {j.site_name}</Text>
       <Text testID="pro-job-status" style={type(12, 600, { color: j.status === 'accepted' ? C.lime : C.warn })}>{({ scheduled: 'Planlandı', checked_in: 'Giriş yapıldı', report_submitted: 'Rapor gönderildi, teslim kabulü bekleniyor', accepted: 'İşletme teslim kabul etti', disputed: 'İşletme itiraz etti', revision_requested: 'İşletme revizyon istedi: yeni rapor gönder', cancelled: 'İşletme işi iptal etti' } as Record<string, string>)[j.status] ?? j.status}</Text>

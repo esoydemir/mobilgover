@@ -15,7 +15,7 @@ type Me = { hasProfile: boolean; moderator: boolean; note: string };
 export default function NetworkRoute() {
   const { me: session } = useSession();
   const me = useApi<Me>('/network/me');
-  const [scope, setScope] = useState<'all' | 'following' | 'mine'>('all');
+  const [scope, setScope] = useState<'all' | 'following' | 'mine' | 'saved'>('all');
   const feed = useApi<{ label: string; posts: Post[] }>(me.data?.hasProfile ? `/network/feed?scope=${scope}` : null);
   return (
     <Screen title="Mesleki ağ" titleEn="Network" gap={11} onRefresh={() => { void me.reload(); void feed.reload(); }} refreshing={feed.loading}>
@@ -36,13 +36,13 @@ export default function NetworkRoute() {
             {me.data.moderator ? <GhostButton testID="net-moderation" label="Moderasyon" height={38} size={12} onPress={() => router.push('/moderation')} /> : null}
           </View>
           <View style={{ flexDirection: 'row', gap: 7 }}>
-            {([['all', 'Tümü'], ['following', 'Takip ettiklerim'], ['mine', 'Benimkiler']] as const).map(([k, l]) =>
+            {([['all', 'Tümü'], ['following', 'Takip ettiklerim'], ['saved', 'Kaydedilenler'], ['mine', 'Benimkiler']] as const).map(([k, l]) =>
               <FilterChip key={k} testID={`net-tab-${k}`} label={l} active={scope === k} onPress={() => setScope(k)} />)}
           </View>
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Paylaşımlar kullanıcı içeriğidir; doğrulanmış mevzuat ya da platform onaylı içerik değildir. İşletme kayıtların otomatik paylaşılmaz.</Text>
           {feed.error ? <ErrorBox message={feed.error} onRetry={feed.reload} /> : null}
           {!feed.data && feed.loading ? <Loading /> : null}
-          {feed.data?.posts.length === 0 ? <Empty title={scope === 'following' ? 'Takip ettiğin kişilerin paylaşımı yok' : 'Henüz paylaşım yok'} /> : null}
+          {feed.data?.posts.length === 0 ? <Empty title={scope === 'following' ? 'Takip ettiğin kişilerin paylaşımı yok' : scope === 'saved' ? 'Kaydettiğin paylaşım yok' : 'Henüz paylaşım yok'} /> : null}
           {(feed.data?.posts ?? []).map(p => <PostCard key={p.id} p={p} />)}
         </>
       )}

@@ -12,6 +12,7 @@ import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
 import { addSite, board, relate } from '../services/board';
 import { bulkAssignApply, bulkAssignPreview } from '../services/bulk-assign';
+import * as depth from '../services/market-depth';
 import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
@@ -827,20 +828,81 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   // ── Marketplace: business side ──
   app.get('/companies/:companyId/providers', async req => {
     company(req);
-    const { category } = z.object({ category: z.string() }).parse(req.query);
-    return db.system(tx => mk.providersFor(tx, category));
+    const q = z.object({ category: z.string(), q: z.string().max(100).optional(), city: z.string().max(60).optional(), district: z.string().max(60).optional(),
+      minCredentials: z.coerce.number().int().min(0).max(10).optional(), reviewedOnly: z.enum(['true', 'false']).optional() }).parse(req.query);
+    return db.system(tx => mk.providersFor(tx, q.category, { ...q, reviewedOnly: q.reviewedOnly === 'true' }));
   });
   app.post('/companies/:companyId/service-requests', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().trim().min(3).max(200), description: z.string().trim().min(5).max(4000),
       ncrId: uuid.nullable().optional(), taskId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false),
-      invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
+      invitedProfileId: uuid.nullable().default(null), invitedProfileIds: z.array(uuid).max(5).default([]) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.createRequest(tx, req.principal, companyId, b), 201);
+  });
+  // Appointments (both sides) and request-linked messages.
+  const apptBody = z.object({ startsAt: z.iso.datetime({ offset: true }), endsAt: z.iso.datetime({ offset: true }), note: z.string().max(500).nullable().optional() });
+  app.get('/companies/:companyId/jobs/:jobId/appointments', async req => {
+    const companyId = company(req);
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => depth.jobAppointments(tx, req.principal, jobId));
+  });
+  app.post('/companies/:companyId/jobs/:jobId/appointments', async (req, reply) => {
+    const companyId = company(req);
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, tx => depth.proposeAppointment(tx, req.principal, jobId, apptBody.parse(req.body)), 201);
+  });
+  app.post('/companies/:companyId/appointments/:id/decision', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ accept: z.boolean(), reason: z.string().max(500).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => depth.decideAppointment(tx, req.principal, id, b));
+  });
+  app.post('/companies/:companyId/appointments/:id/cancel', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ reason: z.string().max(500) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => depth.cancelAppointment(tx, req.principal, id, b.reason));
+  });
+  app.get('/companies/:companyId/service-requests/:id/messages', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const { profileId } = z.object({ profileId: uuid }).parse(req.query);
+    return db.tenant(companyId, tx => depth.businessThread(tx, req.principal, companyId, id, profileId));
+  });
+  app.post('/companies/:companyId/service-requests/:id/messages', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ profileId: uuid, body: z.string().max(2000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => depth.businessSend(tx, req.principal, companyId, id, b.profileId, b.body), 201);
+  });
+  // Provider side (system mode: every query filters by the provider's own profile).
+  app.get('/pro/calendar', async req => {
+    const q = z.object({ from: z.iso.datetime({ offset: true }).default(() => new Date().toISOString()), to: z.iso.datetime({ offset: true }).default(() => new Date(Date.now() + 60 * 864e5).toISOString()) }).parse(req.query);
+    return db.system(tx => depth.providerCalendar(tx, req.principal, q));
+  });
+  app.get('/pro/jobs/:jobId/appointments', async req => db.system(tx => depth.jobAppointments(tx, req.principal, z.object({ jobId: uuid }).parse(req.params).jobId)));
+  app.post('/pro/jobs/:jobId/appointments', async (req, reply) => {
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => depth.proposeAppointment(tx, req.principal, jobId, apptBody.parse(req.body)), 201);
+  });
+  app.post('/pro/appointments/:id/decision', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ accept: z.boolean(), reason: z.string().max(500).nullable().optional() }).parse(req.body);
+    return userMutate(req, reply, tx => depth.decideAppointment(tx, req.principal, id, b));
+  });
+  app.post('/pro/appointments/:id/cancel', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => depth.cancelAppointment(tx, req.principal, id, z.object({ reason: z.string().max(500) }).parse(req.body).reason));
+  });
+  app.get('/pro/requests/:id/messages', async req => db.system(tx => depth.providerThread(tx, req.principal, z.object({ id: uuid }).parse(req.params).id)));
+  app.post('/pro/requests/:id/messages', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => depth.providerSend(tx, req.principal, id, z.object({ body: z.string().max(2000) }).parse(req.body).body), 201);
   });
   app.post('/companies/:companyId/service-requests/preview', async req => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().max(200), description: z.string().max(4000), city: z.string().max(60),
-      ncrId: uuid.nullable().optional(), shareNcrSummary: z.boolean().default(false), invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
+      ncrId: uuid.nullable().optional(), shareNcrSummary: z.boolean().default(false), invitedProfileId: uuid.nullable().default(null), invitedProfileIds: z.array(uuid).max(5).default([]) }).parse(req.body);
     return db.tenant(companyId, tx => mk.requestPreview(tx, req.principal, companyId, b));
   });
   app.post('/companies/:companyId/service-requests/:id/cancel', async (req, reply) => {
@@ -919,7 +981,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return db.system(async (tx): Promise<object> => op === 'follow' || op === 'unfollow' ? net.follow(tx, req.principal, userId, op === 'follow') : net.block(tx, req.principal, userId, op === 'block'));
   });
   app.get('/network/feed', async req => {
-    const q = z.object({ scope: z.enum(['all', 'following', 'mine']).default('all'), authorId: uuid.optional() }).parse(req.query);
+    const q = z.object({ scope: z.enum(['all', 'following', 'mine', 'saved']).default('all'), authorId: uuid.optional() }).parse(req.query);
     return db.system(tx => net.feed(tx, req.principal, q));
   });
   app.post('/network/posts', async (req, reply) => {
@@ -931,6 +993,11 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ body: z.string().max(5000).optional(), op: z.enum(['publish', 'delete']).optional() }).parse(req.body);
     await db.system(tx => net.updatePost(tx, req.principal, id, b)); return { ok: true };
+  });
+  app.post('/network/posts/:id/reactions', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ kind: z.enum(['helpful', 'saved']), on: z.boolean() }).parse(req.body);
+    return userMutate(req, reply, tx => net.react(tx, req.principal, id, b.kind, b.on));
   });
   app.post('/network/posts/:id/comments', async (req, reply) => {
     const { id } = z.object({ id: uuid }).parse(req.params);

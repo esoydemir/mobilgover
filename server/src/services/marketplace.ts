@@ -19,6 +19,9 @@ import { notify, notifyUser, siteManagers } from './notifications';
 
 const isReviewer = (p: Principal) => p.platformRoles.includes('marketplace_reviewer');
 const today = () => new Date().toISOString().slice(0, 10);
+/** A request is visible to provider $1 when it is open-market, sent to them alone, or they are one of its chosen providers. */
+const VISIBLE_TO_PROVIDER = `((r.invited_profile_id IS NULL AND NOT EXISTS (SELECT 1 FROM service_request_invites i0 WHERE i0.request_id = r.id))
+  OR r.invited_profile_id = $1 OR EXISTS (SELECT 1 FROM service_request_invites i1 WHERE i1.request_id = r.id AND i1.profile_id = $1))`;
 
 /**
  * SQL condition for an approval that can take new work today ($n = today's date):
@@ -68,13 +71,15 @@ export async function profileView(tx: Tx, profileId: string) {
        FROM service_reviews sr JOIN service_jobs j ON j.id = sr.job_id JOIN service_requests r ON r.id = j.request_id
        JOIN service_categories c ON c.code = r.category_code
       WHERE sr.provider_profile_id = $1 AND sr.show_on_profile AND j.status = 'accepted' ORDER BY j.accepted_at DESC LIMIT 50`, [profileId])).rows;
+  // Distribution over the same reviewed, accepted, profile-visible jobs: overall score per job (mean of the three criteria, rounded) → count.
+  const distribution = [1, 2, 3, 4, 5].map(star => ({ stars: star, count: history.filter(h => Math.round((h.quality + h.timeliness + h.communication) / 3) === star).length }));
   const avg = (k: 'quality' | 'timeliness' | 'communication') => history.length ? Math.round(history.reduce((a, h) => a + h[k], 0) / history.length * 10) / 10 : null;
   return {
     profile: pr,
     serviceHistory: {
       items: history,
-      summary: { count: history.length, quality: avg('quality'), timeliness: avg('timeliness'), communication: avg('communication') },
-      note: 'Yalnızca teslim edilip işletmece kabul edilmiş ve işletmenin profilde gösterilmesine izin verdiği işler; işletme adı gösterilmez.',
+      summary: { count: history.length, distribution, responseTime: null, quality: avg('quality'), timeliness: avg('timeliness'), communication: avg('communication') },
+      note: 'Yalnızca teslim edilip işletmece kabul edilmiş ve işletmenin profilde gösterilmesine izin verdiği işler; işletme adı gösterilmez. Yanıt süresi henüz ölçülmüyor; örnek sayısı azsa dağılım yanıltıcı olabilir.',
     },
     identity: identity ? { status: 'verified', checkedAt: identity.checked_at, method: identity.check_method } : { status: 'not_verified' },
     credentials: ver.filter(v => v.kind === 'credential'),
@@ -173,18 +178,30 @@ export async function reviewQueue(tx: Tx, p: Principal) {
 // ── Business: requests, quotes, jobs ──
 
 /** Providers authorized for a category. No paid ranking exists; order is by verified credentials, then name. */
-export async function providersFor(tx: Tx, categoryCode: string) {
-  return (await tx.query(
+/**
+ * Providers who can take this category today. Filters: free text (name, headline, bio), city / district, minimum number of verified
+ * credentials, and "has reviewed jobs". Each row carries the review summary of accepted, reviewed jobs the business allowed on the profile.
+ * Language, availability and remote/on-site are not stored for providers yet, so they are not offered as filters.
+ */
+export async function providersFor(tx: Tx, categoryCode: string, f: { q?: string; city?: string; district?: string; minCredentials?: number; reviewedOnly?: boolean } = {}) {
+  const rows = (await tx.query(
     `SELECT pp.id, pp.display_name, pp.headline, pp.city, pp.district,
-            (SELECT count(*)::int FROM professional_verifications v WHERE v.profile_id = pp.id AND v.status = 'verified' AND v.kind = 'credential') AS verified_credentials
+            (SELECT count(*)::int FROM professional_verifications v WHERE v.profile_id = pp.id AND v.status = 'verified' AND v.kind = 'credential') AS verified_credentials,
+            (SELECT count(*)::int FROM service_reviews sr JOIN service_jobs j ON j.id = sr.job_id WHERE sr.provider_profile_id = pp.id AND sr.show_on_profile AND j.status = 'accepted') AS reviewed_jobs,
+            (SELECT round(avg((sr.quality + sr.timeliness + sr.communication) / 3.0), 1)::float FROM service_reviews sr JOIN service_jobs j ON j.id = sr.job_id
+              WHERE sr.provider_profile_id = pp.id AND sr.show_on_profile AND j.status = 'accepted') AS rating
        FROM professional_profiles pp JOIN service_authorizations a ON a.profile_id = pp.id
       WHERE a.category_code = $1 AND ${LIVE_AUTH('a', 2)} AND pp.status = 'active'
-      ORDER BY verified_credentials DESC, pp.display_name`, [categoryCode, today()])).rows
+        AND ($3::text IS NULL OR lower(pp.city) = lower($3)) AND ($4::text IS NULL OR lower(coalesce(pp.district, '')) = lower($4))
+        AND ($5::text IS NULL OR pp.display_name ILIKE '%' || $5 || '%' OR pp.headline ILIKE '%' || $5 || '%' OR pp.bio ILIKE '%' || $5 || '%')
+      ORDER BY verified_credentials DESC, pp.display_name`,
+    [categoryCode, today(), f.city?.trim() || null, f.district?.trim() || null, f.q?.trim().replace(/[%_\\]/g, '') || null])).rows;
+  return rows.filter(r => r.verified_credentials >= (f.minCredentials ?? 0) && (!f.reviewedOnly || r.reviewed_jobs > 0))
     .map(r => ({ ...r, sponsored: false }));
 }
 
 export async function createRequest(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; ncrId?: string | null; taskId?: string | null; city: string; shareNcrSummary?: boolean;
-  invitedProfileId?: string | null }) {
+  invitedProfileId?: string | null; invitedProfileIds?: string[] }) {
   if (!can(p, 'service.request', { companyId, siteId: b.siteId }).ok) throw forbidden();
   if (!(await tx.query(`SELECT 1 FROM service_categories WHERE code = $1`, [b.categoryCode])).rowCount) throw notFound('Hizmet kategorisi');
   if (b.ncrId && !(await tx.query(`SELECT 1 FROM nonconformities WHERE id = $1 AND company_id = $2`, [b.ncrId, companyId])).rowCount) throw notFound('Uygunsuzluk');
@@ -192,24 +209,31 @@ export async function createRequest(tx: Tx, p: Principal, companyId: string, b: 
   if (b.shareNcrSummary && !b.ncrId) throw invalid('Paylaşmak için bir uygunsuzluk seç.');
   // From a network profile: the request goes to that provider only, and only within a category they hold
   // a live approval for. A network profile alone is not an approval.
-  if (b.invitedProfileId) {
+  // Several chosen providers (2–5): the request goes only to them and their quotes are compared like for like.
+  const selected = [...new Set(b.invitedProfileIds ?? [])];
+  if (selected.length && b.invitedProfileId) throw invalid('Tek uzman ile birden çok uzman birlikte seçilemez.');
+  if (selected.length === 1) { b = { ...b, invitedProfileId: selected[0], invitedProfileIds: [] }; selected.length = 0; }
+  if (selected.length > 5) throw invalid('En fazla 5 uzmana gönderilebilir.');
+  for (const id of [...selected, ...(b.invitedProfileId ? [b.invitedProfileId] : [])]) {
     const ok = (await tx.query(`SELECT 1 FROM service_authorizations a JOIN professional_profiles pp ON pp.id = a.profile_id
-       WHERE a.profile_id = $1 AND a.category_code = $2 AND pp.status = 'active' AND ${LIVE_AUTH('a', 3)}`, [b.invitedProfileId, b.categoryCode, today()])).rowCount;
-    if (!ok) throw new AppError(422, 'PROVIDER_NOT_APPROVED_FOR_CATEGORY', 'Bu uzmanın seçilen kategoride geçerli hizmet onayı yok; talep ona gönderilemez.');
+       WHERE a.profile_id = $1 AND a.category_code = $2 AND pp.status = 'active' AND ${LIVE_AUTH('a', 3)}`, [id, b.categoryCode, today()])).rowCount;
+    if (!ok) throw new AppError(422, 'PROVIDER_NOT_APPROVED_FOR_CATEGORY', 'Seçilen uzmanlardan birinin bu kategoride geçerli hizmet onayı yok; talep ona gönderilemez.');
   }
   const r = await tx.query<{ id: string }>(
     `INSERT INTO service_requests (company_id, site_id, category_code, title, description, ncr_id, city, created_by, share_ncr_summary, invited_profile_id, task_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
     [companyId, b.siteId, b.categoryCode, b.title, b.description, b.ncrId ?? null, b.city, p.userId, !!b.shareNcrSummary, b.invitedProfileId ?? null, b.taskId ?? null]);
+  for (const id of selected) await tx.query(`INSERT INTO service_request_invites (request_id, company_id, profile_id) VALUES ($1,$2,$3)`, [r.rows[0]!.id, companyId, id]);
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'service.requested', entityType: 'service_request', entityId: r.rows[0]!.id,
-    payload: { category: b.categoryCode, ncrId: b.ncrId ?? null, sharedWithProviders: sharedFields(!!b.shareNcrSummary) } });
+    payload: { category: b.categoryCode, ncrId: b.ncrId ?? null, sharedWithProviders: sharedFields(!!b.shareNcrSummary), ...(selected.length ? { selectedProviders: selected.length } : {}) } });
   // Providers approved for this category hear about it (no business name: it is revealed only on award).
   const pros = (await tx.query<{ user_id: string }>(`SELECT DISTINCT pp.user_id FROM service_authorizations a JOIN professional_profiles pp ON pp.id = a.profile_id
-     WHERE a.category_code = $1 AND pp.status = 'active' AND ${LIVE_AUTH('a', 2)} AND ($3::uuid IS NULL OR pp.id = $3)`, [b.categoryCode, today(), b.invitedProfileId ?? null])).rows;
+     WHERE a.category_code = $1 AND pp.status = 'active' AND ${LIVE_AUTH('a', 2)} AND ($3::uuid IS NULL OR pp.id = $3)
+       AND ($4::uuid[] IS NULL OR pp.id = ANY($4))`, [b.categoryCode, today(), b.invitedProfileId ?? null, selected.length ? selected : null])).rows;
   const cat = (await tx.query<{ name: string }>(`SELECT name FROM service_categories WHERE code = $1`, [b.categoryCode])).rows[0]!.name;
   for (const pr of pros) {
     if (pr.user_id === p.userId) continue;
     await notifyUser(tx, { companyId, siteId: null, userId: pr.user_id, kind: 'provider_new_request', entityType: 'pro_request', entityId: r.rows[0]!.id,
-      dedupeKey: `provider_new_request:${r.rows[0]!.id}`, title: b.invitedProfileId ? 'Profilin üzerinden sana hizmet talebi geldi' : 'Kategorinde yeni hizmet talebi', body: `${cat} · ${b.title} · ${b.city}` });
+      dedupeKey: `provider_new_request:${r.rows[0]!.id}`, title: b.invitedProfileId ? 'Profilin üzerinden sana hizmet talebi geldi' : selected.length ? 'Seçilen uzmanlardan biri olarak sana hizmet talebi geldi' : 'Kategorinde yeni hizmet talebi', body: `${cat} · ${b.title} · ${b.city}` });
   }
   return { id: r.rows[0]!.id };
 }
@@ -247,14 +271,17 @@ export async function requestDetail(tx: Tx, p: Principal, companyId: string, id:
   const history = (await tx.query(`SELECT e.event_type, e.payload, e.occurred_at, u.display_name AS actor_name FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
      WHERE e.company_id = $1 AND ((e.entity_type = 'service_request' AND e.entity_id = $2) OR (e.entity_type = 'service_job' AND e.entity_id = $3)
         OR (e.entity_type = 'quote' AND e.entity_id = ANY($4))) ORDER BY e.seq`, [companyId, id, job?.id ?? id, quotes.map(q => q.id)])).rows;
-  const mode = r.invited_profile_id ? 'direct' : 'open';
+  const invited = (await tx.query<{ profile_id: string; display_name: string }>(`SELECT i.profile_id, pp.display_name FROM service_request_invites i JOIN professional_profiles pp ON pp.id = i.profile_id
+     WHERE i.request_id = $1 ORDER BY pp.display_name`, [id])).rows;
+  const mode = r.invited_profile_id ? 'direct' : invited.length ? 'selected' : 'open';
   return {
     request: r, quotes, job, review, reports, history, reportDocuments: await requestReportDocs(tx, companyId, id),
-    mode, modeNote: mode === 'direct'
+    mode, invitedProviders: invited.map(i => ({ profileId: i.profile_id, name: i.display_name })), modeNote: mode === 'direct'
       ? `Doğrudan ${r.invited_name ?? 'tek uzmana'} gönderildi; yalnız o teklif verebilir, karşılaştırma yapılmaz.`
+      : mode === 'selected' ? `Seçtiğin ${invited.length} uzmana gönderildi (${invited.map(i => i.display_name).join(', ')}); yalnız onlar teklif verebilir, gelen teklifler aynı sırayla karşılaştırılır.`
       : 'Kategoride onayı olan uzmanlar teklif verebilir; gelen teklifler aynı sırayla karşılaştırılır.',
     // Same order for every quote: scope, exclusions, price, duration, deliverable.
-    comparison: mode === 'open' && quotes.length > 1 ? COMPARE_ROWS : null,
+    comparison: mode !== 'direct' && quotes.length > 1 ? COMPARE_ROWS : null,
     jobProviderStatus: jobProvider ? jobProvider.providerStatus : null,
     canReview: !!job && job.status === 'accepted' && !review,
     canCancel: (r.status === 'open') || (!!job && ['scheduled', 'checked_in', 'report_submitted', 'revision_requested'].includes(job.status)),
@@ -299,7 +326,7 @@ export async function cancelService(tx: Tx, p: Principal, companyId: string, req
  * details and business documents are never part of a request in this version.
  */
 export async function requestPreview(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; city: string;
-  ncrId?: string | null; shareNcrSummary?: boolean; invitedProfileId?: string | null }) {
+  ncrId?: string | null; shareNcrSummary?: boolean; invitedProfileId?: string | null; invitedProfileIds?: string[] }) {
   if (!can(p, 'service.request', { companyId, siteId: b.siteId }).ok) throw forbidden();
   const cat = (await tx.query(`SELECT name FROM service_categories WHERE code = $1`, [b.categoryCode])).rows[0];
   const ncr = b.ncrId && b.shareNcrSummary ? (await tx.query(`SELECT title, risk_level, hazard_type FROM nonconformities WHERE id = $1 AND company_id = $2`, [b.ncrId, companyId])).rows[0] : null;
@@ -385,7 +412,7 @@ export async function providerInbox(tx: Tx, p: Principal) {
        FROM service_requests r JOIN service_categories c ON c.code = r.category_code
        JOIN service_authorizations a ON a.category_code = r.category_code AND a.profile_id = $1 AND ${LIVE_AUTH('a', 2)}
        LEFT JOIN nonconformities n ON n.id = r.ncr_id AND n.company_id = r.company_id
-      WHERE r.status = 'open' AND (r.invited_profile_id IS NULL OR r.invited_profile_id = $1) ORDER BY r.created_at DESC`, [pr.id, today()])).rows;
+      WHERE r.status = 'open' AND ${VISIBLE_TO_PROVIDER} ORDER BY r.created_at DESC`, [pr.id, today()])).rows;
   const authorizations = (await tx.query(
     `SELECT a.category_code, c.name, a.status, a.valid_until, (a.status = 'approved' AND NOT (${LIVE_AUTH('a', 2)})) AS expired
        FROM service_authorizations a JOIN service_categories c ON c.code = a.category_code WHERE a.profile_id = $1 ORDER BY c.name`, [pr.id, today()])).rows;
@@ -403,7 +430,12 @@ export async function submitQuote(tx: Tx, p: Principal, requestId: string, b: { 
        JOIN service_authorizations a ON a.category_code = r.category_code AND a.profile_id = $2 AND a.status = 'approved'
       WHERE r.id = $1`, [requestId, pr.id, today()])).rows[0];
   // Unauthorized categories, and requests sent to another provider, look like missing requests.
-  if (!r || (r.invited_profile_id && r.invited_profile_id !== pr.id)) throw notFound('Hizmet talebi');
+  if (r && r.invited_profile_id && r.invited_profile_id !== pr.id) throw notFound('Hizmet talebi');
+  if (r && !r.invited_profile_id) {
+    const inv = (await tx.query<{ profile_id: string }>(`SELECT profile_id FROM service_request_invites WHERE request_id = $1`, [requestId])).rows;
+    if (inv.length && !inv.some(i => i.profile_id === pr.id)) throw notFound('Hizmet talebi');
+  }
+  if (!r) throw notFound('Hizmet talebi');
   if (r.auth_expired) throw new AppError(403, 'AUTHORIZATION_EXPIRED', 'Bu kategorideki hizmet onayının süresi doldu; yeni iş alamazsın. Güncel belgeyle yeniden onay iste.');
   if (r.status !== 'open') throw conflict('INVALID_STATE', 'Talep teklif almaya kapalı.');
   if (new Date(b.validUntil) <= new Date()) throw invalid('Geçerlilik tarihi gelecekte olmalı.');

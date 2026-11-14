@@ -314,7 +314,31 @@ export async function updatePost(tx: Tx, p: Principal, id: string, b: { body?: s
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: `network.post_${b.op ?? 'edited'}`, entityType: 'network_post', entityId: id, payload: {} });
 }
 
-export async function feed(tx: Tx, p: Principal, q: { scope: 'all' | 'following' | 'mine'; authorId?: string }) {
+/** Adds the persisted "helpful" count and the viewer's own helpful / saved marks to already-built post views. */
+async function withReactions<T extends { id: string }>(tx: Tx, viewer: string, posts: T[]) {
+  if (!posts.length) return posts.map(x => ({ ...x, helpfulCount: 0, helpfulByMe: false, savedByMe: false }));
+  const rows = (await tx.query<{ post_id: string; kind: string; n: number; mine: boolean }>(
+    `SELECT post_id, kind, count(*)::int AS n, bool_or(user_id = $2) AS mine FROM network_post_reactions WHERE post_id = ANY($1) GROUP BY post_id, kind`, [posts.map(x => x.id), viewer])).rows;
+  return posts.map(x => ({ ...x,
+    helpfulCount: rows.find(r => r.post_id === x.id && r.kind === 'helpful')?.n ?? 0,
+    helpfulByMe: !!rows.find(r => r.post_id === x.id && r.kind === 'helpful')?.mine,
+    savedByMe: !!rows.find(r => r.post_id === x.id && r.kind === 'saved')?.mine }));
+}
+
+/** "Helpful" and "saved" on a post you can see. Idempotent both ways; "saved" is private to the person, "helpful" is counted. */
+export async function react(tx: Tx, p: Principal, postId: string, kind: 'helpful' | 'saved', on: boolean) {
+  await myProfile(tx, p);
+  const blocked = await blockedWith(tx, p.userId);
+  const r = (await tx.query(`SELECT id, author_id, status, hidden_at FROM network_posts WHERE id = $1`, [postId])).rows[0];
+  if (!r || r.status !== 'published' || r.hidden_at || blocked.has(r.author_id)) throw notFound('Paylaşım');
+  if (kind === 'helpful' && r.author_id === p.userId) throw invalid('Kendi paylaşımını faydalı bulamazsın.');
+  if (on) await tx.query(`INSERT INTO network_post_reactions (post_id, user_id, kind) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, [postId, p.userId, kind]);
+  else await tx.query(`DELETE FROM network_post_reactions WHERE post_id = $1 AND user_id = $2 AND kind = $3`, [postId, p.userId, kind]);
+  const [v] = await withReactions(tx, p.userId, [{ id: postId }]);
+  return { helpfulCount: v!.helpfulCount, helpfulByMe: v!.helpfulByMe, savedByMe: v!.savedByMe };
+}
+
+export async function feed(tx: Tx, p: Principal, q: { scope: 'all' | 'following' | 'mine' | 'saved'; authorId?: string }) {
   await myProfile(tx, p);
   const blocked = [...(await blockedWith(tx, p.userId))];
   const rows = (await tx.query(`${POST_SQL}
@@ -324,10 +348,11 @@ export async function feed(tx: Tx, p: Principal, q: { scope: 'all' | 'following'
        AND NOT (po.author_id = ANY($2::uuid[]))
        AND ($3 <> 'following' OR po.author_id IN (SELECT followee_id FROM network_follows WHERE follower_id = $1))
        AND ($3 <> 'mine' OR po.author_id = $1)
+       AND ($3 <> 'saved' OR po.id IN (SELECT post_id FROM network_post_reactions WHERE user_id = $1 AND kind = 'saved'))
        AND ($4::uuid IS NULL OR po.author_id = $4)
        AND ($3 = 'mine' OR po.status = 'published' OR $4::uuid = $1)
      ORDER BY COALESCE(po.published_at, po.created_at) DESC LIMIT 100`, [p.userId, blocked, q.scope, q.authorId ?? null])).rows;
-  return { label: POST_NOTE, posts: rows.map(r => postOut(r, p.userId)) };
+  return { label: POST_NOTE, posts: await withReactions(tx, p.userId, rows.map(r => postOut(r, p.userId))) };
 }
 
 export async function getPost(tx: Tx, p: Principal, id: string) {
@@ -340,7 +365,8 @@ export async function getPost(tx: Tx, p: Principal, id: string) {
     .filter(c => !blocked.has(c.author_id) && (!c.hidden_at || c.author_id === p.userId))
     .map(c => ({ id: c.id, authorId: c.author_id, authorName: c.author_name, body: c.body, createdAt: c.created_at, editedAt: c.edited_at, mine: c.author_id === p.userId,
       hidden: !!c.hidden_at, hiddenReason: c.author_id === p.userId ? c.hidden_reason : null }));
-  return { ...postOut(r, p.userId), comments };
+  const [withR] = await withReactions(tx, p.userId, [postOut(r, p.userId)]);
+  return { ...withR!, comments };
 }
 
 export async function comment(tx: Tx, p: Principal, postId: string, body: string) {
