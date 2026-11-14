@@ -10,6 +10,7 @@ import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../
 import { addDays, fmtDate, fmtDateTime } from '../features/dates';
 import { Invitations } from '../features/Invitations';
 import { goRoot } from '../state/app';
+import { TYPE_LABEL, fileMeta, fmtSize, pickFile, uploadReportBytes, type Picked } from '../features/files';
 import { QUOTE_STATUS, RISK_LABEL, credentialLabel } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
@@ -264,11 +265,34 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
 }
 
 function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }) {
-  const { call } = useSession();
+  const { call, token } = useSession();
   const [code, setCode] = useState('');
   const [report, setReport] = useState('');
+  const [file, setFile] = useState<Picked | null>(null);
+  // The report is registered but its file did not arrive: retry the same upload.
+  const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const run = async (fn: () => Promise<unknown>) => { setError(null); try { await fn(); onDone(); } catch (e) { setError(errorText(e)); } };
+  const pickReport = async () => { setError(null); try { const f = await pickFile('document'); if (f) setFile(f); } catch (e) { setError((e as Error).message); } };
+  const sendReport = async () => {
+    setError(null);
+    try {
+      let evidenceId = pending;
+      if (!evidenceId) {
+        const r = await call<{ evidenceId: string | null; duplicate: boolean }>('POST', `/pro/jobs/${j.id}/report`, { report: report.trim(), file: file ? fileMeta(file) : null });
+        evidenceId = r.evidenceId;
+        if (r.duplicate) { onDone(); return; }
+      }
+      if (evidenceId && file) {
+        setPending(evidenceId);
+        await uploadReportBytes(token, j.id, evidenceId, file);
+        setPending(null);
+      }
+      onDone();
+    } catch (e) {
+      setError(`${errorText(e)}${pending || file ? ' Rapor kaydı duruyor; dosya yüklenmediyse tekrar bas.' : ''}`);
+    }
+  };
   return (
     <View testID={`pro-job-${j.id}`}><Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
       <Text style={type(14.5, 600)}>{j.title}</Text>
@@ -284,7 +308,9 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
       {j.status === 'checked_in' || j.status === 'revision_requested' ? (
         <>
           <Field label={j.status === 'revision_requested' ? 'Revize hizmet raporu (önceki sürüm saklanır)' : 'Hizmet raporu'} testID="pro-report" value={report} onChangeText={setReport} multiline placeholder="Ne yapıldı, hangi ölçümler alındı, hangi parçalar kullanıldı?" />
-          <GhostButton testID="pro-report-submit" label="Raporu gönder" disabled={report.trim().length < 20} onPress={() => run(() => call('POST', `/pro/jobs/${j.id}/report`, { report: report.trim() }))} />
+          <GhostButton testID="pro-report-file" label={file ? `Seçildi: ${file.name} · ${TYPE_LABEL[file.mime] ?? file.mime} · ${fmtSize(file.bytes.length)}` : 'Rapor dosyası ekle (PDF/JPEG/PNG)'} height={38} size={12} style={{ alignSelf: 'flex-start' }} onPress={pickReport} />
+          <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Dosya işletmenin belge kasasına İnceleme bekliyor olarak düşer; işletme teslimi kabul etse bile dosyayı ayrıca inceler.</Text>
+          <GhostButton testID="pro-report-submit" label={pending ? 'Dosyayı yeniden yükle' : 'Raporu gönder'} disabled={!pending && report.trim().length < 20} onPress={sendReport} />
         </>
       ) : null}
       {j.business_note ? <Text style={type(12, 400, { color: C.t2 })}>İşletmenin notu: {j.business_note}</Text> : null}

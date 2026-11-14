@@ -21,6 +21,7 @@ type Review = { id: string; quality: number; timeliness: number; communication: 
 type Detail = { request: { id: string; title: string; description: string; category_name: string; status: string; ncr_id: string | null; created_at: string; cancel_reason: string | null };
   quotes: Quote[]; job: Job | null; review?: Review | null; canReview?: boolean; canCancel: boolean; mode: 'direct' | 'open'; modeNote: string;
   comparison: { key: string; label: string }[] | null; jobProviderStatus: Quote['providerStatus'] | null;
+  reportDocuments?: { document_id: string; version_id: string; version: number; review_status: string; is_latest: boolean; site_name: string; task_title: string | null }[];
   reports: { version: number; report: string; submitted_at: string; decision: string | null; decision_note: string | null; decided_at: string | null; decided_by_name: string | null }[];
   history: { event_type: string; payload: any; occurred_at: string; actor_name: string | null }[] };
 
@@ -88,6 +89,19 @@ export default function ServiceDetailRoute() {
               {r.decision ? <Text style={type(11.5, 500, { color: r.decision === 'accepted' ? C.lime : C.warn, lh: 1.45 })}>{r.decision === 'accepted' ? 'Kabul edildi' : 'Revizyon istendi'} · {r.decided_by_name} · {r.decision_note}</Text> : null}
             </View>
           ))}
+          {d.reportDocuments?.length ? (
+            <View testID="job-report-docs" style={{ marginTop: 12, gap: 6, borderWidth: 1, borderColor: tint.info(0.3), borderRadius: 16, padding: 12 }}>
+              <Text style={type(11, 600, { ls: 0.1, color: C.info })}>RAPOR DOSYASI · BELGE KASASI</Text>
+              <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Şube: {d.reportDocuments[0]!.site_name}{d.reportDocuments[0]!.task_title ? ` · Görev: ${d.reportDocuments[0]!.task_title}` : ''}</Text>
+              {d.reportDocuments.map(v => (
+                <Text key={v.version_id} style={type(12, v.is_latest ? 600 : 400, { color: v.is_latest ? C.t1 : C.t3, lh: 1.45 })}>
+                  Sürüm {v.version}{v.is_latest ? ' · SON SÜRÜM' : ' · önceki'} · {({ unreviewed: 'İNCELEME BEKLİYOR', verified: 'İNCELENDİ', rejected: 'KABUL EDİLMEDİ' } as Record<string, string>)[v.review_status]}
+                </Text>
+              ))}
+              <GhostButton testID="job-report-doc-open" label="Raporu belge kasasında aç" height={36} size={12} onPress={() => router.push(`/documents/${d.reportDocuments![0]!.document_id}` as never)} />
+              <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Teslimi kabul etmek dosyayı doğrulamaz; dosyayı belge kasasında ayrıca inceleyen kişi doğrular. Bağlı görev o zamana kadar açık kalır.</Text>
+            </View>
+          ) : null}
           {d.job.status === 'report_submitted' ? (
             <View style={{ marginTop: 12, gap: 10 }}>
               <Field testID="job-note" value={note} onChangeText={setNote} multiline placeholder="Raporu okudun mu, işi kontrol ettin mi? Revizyon istiyorsan neyin eksik olduğunu yaz." />

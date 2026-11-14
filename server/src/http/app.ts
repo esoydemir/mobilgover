@@ -777,8 +777,16 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   app.post('/pro/jobs/:id/report', async (req, reply) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const { report } = z.object({ report: z.string().max(8000) }).parse(req.body);
-    return userMutate(req, reply, async tx => { await mk.submitReport(tx, req.principal, id, report); return { ok: true }; });
+    const { report, file } = z.object({ report: z.string().max(8000),
+      file: z.object({ mime: z.string(), sha256: z.string(), sizeBytes: z.number().int().positive().max(config.maxUploadBytes) }).nullable().optional() }).parse(req.body);
+    return userMutate(req, reply, tx => mk.submitReport(tx, req.principal, id, report, file ?? null));
+  });
+  // The expert's file for the report they registered: same hash/type checks as every evidence file; never readable by anyone outside the business.
+  app.put('/pro/jobs/:id/report/:evidenceId/content', async req => {
+    const { id, evidenceId } = z.object({ id: uuid, evidenceId: uuid }).parse(req.params);
+    if (!Buffer.isBuffer(req.body)) throw new AppError(415, 'UNSUPPORTED_MEDIA', `Dosya gövdesi şu türlerden biri olmalı: ${ALLOWED_MIME.join(', ')}`);
+    const companyId = await db.system(tx => mk.reportEvidenceCompany(tx, req.principal, id, evidenceId));
+    return uploadContent(db, store, req.principal, companyId, evidenceId, req.body);
   });
 
   // ── Marketplace: review (platform) ──

@@ -1,0 +1,32 @@
+{
+ "personel.rt1@demo.goverhub.test": {
+  "liste": "görünmüyor",
+  "belge": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag",
+  "dosya": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag"
+ },
+ "mudur2.rt1@demo.goverhub.test": {
+  "liste": "görünmüyor",
+  "belge": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag",
+  "dosya": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag"
+ },
+ "dogrulayici2.rt1@demo.goverhub.test": {
+  "liste": "görünmüyor",
+  "belge": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag",
+  "dosya": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag"
+ },
+ "mudur.rt1@demo.goverhub.test": {
+  "liste": "GÖRÜNÜYOR",
+  "belge": "GÖRÜNÜYOR",
+  "dosya": "GÖRÜNÜYOR"
+ },
+ "merkez.rt1@demo.goverhub.test": {
+  "liste": "GÖRÜNÜYOR",
+  "belge": "GÖRÜNÜYOR",
+  "dosya": "GÖRÜNÜYOR"
+ },
+ "uzman@demo.goverhub.test": {
+  "liste": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag",
+  "belge": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag",
+  "dosya": "404 {\"error\":{\"code\":\"NOT_FOUND\",\"messag"
+ }
+}

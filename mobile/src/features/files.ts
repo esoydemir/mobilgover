@@ -75,6 +75,11 @@ export async function pickFile(kind: 'photo' | 'document', maxBytes = DEFAULT_MA
 
 export const fileMeta = (f: Picked) => ({ mime: f.mime, sha256: f.sha256, sizeBytes: f.bytes.length });
 
+/** The expert's file for the report they registered (their own route: they are not a member of the business). */
+export async function uploadReportBytes(token: string | null, jobId: string, evidenceId: string, f: Picked) {
+  return api('PUT', `/pro/jobs/${jobId}/report/${evidenceId}/content`, { token, bytes: { data: f.bytes, mime: f.mime } });
+}
+
 export async function uploadBytes(token: string | null, companyId: string, evidenceId: string, f: Picked) {
   return api('PUT', `/companies/${companyId}/evidence/${evidenceId}/content`, { token, bytes: { data: f.bytes, mime: f.mime } });
 }

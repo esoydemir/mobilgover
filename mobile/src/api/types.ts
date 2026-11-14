@@ -37,6 +37,10 @@ export type TaskDetail = {
   rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string };
   legalBasis?: { ref: string; excerpt: string; version_label: string | null; source_title: string; issuer: string | null; is_example: boolean }[];
   lastCompletedAt?: string | null; nextDueAt?: string | null; hazardType?: string;
+  serviceReports?: { blocked: boolean; reason: string | null; reports: {
+    requestId: string; requestTitle: string; jobStatus: string; providerName: string; documentId: string; documentTitle: string; siteName: string;
+    latest: { version: number; reviewStatus: 'unreviewed' | 'verified' | 'rejected' };
+    versions: { version: number; reportVersion: number | null; reviewStatus: 'unreviewed' | 'verified' | 'rejected'; reviewNotes: string | null; reviewedBy: string | null; uploadedAt: string; fileStatus: string | null; isLatest: boolean }[] }[] };
   services?: { id: string; title: string; status: string; created_at: string }[];
   obligationId: string; requirements: Requirement[];
   limits: { quantity: string; equipmentType: string; unit: string; min: number | null; max: number | null; basis: string; note?: string }[];

@@ -5,6 +5,7 @@ import { can, onlyAssignedTasks, type Principal } from '../domain/permissions';
 import { localDay, occurrences, type Recurrence } from '../domain/schedule';
 import { ALLOWED_MIME } from '../storage/local';
 import { documentsForTask } from './documents';
+import { taskServiceReports } from './marketplace';
 import { appendAudit } from './audit';
 import { relatedCourses } from './training';
 import { createFromTask } from './nonconformities';
@@ -129,6 +130,12 @@ async function taskContext(tx: Tx, companyId: string, t: any) {
   return { legalBasis, lastCompletedAt: last, nextDueAt: next, services, hazardType: t.hazard_type };
 }
 
+/** Service reports of the task's linked services, only for people who may read the business's documents at the task's site. */
+async function taskReports(tx: Tx, p: Principal, companyId: string, t: any) {
+  if (!can(p, 'document.read', { companyId, siteId: t.site_id }).ok) return { reports: [], blocked: false, reason: null };
+  return taskServiceReports(tx, companyId, t.id);
+}
+
 export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId: string) {
   const t = await loadTask(tx, p, companyId, taskId, 'task.read');
   const c = await collected(tx, taskId);
@@ -140,6 +147,7 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     equipment: t.equipment_id ? { id: t.equipment_id, name: t.equipment_name, type: t.equipment_type } : null,
     rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example, title: t.obligation_title, summary: t.obligation_summary },
     ...(await taskContext(tx, companyId, t)),
+    serviceReports: await taskReports(tx, p, companyId, t),
     obligationId: t.obligation_id,
     requirements: reqs,
     limits: t.limits,
@@ -323,6 +331,9 @@ export async function completeTask(tx: Tx, p: Principal, companyId: string, task
   await tx.query(`SELECT 1 FROM tasks WHERE id = $1 AND company_id = $2 FOR UPDATE`, [taskId, companyId]);
   const t = await loadTask(tx, p, companyId, taskId, 'task.execute');
   assertOpen(t);
+  // A service report is evidence that someone in the business must check. Accepting the delivery does not close the task.
+  const gate = await taskServiceReports(tx, companyId, taskId);
+  if (gate.blocked) throw new AppError(422, 'SERVICE_REPORT_UNVERIFIED', gate.reason ?? 'Servis raporu doğrulanmadan görev kapatılamaz.', { reports: gate.reports.map(r => ({ requestTitle: r.requestTitle, documentId: r.documentId, status: r.latest.reviewStatus })) });
   const reqs = (t.evidence as unknown[]).map(x => evidenceRequirementSchema.parse(x));
   const c = await collected(tx, taskId);
   const a = assessEvidence(reqs, toCollected(c));

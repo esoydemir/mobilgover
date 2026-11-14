@@ -193,6 +193,36 @@ const SEVERITY_RISK = { critical: "Kritik kontrol: süresi geçerse Risk Merkezi
   major: "Önemli kontrol: süresi geçerse gecikmiş kontrol olarak Risk Merkezi'ne düşer.", minor: 'İyileştirme kontrolü: süresi geçerse gecikmiş olarak görünür.' } as const;
 
 /** Why the task exists, its legal basis, dates, who is responsible, what happens if it is not done, what to do and which services were asked for. */
+const REVIEW_TR = { unreviewed: ['İNCELEME BEKLİYOR', C.warn], verified: ['İNCELENDİ', C.lime], rejected: ['KABUL EDİLMEDİ', C.crit] } as const;
+/** Report files the experts delivered for this task's services: site, request, review state, versions; the task stays open until the latest is reviewed. */
+function ServiceReports({ t }: { t: TaskDetail }) {
+  const sr = t.serviceReports;
+  if (!sr || sr.reports.length === 0) return null;
+  return (
+    <View testID="task-reports"><Card radius={22} border={sr.blocked ? tint.warn(0.3) : tint.lime(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Eyebrow color={sr.blocked ? C.warn : C.lime}>SERVİS RAPORU</Eyebrow>
+      {sr.reports.map(r => (
+        <View key={r.documentId} testID={`task-report-${r.documentId}`} style={{ gap: 4 }}>
+          <Text style={type(13, 600, { lh: 1.35 })}>{r.requestTitle}</Text>
+          <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {r.siteName} · Uzman: {r.providerName}</Text>
+          {r.versions.map(v => (
+            <Text key={v.version} style={type(11.5, v.isLatest ? 600 : 400, { color: v.isLatest ? C.t1 : C.t3, lh: 1.45 })}>
+              Sürüm {v.version}{v.isLatest ? ' · SON SÜRÜM' : ' · önceki'} · <Text style={{ color: REVIEW_TR[v.reviewStatus][1] }}>{REVIEW_TR[v.reviewStatus][0]}</Text>{v.reviewNotes ? ` · ${v.reviewNotes}` : ''}
+            </Text>
+          ))}
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <GhostButton testID={`task-report-open-${r.documentId}`} label="Raporu belge kasasında aç" height={36} size={12} onPress={() => router.push(`/documents/${r.documentId}` as never)} />
+            <GhostButton label="Servis talebi" height={36} size={12} onPress={() => router.push(`/service/${r.requestId}` as never)} />
+          </View>
+        </View>
+      ))}
+      <Text testID="task-reports-note" style={type(11.5, 500, { color: sr.blocked ? C.warn : C.lime, lh: 1.45 })}>
+        {sr.blocked ? `Görev açık kalır: ${sr.reason ?? 'rapor dosyası incelenmedi.'} Teslim kabulü dosyanın doğrulandığı anlamına gelmez.` : 'Son rapor sürümü incelendi; görev diğer kanıtlar tamamlanınca kapatılabilir.'}
+      </Text>
+    </Card></View>
+  );
+}
+
 function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
   const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
   const hasLimit = t.requirements.some(r => r.kind === 'measurement');
@@ -226,6 +256,7 @@ Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonrak
         <Text testID="task-risk" style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>{SEVERITY_RISK[t.severity]}{hasLimit ? ' Ölçüm limit dışı çıkarsa uygunsuzluk açılır ve takip gerekir.' : ''}</Text>
         <Text style={type(11.5, 500, { color: C.t3 })}>Olası ceza tutarı: modellenmedi (doğrulanmış ceza tablosu yok).</Text>
       </Card>
+      <ServiceReports t={t} />
       {manager || (t.services?.length ?? 0) > 0 ? (
         <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>SERVİS</Eyebrow>
