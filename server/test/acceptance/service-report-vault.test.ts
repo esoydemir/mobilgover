@@ -55,7 +55,7 @@ describe('service report file → vault document', () => {
     docId = r.body.documentId;
     // The expert uploads the bytes; another expert cannot.
     expect((await P2().put(`/pro/jobs/${jobId}/report/${r.body.evidenceId}/content`, f1, 'application/pdf')).status).toBe(404);
-    const up = await P1().put(`/pro/jobs/${jobId}/report/${r.body.evidenceId}/content`, f1, 'application/pdf'); if (up.status !== 200) console.log('UP', JSON.stringify(up.body)); expect(up.status).toBe(200);
+    expect((await P1().put(`/pro/jobs/${jobId}/report/${r.body.evidenceId}/content`, f1, 'application/pdf')).status).toBe(200);
 
     const list2 = (await owner().get(`${C()}/documents`)).body as any[];
     const d = list2.find(x => x.id === docId);
