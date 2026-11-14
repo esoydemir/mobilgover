@@ -80,3 +80,5 @@ Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESL
 
 Kanıt dosyaları: `kanit-g45/wk/ekran`, `kanit-g45/cr/ekran` (ekran görüntüleri), `tools/g45check.cjs`.
 **Doğrulanamayanlar (açık):** fiziksel iPhone Safari (kamera QR, PDF indirme, yazdırma); kamerayla QR okuma; gerçek OCR motoru; gerçek cihazda 320 px dışındaki genişlikler.
+
+**CI bulgusu ve düzeltme:** GitHub CI, İstanbul gece yarısından sonra (UTC 21:00–24:00) `new-site-tasks.test.ts › repeating the operation never opens the same task twice` testinde düştü (`expected 1 to be 0`). Sebep ürün değil, test: şubenin takvimi İstanbul'dur, test ise UTC gününü kullanıyordu; bu saat aralığında "bugün" bir gün kayıyordu. Yerelde aynı saatte yeniden üretildi, test günü `Europe/Istanbul` ile hesaplayacak şekilde düzeltildi; tam takım 38/38 (318 test) geçti. Tam takımda bir koşuda tek bir dosya (`board`) yük altında kısa süre kurulumda düştü, tek başına ve sonraki tam koşuda geçti: zamanlama dalgalanması olarak izleniyor.

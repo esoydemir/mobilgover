@@ -51,8 +51,10 @@ describe('task generation for a newly added site', () => {
 
   it('repeating the operation never opens the same task twice', async () => {
     const before = await tasksOf(siteId);
-    const day = new Date().toISOString().slice(0, 10);
-    const to = new Date(Date.now() + 13 * 86_400_000).toISOString().slice(0, 10);
+    // The site's calendar is Istanbul's: between 21:00 and 24:00 UTC the site's "today" is already the next UTC day.
+    const ist = (ms: number) => new Date(ms).toLocaleDateString('en-CA', { timeZone: 'Europe/Istanbul' });
+    const day = ist(Date.now());
+    const to = ist(Date.now() + 13 * 86_400_000);
     for (let i = 0; i < 2; i++) {
       const g = await owner().post(`${C()}/tasks/generate`, { siteId, fromDay: day, toDay: to });
       expect(g.status).toBe(200);
