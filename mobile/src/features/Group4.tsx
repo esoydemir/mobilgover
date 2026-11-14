@@ -57,11 +57,12 @@ type Suggestion = { field: 'docType' | 'issuer' | 'documentNo' | 'validFrom' | '
 type Extraction = { id: string; version: number; status: string; suggestions: Suggestion[]; createdAt: string };
 const FIELD_TR: Record<string, string> = { docType: 'Belge türü', issuer: 'Düzenleyen kurum', documentNo: 'Belge no', validFrom: 'Başlangıç', validUntil: 'Bitiş' };
 
-export function ExtractionCard({ documentId, versionId, onApplied }: { documentId: string; versionId: string | null; onApplied: () => void }) {
+export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: { documentId: string; versionId: string | null; reviewed: boolean; onApplied: () => void }) {
   const { company, call } = useSession();
   const q = useApi<{ ocr: { available: boolean; note: string }; items: Extraction[] }>(company ? `/companies/${company.id}/documents/${documentId}/extractions` : null);
   const [text, setText] = useState(''); const [vals, setVals] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const pending = (q.data?.items ?? []).find(x => x.status === 'pending' && x.suggestions && true) ?? null;
+  const shown = (pending?.suggestions ?? []).filter(s => !reviewed || (s.field !== 'validFrom' && s.field !== 'validUntil'));
   const propose = async () => {
     setBusy(true); setError(null);
     try {
@@ -73,7 +74,8 @@ export function ExtractionCard({ documentId, versionId, onApplied }: { documentI
     if (!pending) return;
     setBusy(true); setError(null);
     try {
-      const fields = Object.fromEntries(pending.suggestions.map(s => [s.field, (vals[s.field] ?? s.value).trim() || null]));
+      // A reviewed version keeps the dates the reviewer confirmed; only the document's own details may be filled in.
+      const fields = Object.fromEntries(shown.map(s => [s.field, (vals[s.field] ?? s.value).trim() || null]));
       await call('POST', `/companies/${company!.id}/extractions/${pending.id}/decision`, confirm ? { confirm: true, fields } : { confirm: false });
       await q.reload(); if (confirm) onApplied();
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
@@ -86,8 +88,9 @@ export function ExtractionCard({ documentId, versionId, onApplied }: { documentI
       {pending ? (
         <View style={{ gap: 8 }}>
           <Text style={type(12.5, 600, { color: C.warn })}>Öneriler onayını bekliyor · sürüm {pending.version}. Onaylamadıkça belgeye yazılmaz; onaylasan da belge "incelendi" sayılmaz.</Text>
-          {pending.suggestions.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Metinden alan çıkarılamadı. Alanları elle gir.</Text> : null}
-          {pending.suggestions.map(s => (
+          {reviewed ? <Text testID="extract-reviewed-note" style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Bu sürüm incelendi: tarihler değişmez, yalnız belge bilgileri kaydedilir. Tarih değiştiyse yeni sürüm yükle.</Text> : null}
+          {shown.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Metinden alan çıkarılamadı. Alanları elle gir.</Text> : null}
+          {shown.map(s => (
             <View key={s.field} style={{ gap: 3 }}>
               <Field label={`${FIELD_TR[s.field]}${s.confidence === 'low' ? ' · düşük güven' : ''}`} testID={`extract-${s.field}`} value={vals[s.field] ?? s.value} onChangeText={v => setVals(x => ({ ...x, [s.field]: v }))} />
               <Text style={type(10.5, 400, { color: C.t3, lh: 1.35 })}>Kaynak satır: “{s.snippet}”{s.field === 'docType' ? ` · ${DOC_TYPE[s.value] ?? s.value}` : ''}{s.note ? ` · ${s.note}` : ''}</Text>

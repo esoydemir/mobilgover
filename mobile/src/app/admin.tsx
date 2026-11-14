@@ -44,7 +44,7 @@ export default function AdminRoute() {
         </View>
       ) : null}
       {error ? <ErrorBox message={error} /> : null}
-      {!mfaMissing && roles.length > 0 ? <PlatformOverview /> : null}
+      {roles.length > 0 ? <PlatformOverview /> : null}
       <Field label="Not / gerekçe (inceleme ve kararlar için)" value={note} onChangeText={setNote} placeholder="ör. Kaynak metinle karşılaştırıldı" />
 
       {rules.data || rules.error ? (
@@ -114,7 +114,7 @@ export default function AdminRoute() {
           ))}
         </>
       ) : null}
-      {!mfaMissing && roles.includes('platform_admin') ? <><PlatformRoles /><AuditTrail /></> : null}
+      {roles.includes('platform_admin') ? <><PlatformRoles /><AuditTrail /></> : null}
       {roles.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Platform rolün yok.</Text> : null}
     </Screen>
   );

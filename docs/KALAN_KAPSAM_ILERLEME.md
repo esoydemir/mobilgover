@@ -65,3 +65,15 @@ Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESL
 4. Sağlayıcı seçilince yapılacaklar: webhook imza doğrulaması ve idempotent olay defteri, sandbox'ta başarılı/başarısız/iade senaryoları, kart verisinin yalnızca sağlayıcı sayfasında girilmesi.
 
 **Not (tam takım):** Grup 5 sonrası tam takım ilk koşuda tek bir sıralama dalgalanması gösterdi (`market-depth`: aynı milisaniyede yazılan iki randevu satırı); sıralamaya `decided_at` ikinci anahtar olarak eklendi. Sonraki tam koşu 38/38 dosya geçti.
+
+## Grup 4–5 tarayıcı ve ortam doğrulaması (8091, 2026-11-14/15)
+| Ne | Nasıl | Sonuç |
+|---|---|---|
+| API sahnesi (12 kontrol) | `tools/g45check.cjs` 8091'e karşı | QR üret/PNG/bağlantı; yetkili sahip okutunca ekipman rotası; başka işletmenin sahibi ve bilinmeyen kod 404; asistan kaynaklı yanıt / konu dışı "yetersiz" / ceza tutarı reddi; metinden alan önerisi snippet'li; vazgeçince belgeye yazılmaz; platform genel durum + denetim; işletme sahibi denetimde 403 — **12/12 tamam** |
+| WebKit (iPhone 14 öykünmesi, 390 px) | QR kartı ekipman ekranında, asistan, kod girişi, belge metninden alan oku | QR görüntüsü ve bağlantı görünüyor; asistan 4 kaynakla yanıt veriyor ve "doğrulanmış mevzuat dayanağı değil" notunu yazıyor; geçersiz kod "QR kodu bulunamadı."; öneri kartı düşük güveni ve kaynak satırı gösteriyor; yatay taşma yok |
+| Çevrimdışı kesinti (WebKit) | Asistan sorusu bağlantı kesikken, sonra bağlantı geri | "Bağlantı yok." yazıyor, uygulama çökmüyor; bağlantı gelince aynı soru yanıtlanıyor |
+| Chromium (Pixel 7 öykünmesi) | `/admin` platform yöneticisi: genel durum, rol ver (gerekçesiz engel, gerekçeli verildi), denetim kaydı | Gerekçe 10 karakterden kısaysa "Önce en az 10 karakterlik gerekçeyi yaz."; rol verilince denetimde "Platform rolü verildi · Gerekçe: Moderasyon vardiyası için görevlendirildi" |
+| Bulgu ve düzeltme | İncelenmiş sürümde tarih alanlarını onaylamak 409 veriyordu (sunucu doğru reddediyor, ekran yönlendirmiyordu) | Kart, incelenmiş sürümde tarihleri göstermez ve nedenini yazar; yalnız belge bilgileri kaydedilir. Aynı akış yeniden denendi: tür ve belge no yazıldı, tarihler ve inceleme durumu değişmedi |
+
+Kanıt dosyaları: `kanit-g45/wk/ekran`, `kanit-g45/cr/ekran` (ekran görüntüleri), `tools/g45check.cjs`.
+**Doğrulanamayanlar (açık):** fiziksel iPhone Safari (kamera QR, PDF indirme, yazdırma); kamerayla QR okuma; gerçek OCR motoru; 320 px genişlikte (iPhone SE) Grup 4–5 ekranları (oturum açma sınırlaması yüzünden bu turda taranamadı); rol rol menü ekran taraması yalnız sunucu matrisiyle kapalı.
