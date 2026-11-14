@@ -88,12 +88,13 @@ const VERSIONS_SQL = `SELECT v.id, v.document_id, v.version, v.valid_from::text 
    FROM document_versions v JOIN users uu ON uu.id = v.uploaded_by LEFT JOIN users ru ON ru.id = v.reviewed_by LEFT JOIN users iu ON iu.id = v.issuer_checked_by
    LEFT JOIN LATERAL (SELECT * FROM evidence x WHERE x.document_version_id = v.id ORDER BY x.created_at DESC LIMIT 1) e ON true`;
 
-export type DocFilter = 'expiring' | 'expired' | 'pending_review' | 'rejected';
-/** Vault filters: soon to run out, ran out, waiting for review (also a newer version on a valid document), rejected. */
+export type DocFilter = 'expiring' | 'expired' | 'pending_review' | 'rejected' | 'no_file';
+/** Vault filters: soon to run out, ran out, waiting for review (also a newer version on a valid document), rejected, missing (no file uploaded yet). */
 export function matchesFilter(d: { status: DocStatus; expiring: boolean; pendingReview: boolean; latestRejected?: boolean }, f: DocFilter) {
   if (f === 'expiring') return d.expiring && d.status !== 'expired';
   if (f === 'expired') return d.status === 'expired';
   if (f === 'pending_review') return d.pendingReview;
+  if (f === 'no_file') return d.status === 'no_file';
   return d.status === 'rejected' || !!d.latestRejected;
 }
 

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 /**
  * Evidence file storage on local disk. The interface is small on purpose so
@@ -17,7 +17,10 @@ export class LocalStore implements EvidenceStore {
 
   private path(key: string) {
     const p = resolve(join(this.root, key));
-    if (!p.startsWith(this.root + '/')) throw new Error('invalid storage key');
+    // relative() uses the platform separator, so this holds on Windows (backslash) and POSIX alike;
+    // a key that escapes the root (or is the root itself) is refused.
+    const rel = relative(this.root, p);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('invalid storage key');
     return p;
   }
 

@@ -7,6 +7,7 @@ import { useQueue, type Op } from '../../api/queue';
 import { useSession } from '../../api/session';
 import type { Requirement, TaskDetail, TaskRow } from '../../api/types';
 import { errorText } from '../../api/client';
+import { quantityLabel, quantityTitle } from '../../features/quantity-label';
 import { useApi } from '../../api/useApi';
 import { CameraIcon, WarnIcon } from '../../components/Icons';
 import { Screen } from '../../components/Screen';
@@ -188,7 +189,7 @@ export default function TaskDetailRoute() {
   );
 }
 
-const REQ_TEXT = (r: Requirement) => r.kind === 'measurement' ? `${r.quantity === 'temperature' ? 'Sıcaklık' : r.quantity} ölçümü gir (${r.unit})`
+const REQ_TEXT = (r: Requirement) => r.kind === 'measurement' ? `${quantityTitle(r.quantity)} ölçümü gir (${r.unit})`
   : r.kind === 'photo' ? `En az ${r.min} fotoğraf ekle` : r.kind === 'document' ? `En az ${r.min} belge ekle${r.acceptsServiceReport ? ' ya da incelenmiş servis raporunu seç' : ''}`
   : r.kind === 'checklist' ? `Kontrol listesini yanıtla (${r.items.length} madde)` : r.kind === 'note' ? 'Açıklama yaz' : 'Yetkili onayı al';
 const SEVERITY_RISK = { critical: "Kritik kontrol: süresi geçerse Risk Merkezi'nde kritik kalem olur ve denetimde kayıt eksikliği olarak görülebilir.",
@@ -357,7 +358,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>ÖLÇÜM · ZORUNLU</Eyebrow>
-        <Text style={[type(13, 600), { marginTop: 10 }]}>{r.quantity === 'temperature' ? 'Ölçülen sıcaklık' : r.quantity} ({r.unit})</Text>
+        <Text style={[type(13, 600), { marginTop: 10 }]}>Ölçülen {quantityLabel(r.quantity)} ({r.unit})</Text>
         <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 3 }]}>
           {limit ? `Kabul aralığı: ${limit.min ?? '—'} … ${limit.max ?? '—'} ${limit.unit}${limit.basis === 'example' ? ' · ÖRNEK LİMİT, doğrulanmadı' : ''}` : 'Bu ekipman için limit tanımlı değil; sunucu kaydı reddeder.'}
         </Text>

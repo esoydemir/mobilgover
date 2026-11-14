@@ -33,8 +33,13 @@ export const limitSchema = z.object({
 export type Limit = z.infer<typeof limitSchema>;
 
 /** Turkish labels for measured quantities shown to users. */
-export const QUANTITY_LABEL: Record<string, string> = { temperature: 'sıcaklık' };
-const qLabel = (q: string) => QUANTITY_LABEL[q] ?? q;
+export const QUANTITY_LABEL: Record<string, string> = {
+  temperature: 'sıcaklık', humidity: 'nem', pressure: 'basınç', ph: 'pH', chlorine: 'klor', oil_polar: 'yağ polar madde oranı',
+  core_temperature: 'çekirdek sıcaklık', hot_holding_temperature: 'sıcak tutma sıcaklığı', cold_holding_temperature: 'soğuk tutma sıcaklığı',
+};
+/** Never shows an internal field name: unknown quantities fall back to a readable form of the code. */
+export const qLabel = (q: string) => QUANTITY_LABEL[q] ?? q.replace(/_/g, ' ');
+export const APPROVAL_ROLE_LABEL: Record<string, string> = { owner: 'işletme sahibi', hq_manager: 'merkez yöneticisi', site_manager: 'şube yöneticisi' };
 
 export type SelectedLimit = { ok: true; limit: Limit } | { ok: false; code: 'LIMIT_UNDEFINED' | 'UNIT_MISMATCH'; message: string };
 
@@ -42,7 +47,7 @@ export type SelectedLimit = { ok: true; limit: Limit } | { ok: false; code: 'LIM
 export function selectLimit(limits: Limit[], quantity: string, equipmentType: string | null, unit: string, productCategory?: string): SelectedLimit {
   const candidates = limits.filter(l => l.quantity === quantity && l.equipmentType === equipmentType);
   const match = candidates.find(l => l.productCategory === productCategory) ?? candidates.find(l => !l.productCategory);
-  if (!match) return { ok: false, code: 'LIMIT_UNDEFINED', message: `Bu ekipman türü (${equipmentType ?? 'yok'}) için "${quantity}" limiti tanımlı değil. Limit tahmin edilmez; kural sahibine bildirin.` };
+  if (!match) return { ok: false, code: 'LIMIT_UNDEFINED', message: `Bu ekipman türü (${equipmentType ?? 'yok'}) için "${qLabel(quantity)}" limiti tanımlı değil. Limit tahmin edilmez; kural sahibine bildirin.` };
   if (match.unit !== unit) return { ok: false, code: 'UNIT_MISMATCH', message: `Birim ${match.unit} olmalı, ${unit} gönderildi.` };
   return { ok: true, limit: match };
 }
@@ -73,7 +78,7 @@ export function assessEvidence(reqs: EvidenceRequirement[], ev: CollectedEvidenc
   for (const r of reqs) {
     if (r.kind === 'measurement') {
       const ms = ev.measurements.filter(m => m.quantity === r.quantity);
-      if (!ms.length) missing.push(`Ölçüm: ${r.quantity} (${r.unit})`);
+      if (!ms.length) missing.push(`Ölçüm: ${qLabel(r.quantity)} (${r.unit})`);
       else if (ms.some(m => !m.withinLimit)) nonconforming.push(`Ölçüm limit dışı: ${qLabel(r.quantity)}`);
     } else if (r.kind === 'photo' || r.kind === 'document') {
       const label = r.kind === 'photo' ? 'Fotoğraf' : 'Belge';
@@ -82,14 +87,14 @@ export function assessEvidence(reqs: EvidenceRequirement[], ev: CollectedEvidenc
       const waiting = ev.files.filter(f => f.kind === r.kind && f.status === 'pending_upload').length;
       if (stored < r.min) (waiting ? pending : missing).push(`${label}: ${stored}/${r.min} ${r.kind === 'document' && r.acceptsServiceReport ? 'yüklendi ya da incelenmiş servis raporu seçildi' : 'yüklendi'}`);
     } else if (r.kind === 'device_record') {
-      if (!ev.files.some(f => f.kind === 'device_record' && f.status === 'stored')) missing.push(`Cihaz kaydı: ${r.quantity}`);
+      if (!ev.files.some(f => f.kind === 'device_record' && f.status === 'stored')) missing.push(`Cihaz kaydı: ${qLabel(r.quantity)}`);
     } else if (r.kind === 'checklist') {
       const answers = ev.checklist ?? {};
       const unanswered = r.items.filter(i => !answers[i.id]);
       if (unanswered.length) missing.push(`Kontrol listesi: ${unanswered.map(i => i.label).join(', ')}`);
       for (const i of r.items) if (answers[i.id] === 'fail' && i.critical) nonconforming.push(`Kontrol listesi uygunsuz: ${i.label}`);
     } else if (r.kind === 'approval') {
-      if (!ev.approvals.includes(r.role)) missing.push(`Onay: ${r.role}`);
+      if (!ev.approvals.includes(r.role)) missing.push(`Onay: ${APPROVAL_ROLE_LABEL[r.role] ?? r.role}`);
     }
   }
   // A written explanation is required once the result is nonconforming.

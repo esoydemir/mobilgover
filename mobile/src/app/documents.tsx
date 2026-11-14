@@ -25,7 +25,7 @@ export default function DocumentsRoute() {
       <PrimaryButton testID="doc-new" label="Belge ekle" onPress={() => router.push('/documents/new')} />
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Durumlar ayrı tutulur: inceleme bekliyor, kurum içi incelendi, düzenleyen kurumdan doğrulandı, reddedildi, süresi doldu. Yükleme ya da kurum içi inceleme resmî geçerlilik doğrulaması değildir; GoverHub kurumu kendisi sorgulamaz.</Text>
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-        {([[null, 'Tümü'], ['expiring', 'Yakında bitecek'], ['expired', 'Süresi doldu'], ['pending_review', 'İnceleme bekliyor'], ['rejected', 'Reddedildi']] as const).map(([k, l]) =>
+        {([[null, 'Tümü'], ['expiring', 'Yakında bitecek'], ['expired', 'Süresi doldu'], ['pending_review', 'İnceleme bekliyor'], ['rejected', 'Reddedildi'], ['no_file', 'Eksik (dosya yok)']] as const).map(([k, l]) =>
           <FilterChip key={k ?? 'all'} testID={`doc-filter-${k ?? 'all'}`} label={l} px={11} active={filter === k} onPress={() => setFilter(k)} />)}
       </View>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}

@@ -1065,7 +1065,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   const isoDate = z.iso.date().nullable();
   app.get('/companies/:companyId/documents', async req => {
     const companyId = company(req);
-    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional(), filter: z.enum(['expiring', 'expired', 'pending_review', 'rejected']).optional() }).parse(req.query);
+    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional(), filter: z.enum(['expiring', 'expired', 'pending_review', 'rejected', 'no_file']).optional() }).parse(req.query);
     return db.tenant(companyId, tx => docs.listDocuments(tx, req.principal, companyId, q));
   });
   app.post('/companies/:companyId/documents', async (req, reply) => {

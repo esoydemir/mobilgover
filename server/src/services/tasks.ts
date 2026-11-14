@@ -366,6 +366,13 @@ export async function recordMeasurement(tx: Tx, p: Principal, companyId: string,
   return { id, withinLimit: ok, limit: sel.limit, calibrationStatus: calibration };
 }
 
+/** The frozen template and rule version a record was filled against. Old records keep opening with the form they were made on. */
+async function formVersion(tx: Tx, templateId: string) {
+  const r = (await tx.query<{ code: string; title: string; version: number; rule_code: string }>(
+    `SELECT tt.code, tt.title, rv.version, r.code AS rule_code FROM task_templates tt JOIN rule_versions rv ON rv.id = tt.rule_version_id JOIN rules r ON r.id = rv.rule_id WHERE tt.id = $1`, [templateId])).rows[0];
+  return r ? { templateId, templateCode: r.code, ruleCode: r.rule_code, ruleVersion: r.version } : { templateId };
+}
+
 export type EvidenceInput =
   | { kind: 'photo' | 'document' | 'device_record'; mime: string; sha256: string; sizeBytes: number }
   | { kind: 'note'; text: string }
@@ -399,6 +406,8 @@ export async function addEvidence(tx: Tx, p: Principal, companyId: string, taskI
     else if (e.kind === 'checklist') body = { answers: e.answers };
     else if (e.kind === 'approval') body = { role: e.role };
     else throw invalid('Bilinmeyen kanıt türü.');
+    // The record keeps the form (template) version it was filled against; later rule versions never reinterpret it.
+    body.form = await formVersion(tx, t.template_id);
     row = (await tx.query(
       `INSERT INTO evidence (company_id, task_id, kind, status, body, created_by, stored_at)
        VALUES ($1,$2,$3,'stored',$4,$5, clock_timestamp()) RETURNING id, status`,

@@ -153,11 +153,11 @@ describe('flow 2: a task with a measurement requirement stays open with the repo
     expect((await select(measTask, docId, await latestVersionId(docId))).status).toBe(200);
     const d = await detail(measTask);
     expect(d.progress.complete).toBe(false);
-    expect(d.progress.missing).toEqual(['Ölçüm: temperature (°C)']);
+    expect(d.progress.missing).toEqual(['Ölçüm: sıcaklık (°C)']);
     const done = await owner().post(`${C()}/tasks/${measTask}/complete`, {});
     expect(done.status).toBe(422);
     expect(done.body.error.code).toBe('EVIDENCE_INCOMPLETE');
-    expect(done.body.error.details.missing).toEqual(['Ölçüm: temperature (°C)']);
+    expect(done.body.error.details.missing).toEqual(['Ölçüm: sıcaklık (°C)']);
     expect((await detail(measTask)).status).toBe('open');
   });
 
@@ -167,7 +167,7 @@ describe('flow 2: a task with a measurement requirement stays open with the repo
     const d = await detail(measTask);
     expect(d.reportEvidence.links[0]).toMatchObject({ version: 1, status: 'stale', counts: false });
     expect(d.reportEvidence.links[0].reason).toMatch(/Yeni rapor sürümü \(2\)/);
-    expect(d.progress.missing).toEqual(['Ölçüm: temperature (°C)', 'Belge: 0/1 yüklendi ya da incelenmiş servis raporu seçildi']);
+    expect(d.progress.missing).toEqual(['Ölçüm: sıcaklık (°C)', 'Belge: 0/1 yüklendi ya da incelenmiş servis raporu seçildi']);
     expect(d.reportEvidence.options[0]).toMatchObject({ version: 2, selected: false });
     expect(d.reportEvidence.options[0].reason).toMatch(/henüz incelenmedi/);
     const stale = (await env.ownerDb.query(`SELECT payload FROM audit_events WHERE entity_id = $1 AND event_type = 'task.report_evidence_stale'`, [measTask])).rows;
