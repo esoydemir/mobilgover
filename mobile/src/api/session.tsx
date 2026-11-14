@@ -3,7 +3,7 @@ import { api, ApiError } from './client';
 import { load, remove, save } from './storage';
 import type { Company, Env, Me } from './types';
 
-type Stored = { token: string | null; companyId: string | null; userId?: string | null; siteId?: string | null };
+type Stored = { token: string | null; companyId: string | null; userId?: string | null; siteId?: string | null; provider?: boolean | null };
 
 type Session = {
   ready: boolean;
@@ -12,8 +12,9 @@ type Session = {
   /** Kept on the device so queued records can be matched to their author even when the app starts offline. */
   userId: string | null;
   me: Me | null;
-  /** True when the person has no business but has a professional (provider) profile: their home is the provider area. */
-  provider: boolean;
+  /** True when the person has no business but has a professional (provider) profile: their home is the provider area.
+   *  null = not known yet (the profile could not be fetched, e.g. offline): never send them to business setup meanwhile. */
+  provider: boolean | null;
   companies: Company[];
   company: Company | null;
   siteId: string | null;
@@ -41,30 +42,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [stored, setStored] = useState<Stored>({ token: null, companyId: null });
   const [me, setMe] = useState<Me | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [provider, setProvider] = useState(false);
+  const [provider, setProvider] = useState<boolean | null>(null);
 
   const persist = useCallback((s: Stored) => { setStored(s); void save(KEY, s); }, []);
 
-  const loadAccount = useCallback(async (token: string) => {
+  const loadAccount = useCallback(async (token: string, hint: boolean | null = null) => {
     const [m, c] = await Promise.all([api<Me>('GET', '/me', { token }), api<Company[]>('GET', '/companies', { token })]);
     // Someone with no business but a professional profile belongs in the provider area, not the business setup.
-    let isProvider = false;
+    // If the profile cannot be fetched (offline), keep what the device last knew (or "unknown") instead of guessing "no".
+    let p: boolean | null = c.length === 0 ? hint : false;
     if (c.length === 0) {
-      try { isProvider = !!(await api<unknown>('GET', '/pro/profile', { token })); } catch { /* no profile or offline: treat as a plain new user */ }
+      try { p = !!(await api<unknown>('GET', '/pro/profile', { token })); } catch { /* unknown: retried when the connection returns */ }
     }
-    setProvider(isProvider);
+    setProvider(p);
     setMe(m);
     setCompanies(c);
-    return { m, c };
+    return { m, c, p };
   }, []);
 
   useEffect(() => {
     (async () => {
       const s = await load<Stored>(KEY, { token: null, companyId: null });
       setStored(s);
+      setProvider(s.provider ?? null);
       try { setEnv(await api<Env>('GET', '/env')); } catch { /* offline: env unknown until next start */ }
       if (s.token) {
-        try { await loadAccount(s.token); }
+        try { const r = await loadAccount(s.token, s.provider ?? null); if (r.p !== (s.provider ?? null)) persist({ ...s, provider: r.p }); }
         catch (e) {
           // An expired session signs out; an offline start keeps the token and cached screens.
           if (e instanceof ApiError && e.status === 401) { await remove(KEY); setStored({ token: null, companyId: null }); }
@@ -72,7 +75,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       setReady(true);
     })();
-  }, [loadAccount]);
+  }, [loadAccount, persist]);
+
+  // Signed in but the account (or the professional profile) is still unknown, e.g. the app opened offline:
+  // try again on a timer and the moment the browser/phone says the connection is back.
+  const token = stored.token;
+  const needsAccount = ready && !!token && (!me || (companies.length === 0 && provider === null));
+  useEffect(() => {
+    if (!needsAccount || !token) return;
+    let stop = false;
+    const attempt = async () => {
+      try {
+        const r = await loadAccount(token, provider);
+        if (!stop && r.p !== provider) persist({ ...stored, provider: r.p });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401 && !stop) { await remove(KEY); setStored({ token: null, companyId: null }); }
+      }
+    };
+    const timer = setInterval(attempt, 5000);
+    const g = globalThis as { addEventListener?: (n: string, f: () => void) => void; removeEventListener?: (n: string, f: () => void) => void };
+    g.addEventListener?.('online', attempt);
+    return () => { stop = true; clearInterval(timer); g.removeEventListener?.('online', attempt); };
+  }, [needsAccount, token, provider, stored, loadAccount, persist]);
 
   const value = useMemo<Session>(() => {
     const company = companies.find(c => c.id === stored.companyId) ?? companies[0] ?? null;
@@ -86,8 +110,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       api<T>(method, path, { token: stored.token, body, idempotencyKey });
 
     const finish = async (token: string) => {
-      const { m, c } = await loadAccount(token);
-      persist({ token, companyId: c[0]?.id ?? null, userId: m.userId });
+      const { m, c, p } = await loadAccount(token);
+      persist({ token, companyId: c[0]?.id ?? null, userId: m.userId, provider: p });
     };
 
     return {
@@ -106,8 +130,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       logout: async () => {
         try { await call('POST', '/auth/logout'); } catch { /* sign out locally anyway */ }
-        setMe(null); setCompanies([]); setProvider(false);
-        persist({ token: null, companyId: null, userId: null });
+        setMe(null); setCompanies([]); setProvider(null);
+        persist({ token: null, companyId: null, userId: null, provider: null });
       },
       refresh: async () => { if (stored.token) await loadAccount(stored.token); },
       selectCompany: id => persist({ ...stored, companyId: id, siteId: null }),

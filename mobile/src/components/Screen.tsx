@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, type ReactNode } from 'react';
+import { useCallback, useEffect, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../api/queue';
@@ -97,6 +97,18 @@ function BrandHeader() {
 function NotificationBell({ companyId }: { companyId: string }) {
   const q = useApi<{ unread: number }>(`/companies/${companyId}/notifications`);
   useFocusEffect(useCallback(() => { void q.reload(); }, [])); // eslint-disable-line react-hooks/exhaustive-deps
+  // A new quote, report or assignment must reach the person who keeps this screen open: refresh on a timer and
+  // whenever the app/tab comes back to the foreground.
+  useEffect(() => {
+    const again = () => { void q.reload(); };
+    const timer = setInterval(again, 20_000);
+    const doc = (globalThis as { document?: Document }).document;
+    const win = globalThis as { addEventListener?: (n: string, f: () => void) => void; removeEventListener?: (n: string, f: () => void) => void };
+    const onVisible = () => { if (!doc || doc.visibilityState === 'visible') again(); };
+    doc?.addEventListener('visibilitychange', onVisible);
+    win.addEventListener?.('focus', again);
+    return () => { clearInterval(timer); doc?.removeEventListener('visibilitychange', onVisible); win.removeEventListener?.('focus', again); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const unread = q.data?.unread ?? 0;
   return (
     <Tap testID="home-bell" accessibilityLabel={unread ? `${unread} okunmamış bildirim` : 'Bildirimler'} onPress={() => router.push('/notifications')}

@@ -94,7 +94,15 @@ export async function openEvidence(token: string | null, companyId: string, evid
     if (opts.download) {
       const a = document.createElement('a');
       a.href = blobUrl; a.download = opts.name ?? 'belge'; a.click();
-    } else window.open(blobUrl, '_blank', 'noopener');
+    } else {
+      // After an awaited fetch some browsers (iOS Safari) block the new tab. Never fail silently: fall back to a download.
+      const w = window.open(blobUrl, '_blank');
+      if (w) w.opener = null;
+      else {
+        const a = document.createElement('a');
+        a.href = blobUrl; a.download = opts.name ?? 'belge'; a.click();
+      }
+    }
     return;
   }
   const ext = (opts.name?.match(/\.[a-z0-9]+$/i)?.[0]) ?? '';
@@ -103,6 +111,29 @@ export async function openEvidence(token: string | null, companyId: string, evid
   if (r.status !== 200) throw new Error(r.status === 404 ? 'Dosyayı görme yetkin yok ya da dosya yok.' : 'Dosya indirilemedi.');
   if (!(await Sharing.isAvailableAsync())) throw new Error('Bu cihazda dosya açma/paylaşma kullanılamıyor.');
   await Sharing.shareAsync(r.uri, { mimeType: r.headers['content-type'] ?? r.headers['Content-Type'], dialogTitle: opts.name ?? 'Belge' });
+}
+
+/**
+ * Fetches a stored file with the session's authorisation and returns a local URI an <Image> can show
+ * (web: a blob URL, to be released with `release`; phone: a file in the app cache). Throws a readable message.
+ */
+export async function fetchEvidenceUri(token: string | null, companyId: string, evidenceId: string): Promise<{ uri: string; mime: string; release: () => void }> {
+  const url = `${API_URL}/companies/${companyId}/evidence/${evidenceId}/content`;
+  const headers: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
+  if (Platform.OS === 'web') {
+    let res: Response;
+    try { res = await fetch(url, { headers }); } catch { throw new Error('Bağlantı yok; fotoğraf yüklenemedi.'); }
+    if (!res.ok) throw new Error(res.status === 404 || res.status === 403 ? 'Dosyayı görme yetkin yok ya da dosya yok.' : 'Fotoğraf yüklenemedi.');
+    const blob = await res.blob();
+    if (!blob.size) throw new Error('Dosya boş geldi.');
+    const uri = URL.createObjectURL(blob);
+    return { uri, mime: blob.type, release: () => URL.revokeObjectURL(uri) };
+  }
+  const dest = `${LegacyFS.cacheDirectory}goverhub-${evidenceId}`;
+  let r;
+  try { r = await LegacyFS.downloadAsync(url, dest, { headers }); } catch { throw new Error('Bağlantı yok; fotoğraf yüklenemedi.'); }
+  if (r.status !== 200) throw new Error(r.status === 404 || r.status === 403 ? 'Dosyayı görme yetkin yok ya da dosya yok.' : 'Fotoğraf yüklenemedi.');
+  return { uri: r.uri, mime: r.headers['content-type'] ?? r.headers['Content-Type'] ?? '', release: () => {} };
 }
 
 /**

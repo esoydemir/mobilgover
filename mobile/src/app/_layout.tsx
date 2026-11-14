@@ -5,7 +5,7 @@ import { useFonts } from 'expo-font';
 import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Platform, Text, View, useWindowDimensions } from 'react-native';
 import { QueueProvider } from '../api/queue';
 import { SessionProvider, useSession } from '../api/session';
 import { TabBar } from '../components/TabBar';
@@ -63,14 +63,23 @@ function Gate({ children }: { children: ReactNode }) {
   // People without a business: specialists, network users and platform staff (rules, review, institution demo).
   const providerOnly = !!me && companies.length === 0 && (path.startsWith('/pro') || path.startsWith('/network') || path.startsWith('/moderation')
     || (platform && (path.startsWith('/admin') || path.startsWith('/rule') || path.startsWith('/institution') || path === '/more')));
+  // No business and not yet known whether they are a specialist (the profile could not be read, e.g. offline): wait, do not guess.
+  const waitingProfile = !!token && !!me && companies.length === 0 && provider === null && !providerOnly && path !== '/setup' && path !== '/account';
   useEffect(() => {
     if (!ready) return;
     if (!token && !OPEN_ROUTES.includes(path)) router.replace('/login');
     // No business: a person with a professional profile goes to the provider area; everyone else to business setup.
-    else if (token && me && companies.length === 0 && !providerOnly && path !== '/setup' && path !== '/account') router.replace(provider ? '/pro' : '/setup');
+    else if (token && me && companies.length === 0 && !providerOnly && !waitingProfile && path !== '/setup' && path !== '/account') router.replace(provider ? '/pro' : '/setup');
     else if (token && path === '/login') router.replace('/');
-  }, [ready, token, companies.length, me, path, providerOnly, provider]);
+  }, [ready, token, companies.length, me, path, providerOnly, provider, waitingProfile]);
   if (!ready) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={C.lime} /></View>;
+  if (waitingProfile) return (
+    <View testID="gate-waiting-profile" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 }}>
+      <ActivityIndicator color={C.lime} />
+      <Text style={{ color: C.t1, fontSize: 16, fontWeight: '600', textAlign: 'center' }}>Hesabın kontrol ediliyor</Text>
+      <Text style={{ color: C.t2, fontSize: 13, lineHeight: 19, textAlign: 'center' }}>Uzman profilin sunucudan okunamadı (bağlantı yok olabilir). Bağlantı gelince doğru ekran kendiliğinden açılır; işletme kurulumuna gönderilmedin.</Text>
+    </View>
+  );
   return <>{children}</>;
 }
 

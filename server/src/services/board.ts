@@ -3,6 +3,7 @@ import { conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { listDocuments } from './documents';
+import { topUpSite } from './tasks';
 
 /**
  * Manager board (6B): what needs a manager today, in a fixed, explained order. Every count is the
@@ -211,5 +212,8 @@ export async function addSite(tx: Tx, p: Principal, companyId: string, b: { name
   if ((await tx.query(`SELECT 1 FROM sites WHERE company_id = $1 AND lower(name) = lower($2)`, [companyId, name])).rowCount) throw conflict('SITE_EXISTS', 'Bu adla bir şube zaten var.');
   const s = (await tx.query<{ id: string }>(`INSERT INTO sites (company_id, name, timezone) VALUES ($1,$2,'Europe/Istanbul') RETURNING id`, [companyId, name])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'site.added', entityType: 'site', entityId: s.id, payload: { name } });
-  return { id: s.id };
+  // Decisions for the new site start right away (company-level answers apply; site-level ones show as "needs information"),
+  // and any check that already applies gets its tasks. What is still missing is visible on the obligations list.
+  const filled = await topUpSite(tx, companyId, s.id, 14, p.userId);
+  return { id: s.id, createdTasks: filled.created };
 }

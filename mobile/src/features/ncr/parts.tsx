@@ -12,6 +12,7 @@ import { C, tint, type } from '../../theme';
 import { fmtDateTime } from '../dates';
 import { ROLE_LABEL } from '../labels';
 import { fileMeta, openEvidence, pickFile, uploadBytes } from '../files';
+import { EvidencePreview } from './EvidencePreview';
 import { ACTION_KIND, CAUSE_LABEL, STAGE_LABEL, historyLine, type Cause, type NcrDetail } from './types';
 
 /** Runs a server call with busy / error state and a success toast, then reloads. */
@@ -481,7 +482,9 @@ function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]
       {a.evidence.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
           {a.evidence.map((e, i) => e.status === 'stored'
-            ? <Tap key={e.id} testID={`action-evidence-open-${e.id}`} onPress={() => open(e.id)}><Pill label={`${e.kind === 'photo' ? 'FOTOĞRAF' : 'BELGE'} ${i + 1} · AÇ`} fg={C.info} bg={tint.info(0.12)} /></Tap>
+            ? (e.kind === 'photo'
+              ? <EvidencePreview key={e.id} id={e.id} label={`FOTOĞRAF ${i + 1}`} />
+              : <Tap key={e.id} testID={`action-evidence-open-${e.id}`} onPress={() => open(e.id)}><Pill label={`BELGE ${i + 1} · AÇ`} fg={C.info} bg={tint.info(0.12)} /></Tap>)
             : <Pill key={e.id} label={e.status === 'pending_upload' ? 'YÜKLENİYOR' : 'REDDEDİLEN DOSYA'} fg={e.status === 'rejected' ? C.crit : C.t3} bg={C.chip} />)}
         </View>
       ) : null}
