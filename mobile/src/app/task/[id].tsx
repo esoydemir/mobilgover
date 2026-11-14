@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { useQueue, type Op } from '../../api/queue';
 import { useSession } from '../../api/session';
-import type { Requirement, TaskDetail } from '../../api/types';
+import type { Requirement, TaskDetail, TaskRow } from '../../api/types';
 import { useApi } from '../../api/useApi';
 import { CameraIcon, WarnIcon } from '../../components/Icons';
 import { Screen } from '../../components/Screen';
@@ -13,6 +13,7 @@ import { ErrorBox, ExampleBadge, Field, Loading, StaleNote } from '../../compone
 import { Card, Chevron, Eyebrow, GhostButton, PrimaryButton, Rise, SevPill, Tap } from '../../components/ui';
 import { AssignCard } from '../../features/AssignCard';
 import { fmtDateTime } from '../../features/dates';
+import { bucketTasks, taskWindowPath } from '../../features/work';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
 
@@ -35,6 +36,8 @@ export default function TaskDetailRoute() {
   const base = `/companies/${company?.id}`;
   const q = useApi<TaskDetail>(company ? `${base}/tasks/${id}` : null);
   const instruments = useApi<Instrument[]>(company && siteId && role !== 'staff' ? `${base}/sites/${siteId}/equipment` : null);
+  // History of the same check (same title and unit) in the shared task window: done / nonconforming / late.
+  const windowed = useApi<TaskRow[]>(company && siteId ? taskWindowPath(base, siteId) : null);
   const t = q.data;
   const local = ops.filter(o => o.taskId === id);
   const completing = local.find(o => o.path.endsWith('/complete'));
@@ -78,6 +81,20 @@ export default function TaskDetailRoute() {
         </View>
         <Chevron size={14} />
       </Tap>
+
+      {windowed.data ? (() => {
+        const same = bucketTasks(windowed.data).all.filter(x => x.id !== t.id && x.title === t.title && (x.equipment_name ?? null) === (t.equipment?.name ?? null) && new Date(x.due_at) <= new Date());
+        const bad = same.filter(x => x.outcome === 'nonconforming').length;
+        const late = same.filter(x => x.status === 'missed' || (x.status === 'open' && new Date(x.due_at) < new Date())).length;
+        return (
+          <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
+            <Eyebrow>GEÇMİŞ · SON 14 GÜN</Eyebrow>
+            <Text testID="task-history" style={type(12.5, 500, { color: bad || late ? C.warn : C.t2, lh: 1.45 })}>
+              {same.length === 0 ? 'Bu kontrol için önceki kayıt yok.' : `${same.length} önceki kayıt · ${bad} uygunsuz · ${late} gecikmiş/kaçırılmış${bad >= 2 ? ' · tekrar eden uygunsuzluk' : ''}`}
+            </Text>
+          </Card>
+        );
+      })() : null}
 
       {t.status === 'done' && (
         <Card border={t.outcome === 'nonconforming' ? tint.crit(0.35) : tint.lime(0.3)}>
