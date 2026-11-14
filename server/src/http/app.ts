@@ -11,6 +11,7 @@ import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
 import { addSite, board, relate } from '../services/board';
+import { bulkAssignApply, bulkAssignPreview } from '../services/bulk-assign';
 import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
@@ -469,6 +470,19 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const q = z.object({ siteId: uuid.optional(), from: z.iso.datetime({ offset: true }).optional(), to: z.iso.datetime({ offset: true }).optional(),
       status: z.enum(['open', 'done', 'missed', 'cancelled']).optional() }).parse(req.query);
     return db.tenant(companyId, tx => listTasks(tx, req.principal, companyId, q));
+  });
+  // Bulk assignment: preview names the affected sites and people; apply needs the preview's count.
+  const bulkScope = z.object({ userId: uuid, siteIds: z.array(uuid).max(200).optional(), templateCode: z.string().max(80).optional(),
+    from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }), onlyUnassigned: z.boolean().optional() });
+  app.post('/companies/:companyId/tasks/bulk-assign/preview', async req => {
+    const companyId = company(req);
+    const b = bulkScope.parse(req.body);
+    return db.tenant(companyId, async tx => { const { taskIds: _t, ...v } = await bulkAssignPreview(tx, req.principal, companyId, b); return v; });
+  });
+  app.post('/companies/:companyId/tasks/bulk-assign', async (req, reply) => {
+    const companyId = company(req);
+    const b = bulkScope.extend({ expectedTotal: z.number().int().min(0), reason: z.string().max(500).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => bulkAssignApply(tx, req.principal, companyId, b));
   });
   app.get('/companies/:companyId/tasks/:taskId', async req => {
     const companyId = company(req);

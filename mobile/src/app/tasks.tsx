@@ -73,6 +73,7 @@ export default function TasksRoute() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingBottom: 2 }}>
         {TASK_FILTERS.map(([k, label]) => <FilterChip key={k} testID={`tasks-filter-${k}`} label={q.data ? `${label} ${buckets[k].length}` : label} px={13} active={filter === k} onPress={() => setFilter(k)} />)}
       </View>
+      {role && role !== 'staff' ? <GhostButton testID="tasks-bulk-open" label="Toplu görev ata" height={36} size={12} onPress={() => router.push('/tasks-bulk')} style={{ alignSelf: 'flex-start' }} /> : null}
       <Text testID="tasks-filter-note" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{FILTER_NOTE[filter]}</Text>
       {q.stale ? <StaleNote /> : null}
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
