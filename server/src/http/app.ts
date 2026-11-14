@@ -13,6 +13,9 @@ import { readContent, uploadContent } from '../services/evidence';
 import { addSite, board, relate } from '../services/board';
 import { bulkAssignApply, bulkAssignPreview } from '../services/bulk-assign';
 import * as depth from '../services/market-depth';
+import * as qr from '../services/qr';
+import * as extraction from '../services/extraction';
+import { ask as askAssistant } from '../services/assistant';
 import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
@@ -898,6 +901,63 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/pro/requests/:id/messages', async (req, reply) => {
     const { id } = z.object({ id: uuid }).parse(req.params);
     return userMutate(req, reply, tx => depth.providerSend(tx, req.principal, id, z.object({ body: z.string().max(2000) }).parse(req.body).body), 201);
+  });
+  // ── QR codes bound to records; a scan is checked against the scanner's own rights on the server ──
+  const baseUrl = z.string().max(200).regex(/^https?:\/\/[^\s]+$/);
+  app.post('/companies/:companyId/qr', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ kind: z.enum(['equipment', 'document', 'site']), refId: uuid, label: z.string().max(120).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => qr.createQr(tx, req.principal, companyId, b), 201);
+  });
+  app.get('/companies/:companyId/qr', async req => {
+    const companyId = company(req);
+    const q = z.object({ kind: z.enum(['equipment', 'document', 'site']).optional(), refId: uuid.optional() }).parse(req.query);
+    return db.tenant(companyId, tx => qr.listQr(tx, req.principal, companyId, q));
+  });
+  app.post('/companies/:companyId/qr/:id/active', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ active: z.boolean(), reason: z.string().max(300).nullable().optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => qr.setQrActive(tx, req.principal, companyId, id, b));
+  });
+  app.get('/companies/:companyId/qr/:id/image', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const { base } = z.object({ base: baseUrl }).parse(req.query);
+    return db.tenant(companyId, tx => qr.qrImage(tx, req.principal, companyId, id, base));
+  });
+  app.get('/qr/resolve', async req => {
+    const { token } = z.object({ token: z.string().min(20).max(80).regex(/^[A-Za-z0-9_-]+$/) }).parse(req.query);
+    return db.system(tx => qr.resolveQr(tx, req.principal, token));
+  });
+
+  // ── Reading fields from document text: proposals a person reviews and confirms ──
+  app.get('/ocr/status', async () => extraction.ocrStatus());
+  app.get('/companies/:companyId/documents/:id/extractions', async req => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => extraction.listExtractions(tx, req.principal, companyId, id));
+  });
+  app.post('/companies/:companyId/documents/:id/versions/:versionId/extractions', async (req, reply) => {
+    const companyId = company(req);
+    const { id, versionId } = z.object({ id: uuid, versionId: uuid }).parse(req.params);
+    const b = z.object({ text: z.string().max(20000), source: z.enum(['device_text', 'typed_text']).default('typed_text') }).parse(req.body);
+    return mutate(req, reply, companyId, tx => extraction.createExtraction(tx, req.principal, companyId, id, versionId, b), 201);
+  });
+  app.post('/companies/:companyId/extractions/:id/decision', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
+    const b = z.object({ confirm: z.boolean(), fields: z.object({ docType: z.string().max(40).nullable().optional(), issuer: z.string().max(200).nullable().optional(),
+      documentNo: z.string().max(100).nullable().optional(), validFrom: date, validUntil: date }).optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => extraction.decideExtraction(tx, req.principal, companyId, id, b));
+  });
+
+  // ── Assistant: answers only from this business's own records and published rules; says so when the sources fall short ──
+  app.post('/companies/:companyId/assistant/ask', async req => {
+    const companyId = company(req);
+    const b = z.object({ question: z.string().max(600), siteId: uuid.nullable().optional() }).parse(req.body);
+    return db.tenant(companyId, tx => askAssistant(tx, req.principal, companyId, b));
   });
   app.post('/companies/:companyId/service-requests/preview', async req => {
     const companyId = company(req);

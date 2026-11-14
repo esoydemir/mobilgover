@@ -36,3 +36,14 @@ Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESL
 | Değerlendirme (GM-22) | Kabul edilmiş işe bağlı | Kabulden önce 422; dağılım yalnız profilde gösterilmesine izin verilmiş işler; **yanıt süresi ölçülmüyor → boş, uydurulmadı** | kısmi |
 | Faydalı bul / Kaydet (GM-32) | Akış kartı | Kalıcı, kişiye özel kayıt, geri alınır, idempotent; taslak/gizli yazıya 404; "Kaydedilenler" sekmesi | tamam |
 | Talep→teklif→randevu→rapor→görev uçtan uca | `market-depth` + `report-evidence-link` | Zincir testlerle ayrı ayrı; tek akışta ekran taraması 8091'de | bkz. grup kanıtı |
+
+## Grup 4 — QR, OCR ve yapay zekâ
+| Madde | Senaryo | Kabul ölçütü | Durum |
+|---|---|---|---|
+| QR kaydı | Ekipman/belge için kod üret, PNG göster, pasifleştir | Kayıt başına tek etkin kod; pasifleştirme gerekçeli; yazdırma (web) | tamam — `qr-extraction-assistant.test.ts`, mobil `QrCard` |
+| QR okutma + sunucu yetki kontrolü | Kod okutulur → kayıt ekranı | Kodu okutanın kendi yetkisi kapsamıyorsa, kod bilinmiyorsa ya da pasifse aynı 404; başarılı okutma audit'lenir | tamam; mobil `/scan` ve `/q/[token]` |
+| OCR çıktısını inceleme | Belge metninden alan öner → kişi düzenler/onaylar | Öneri snippet ve güvenle gelir; onay belgeye yazar ama belgeyi **incelendi saymaz**; vazgeçince hiçbir şey yazılmaz | tamam — `ExtractionCard` |
+| Kaynaklı asistan | İşletme sorusu | Yalnız çağıranın okuyabildiği belge/görev/yükümlülük kaynaklarından alıntı; kaynak yoksa "yetersiz kaynak" ve kaynak listesi boş; örnek kural etiketli, doğrulanmış mevzuat sayılmaz; ceza tutarı sorusu reddedilir | tamam — 14 test |
+
+**Grup 4 kanıtı:** tam sunucu takımı 37 dosya, 312 test geçti (backup-restore hariç); sunucu ve mobil `tsc` temiz.
+**Açık kalan (Grup 4):** kamerayla QR okuma cihaz gerektirir, doğrulanmadı (kod/bağlantı girişi var). Pilotta OCR motoru yok: metin yapıştırılır ya da cihaz metninden gelir; sunucu yalnız öneri çıkarır. Asistan geri getirme tabanlıdır, dil modeli yok.

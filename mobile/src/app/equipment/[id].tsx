@@ -6,6 +6,7 @@ import { Screen } from '../../components/Screen';
 import { ErrorBox, Loading } from '../../components/states';
 import { Card, Eyebrow, Pill, Tap } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
+import { QrCard } from '../../features/Group4';
 import { C, tint, type } from '../../theme';
 import { RISK } from '../ncrs';
 
@@ -30,6 +31,7 @@ export default function EquipmentHistoryRoute() {
   return (
     <Screen title={h.equipment.name} titleEn="Equipment history" onRefresh={q.reload} refreshing={q.loading}>
       <Text style={type(12, 400, { color: C.t3 })}>{h.equipment.site_name}{h.equipment.serial ? ` · seri ${h.equipment.serial}` : ''}{h.equipment.active ? '' : ' · KULLANIM DIŞI'}</Text>
+      <QrCard kind="equipment" refId={h.equipment.id} />
       <Card style={{ gap: 8 }}>
         <Eyebrow>UYGUNSUZLUKLAR ({h.cases.length})</Eyebrow>
         {h.cases.length === 0 ? <Text style={type(12, 400, { color: C.t3 })}>Görebildiğin kayıt yok.</Text> : null}

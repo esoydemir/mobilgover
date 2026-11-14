@@ -9,6 +9,7 @@ import { ErrorBox, Field, Loading } from '../../components/states';
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
+import { ExtractionCard, QrCard } from '../../features/Group4';
 import { DOC_STATUS, DOC_TYPE, ISSUER_METHOD, STATUS_NOTE, fmtDay, issuerLine, type IssuerCheck } from '../../features/documents';
 import { ACCEPTED, TYPE_LABEL, fileMeta, fmtSize, openEvidence, pickFile, uploadBytes, type Picked } from '../../features/files';
 import { C, tint, type } from '../../theme';
@@ -77,6 +78,8 @@ export default function DocumentRoute() {
           <UsesCard d={d} onDone={q.reload} />
           {d.permissions.share ? <ShareCard d={d} onDone={q.reload} /> : null}
           {d.permissions.write ? <NewVersion docId={d.id} maxBytes={d.maxUploadBytes} onDone={q.reload} /> : null}
+          {d.permissions.write ? <QrCard kind="document" refId={d.id} /> : null}
+          {d.permissions.write ? <ExtractionCard documentId={d.id} versionId={d.versions.find(v => v.isLatest)?.id ?? null} onApplied={q.reload} /> : null}
           <Eyebrow>SÜRÜMLER</Eyebrow>
           {d.versions.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz dosya yok.</Text> : null}
           {d.versions.map(v => <VersionRow key={v.id} v={v} d={d} current={v.id === d.currentVersionId} onOpen={open} onDone={q.reload} />)}

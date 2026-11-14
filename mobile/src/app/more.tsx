@@ -30,6 +30,8 @@ export default function MoreRoute() {
     { icon: '🧭', label: 'Dış doğrulayıcılar', sub: 'Sınırlı ve süreli bağımsız doğrulama izni', href: '/verifiers', show: role === 'owner' || role === 'hq_manager' },
     { icon: '👥', label: 'Ekip', sub: 'Şube yöneticisi ve personel ekle', href: '/team', show: role === 'owner' || role === 'hq_manager' },
     { icon: '🧊', label: 'Ekipmanlar', sub: 'Soğutucular ve ölçüm cihazları', href: '/equipment', show: manager },
+    { icon: '📷', label: 'QR kodu okut', sub: 'Ekipman ya da belge kodunu gir; yalnız yetkin olan kayıt açılır', href: '/scan' },
+    { icon: '💬', label: 'Kaynaklı asistan', sub: 'Belge, görev ve yükümlülüklerinden kaynak göstererek yanıt', href: '/assistant', show: !!role },
     { icon: '🔄', label: 'Eşitleme', sub: 'Cihazda bekleyen kayıtlar', href: '/sync', badge: ops.length },
     { icon: '🤝', label: 'Mesleki ağ', sub: 'Profil, uzman arama, takip, paylaşım ve yorum', href: '/network' },
     { icon: '🚩', label: 'Ağ moderasyonu', sub: 'Şikâyetler, gerekçeli kararlar', href: '/moderation', show: !!me?.platformRoles.includes('network_moderator') },
