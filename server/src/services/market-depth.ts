@@ -106,7 +106,7 @@ const apptView = (a: any) => ({ id: a.id, jobId: a.job_id, startsAt: a.starts_at
 export async function jobAppointments(tx: Tx, p: Principal, jobId: string) {
   const j = await jobFor(tx, jobId);
   const side = await sideOf(tx, p, j);
-  const rows = (await tx.query(`SELECT * FROM service_appointments WHERE job_id = $1 ORDER BY created_at, decided_at NULLS LAST`, [jobId])).rows;
+  const rows = (await tx.query(`SELECT * FROM service_appointments WHERE job_id = $1 ORDER BY seq`, [jobId])).rows;
   const live = rows.find(r => ['proposed', 'confirmed'].includes(r.status)) ?? null;
   return { side, live: live ? apptView(live) : null, history: rows.map(apptView), canAnswer: !!live && live.status === 'proposed' && live.proposed_side !== side };
 }
@@ -145,7 +145,7 @@ const msgView = (m: any, me: string) => ({ id: m.id, side: m.sender_side as Side
 export async function businessThread(tx: Tx, p: Principal, companyId: string, requestId: string, profileId: string) {
   const t = await threadFor(tx, requestId, profileId);
   if (t.companyId !== companyId || !can(p, 'service.request', { companyId, siteId: t.siteId }).ok) throw notFound('Hizmet talebi');
-  const rows = (await tx.query(`SELECT * FROM service_messages WHERE request_id = $1 AND profile_id = $2 ORDER BY created_at`, [requestId, profileId])).rows;
+  const rows = (await tx.query(`SELECT * FROM service_messages WHERE request_id = $1 AND profile_id = $2 ORDER BY seq`, [requestId, profileId])).rows;
   return { providerName: t.providerName, requestTitle: t.title, messages: rows.map(m => msgView(m, p.userId)), note: 'Yazışma bu talebe bağlıdır; ödeme ve sözleşme bu uygulamanın dışındadır.' };
 }
 
@@ -158,7 +158,7 @@ export async function businessSend(tx: Tx, p: Principal, companyId: string, requ
 export async function providerThread(tx: Tx, p: Principal, requestId: string) {
   const pr = await providerProfile(tx, p);
   const t = await threadFor(tx, requestId, pr.id);
-  const rows = (await tx.query(`SELECT * FROM service_messages WHERE request_id = $1 AND profile_id = $2 ORDER BY created_at`, [requestId, pr.id])).rows;
+  const rows = (await tx.query(`SELECT * FROM service_messages WHERE request_id = $1 AND profile_id = $2 ORDER BY seq`, [requestId, pr.id])).rows;
   return { requestTitle: t.title, awarded: t.awarded, messages: rows.map(m => msgView(m, p.userId)), note: t.awarded ? 'Teklifin kabul edildi; işletme bilgisi iş ekranında.' : 'İşletmenin adı teklifin kabul edilmesinden sonra görünür.' };
 }
 

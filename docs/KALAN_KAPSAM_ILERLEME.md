@@ -4,6 +4,33 @@ Oturum kesilirse **son doğrulanan adımdan** devam edilir. Her grup ayrı commi
 Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESLEMESI.md`, PR #3 açıklaması.
 **Erişilemeyen kaynaklar:** `GoverHub Mobile Standalone.dc(2).html` ve 14 Kasım Markdown dosyası diskte bulunamadı; görsel uyum bu nedenle **açık**, işlev kapsamı GM tablosundan alındı.
 
+## Bugün ne yapıyor, ne yapmıyor (özellik başına)
+
+Bu tablo, kodun **bugün** sunduğu davranışı söyler; hedef davranışı değil. "Yapmaz" sütunu bilerek yazılmıştır.
+
+| Özellik | Bugün yapar | Bugün yapmaz | Açık madde |
+|---|---|---|---|
+| QR kodu | Ekipman/belge için kod üretir, PNG ve bağlantı gösterir, web'de yazdırır, gerekçeyle pasifleştirir. Kod/bağlantıyı **elle yapıştırınca** sunucu okutanın yetkisini denetler; yetkisiz, bilinmeyen ve pasif kod aynı 404'ü verir; okutma denetime yazılır | Kamerayla okumaz. Telefon kamerasından tarama yok | AM-1 |
+| Belge metninden alan | Yapıştırılan/yazılan metinden belge türü, düzenleyen, no, tarihleri **kural tabanlı** önerir; her öneri kaynak satırı ve güven düzeyiyle gelir; kişi düzenler, onaylar ya da vazgeçer. Onay belge alanlarını yazar, belgeyi "incelendi" **saymaz**; incelenmiş sürümde tarihleri değiştirmez | Görselden/PDF'ten metin okumaz (OCR motoru yok). Önerileri kendiliğinden kaydetmez | AM-2 |
+| Kaynaklı asistan | İşletmenin kendi yükümlülük, madde, belge ve açık görev kayıtlarında anahtar sözcük eşleştirir; bulduğunu **kaynağın kendi cümlesiyle** ve numaralı kaynakla verir; kaynak yoksa "yetersiz kaynak" der ve kaynak listesi boştur; örnek kuralı etiketler, doğrulanmış mevzuat saymaz; ceza tutarı sorusunu reddeder; başkasının kaydını görmez | Metin üretmez, özetlemez, yorumlamaz, hukuki görüş vermez; eş anlamlı/dolaylı soruyu anlamaz (sözcük eşleşmesi) | AM-3 |
+| Toplu görev atama | Önce etkilenen şube, kişi ve görev sayısını gösterir; uygulama gösterilen sayıyı ister; atlanan şubeyi nedeniyle yazar; tek denetim olayı | Onaysız ya da bayat sayıyla uygulamaz (409) | — |
+| Uzman pazarı | Seçili 2–5 uzmandan teklif, karşılaştırma, randevu önerme/onaylama/değiştirme, uzman takvimi (liste), talebe bağlı mesaj, doğrulanmış işe bağlı değerlendirme dağılımı, kalıcı Faydalı/Kaydet | Dil, müsaitlik, uzaktan filtresi ve yanıt süresi yok (modelde yok, uydurulmadı); takvimde ay görünümü yok | — |
+| Platform yönetimi | Genel durum sayıları; platform rolü verme/kaldırma (gerekçe ≥10 karakter, kendi rolünü değiştiremez, son yönetici kaldırılamaz); platform + işletme zincirlerinde denetim kaydı (kim, ne zaman, gerekçe; gerekçe yoksa "kaydedilmemiş") | Kural onay/yayın gerekçesini **zorunlu** kılmaz (isteğe bağlı) | — |
+| Ödeme | Hiçbir şey. İşte `payment_status = not_in_scope`; arayüz "ödeme uygulama dışında" der; kart verisi yok | Sağlayıcıya bağlanmaz, tahsilat/emanet yok | AM-5 |
+
+## Ayrı açık maddeler
+
+Her biri bağımsızdır; biri kapanınca diğeri kapanmış sayılmaz.
+
+| No | Madde | Neden açık | Kapanış koşulu |
+|---|---|---|---|
+| AM-1 | **QR kamera okuma** | Kamera erişimi gerçek cihaz/tarayıcı izni ister; bu turda yalnız kod/bağlantı girişi doğrulandı | Telefonda uygulama içinden kamerayla okutup `/qr/resolve` sonucuna gitmek; izin reddi ve düşük ışık durumunun denenmesi |
+| AM-2 | **Gerçek OCR** | Pilotta OCR motoru yok; sunucu yalnız verilen metinden öneri çıkarır | Motor/sağlayıcı kararı; taranmış PDF/fotoğraftan metin; Türkçe belgelerde doğruluk ölçümü; öneri → onay akışının aynı kalması |
+| AM-3 | **Dil modeli** | Asistan geri getirme tabanlıdır; model yok | Model/sağlayıcı kararı; "kaynak yoksa söyleme" ve "ceza tutarı yok" kurallarının model yanıtlarında da testle korunması |
+| AM-4 | **Fiziksel iPhone doğrulaması (GM-17)** | Fiziksel iPhone yok; WebKit/Chromium **öykünmesi** gerçek cihaz yerine geçmez | Safari'de fotoğraf/rapor yükleme (https), PDF indirme, yazdırma, çevrimdışı→eşitleme, dokunma hedefleri ve güvenli alan, kamera QR |
+| AM-5 | **Ödeme sağlayıcısı** | Sahibin kararı **ertelendi**; sağlayıcı seçilmedi, hiçbir sağlayıcıya bağlanılmadı | Sağlayıcı seçimi; test hesabı/anahtarı; tahsilat mı emanet mi; `not_in_scope` kısıtının kalkması; sonra webhook imzası, idempotent olay defteri, sandbox senaryoları |
+| AM-6 | Kural onay/yayın gerekçesi zorunlu değil | Mevcut istemciler gövdesiz çağırıyor | Gerekçeyi zorunlu yapmak ve eski çağrıları güncellemek |
+
 ## Grup 1 — Görevler ve belge kasası
 | Madde | Senaryo | Kabul ölçütü | Durum |
 |---|---|---|---|
@@ -46,7 +73,7 @@ Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESL
 | Kaynaklı asistan | İşletme sorusu | Yalnız çağıranın okuyabildiği belge/görev/yükümlülük kaynaklarından alıntı; kaynak yoksa "yetersiz kaynak" ve kaynak listesi boş; örnek kural etiketli, doğrulanmış mevzuat sayılmaz; ceza tutarı sorusu reddedilir | tamam — 14 test |
 
 **Grup 4 kanıtı:** tam sunucu takımı 37 dosya, 312 test geçti (backup-restore hariç); sunucu ve mobil `tsc` temiz.
-**Açık kalan (Grup 4):** kamerayla QR okuma cihaz gerektirir, doğrulanmadı (kod/bağlantı girişi var). Pilotta OCR motoru yok: metin yapıştırılır ya da cihaz metninden gelir; sunucu yalnız öneri çıkarır. Asistan geri getirme tabanlıdır, dil modeli yok.
+**Açık kalan (Grup 4) → ayrı maddeler AM-1, AM-2, AM-3 (yukarıda):** kamerayla QR okuma cihaz gerektirir, doğrulanmadı (kod/bağlantı girişi var). Pilotta OCR motoru yok: metin yapıştırılır ya da cihaz metninden gelir; sunucu yalnız öneri çıkarır. Asistan geri getirme tabanlıdır, dil modeli yok.
 
 ## Grup 5 — Platform yönetimi ve ödeme
 | Madde | Senaryo | Kabul ölçütü | Durum |
@@ -82,3 +109,12 @@ Kanıt dosyaları: `kanit-g45/wk/ekran`, `kanit-g45/cr/ekran` (ekran görüntül
 **Doğrulanamayanlar (açık):** fiziksel iPhone Safari (kamera QR, PDF indirme, yazdırma); kamerayla QR okuma; gerçek OCR motoru; gerçek cihazda 320 px dışındaki genişlikler.
 
 **CI bulgusu ve düzeltme:** GitHub CI, İstanbul gece yarısından sonra (UTC 21:00–24:00) `new-site-tasks.test.ts › repeating the operation never opens the same task twice` testinde düştü (`expected 1 to be 0`). Sebep ürün değil, test: şubenin takvimi İstanbul'dur, test ise UTC gününü kullanıyordu; bu saat aralığında "bugün" bir gün kayıyordu. Yerelde aynı saatte yeniden üretildi, test günü `Europe/Istanbul` ile hesaplayacak şekilde düzeltildi; tam takım 38/38 (318 test) geçti. Tam takımda bir koşuda tek bir dosya (`board`) yük altında kısa süre kurulumda düştü, tek başına ve sonraki tam koşuda geçti: zamanlama dalgalanması olarak izleniyor.
+
+## Aralıklı test hataları — sınıflandırma ve kanıt (2026-11-15)
+| Belirti | Sınıf | Kanıt | İşlem |
+|---|---|---|---|
+| `market-depth`: randevu geçmişi `['proposed','superseded']` geldi, `['superseded','proposed']` beklenirdi | **Ürün zayıflığı (sıralama saat değerine bağlıydı)**, yani gerçek ama nadir | Satırın `created_at` değeri ileri alınınca eski `ORDER BY created_at` **aynı hata iletisini** üretiyor (yeni testle yeniden üretildi); `seq` ile sıralayınca geçiyor | Migrasyon 023: `service_appointments.seq` ve `service_messages.seq` (identity); sıralama `seq`; test saat kaymasını zorluyor ve `seq` dışarı sızmıyor. Önceki `decided_at` ikinci anahtarı yetersizdi |
+| `board`, `group1-tasks-vault`, `network`, `new-site-tasks`, `platform-admin`: yalnız `beforeAll` "Hook timed out in 10000ms", hiçbir doğrulama hatası yok | **Ortam (Docker/Windows veritabanı G/Ç'si)** | `freshEnv` (şemayı sil + tüm migrasyonlar) 10 ölçümde ortalama ~5,6 sn: 10 sn sınırının payı ince. Veritabanı günlüğünde aynı pencerede `checkpoint … sync=141 s, sync files=39954`. Aynı kodla 4 tam koşunun 3'ü 38/38, başarısızında 4 dosya art arda (zaman kümesi) ve hepsi kurulumda. GitHub CI (Linux) bu hatayı hiç vermedi | `hookTimeout` 60 sn (test yapılandırması); ürün kodu değişmedi |
+| `new-site-tasks › repeating the operation…` (CI ve yerel, UTC 21:00–24:00) | **Test zamanlaması** | Yerelde gece yarısından sonra yeniden üretildi; test UTC gününü, şube İstanbul gününü kullanıyordu | Test günü `Europe/Istanbul` ile hesaplıyor (`8d7814f`) |
+
+Düzeltmeler sonrası tam takım (Windows, backup-restore hariç): art arda 2 koşu 38/38, 318/318.

@@ -123,6 +123,11 @@ describe('a request sent to chosen providers', () => {
       expect(re.status).toBe(201);
       const h = (await owner().get(`${C()}/jobs/${jobId}/appointments`)).body;
       expect(h.history.map((x: any) => x.status)).toEqual(['superseded', 'proposed']);
+      // The order is the insertion order, not the wall clock: push the first row's timestamp into the future and it must still come first.
+      await env.ownerDb.query(`UPDATE service_appointments SET created_at = now() + interval '1 day' WHERE job_id = $1 AND status = 'superseded'`, [jobId]);
+      const skewed = (await owner().get(`${C()}/jobs/${jobId}/appointments`)).body;
+      expect(skewed.history.map((x: any) => x.status)).toEqual(['superseded', 'proposed']);
+      expect(skewed.history.every((x: any) => !('seq' in x))).toBe(true);
       expect(h.canAnswer).toBe(true);
       expect((await owner().post(`${C()}/appointments/${re.body.id}/decision`, { accept: true })).status).toBe(200);
       const after = (await owner().get(`${C()}/jobs/${jobId}/appointments`)).body;
