@@ -1,11 +1,12 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
+import { useApi } from '../api/useApi';
 import { Text, View } from 'react-native';
 import { useSession } from '../api/session';
 import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Loading, StaleNote } from '../components/states';
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, SevPill, Tap, Chevron } from '../components/ui';
-import { KIND_LABEL, PENALTY_NOTE, RISK_FILTERS, filterRisk, isRiskFilter, useRiskItems, type RiskFilter } from '../features/risk';
+import { CONFIRMED_NOTE, KIND_LABEL, PENALTY_NOTE, RISK_FILTERS, filterRisk, isRiskFilter, useRiskItems, type RiskFilter } from '../features/risk';
 import { C, tint, type } from '../theme';
 
 /**
@@ -50,6 +51,17 @@ export default function RiskRoute() {
         <Text testID="risk-penalty-note" style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>{PENALTY_NOTE}</Text>
       </Card>
 
+      <View testID="risk-classes" style={{ flexDirection: 'row', gap: 8 }}>
+        {([['confirmed', 'KESİNLEŞMİŞ CEZA', 0, null], ['potential', 'POTANSİYEL RİSK', r.counts.potential, 'potential'], ['doc', 'EKSİK BELGE', r.counts.doc, 'doc']] as const).map(([k, label, n, f]) => (
+          <Tap key={k} testID={`risk-class-${k}`} onPress={f ? () => setFilter(f) : undefined} style={{ flex: 1, borderWidth: 1, borderColor: f && filter === f ? tint.lime(0.4) : C.bd, borderRadius: 18, backgroundColor: C.card, padding: 12, gap: 4 }}>
+            <Text style={type(9.5, 700, { ls: 0.08, color: C.t3 })}>{label}</Text>
+            <Text style={type(24, 600, { family: 'outfit', ls: -0.03 })}>{r.ready || k === 'confirmed' ? n : '—'}</Text>
+          </Tap>
+        ))}
+      </View>
+      <Text testID="risk-confirmed-note" style={type(11, 400, { color: C.t3, lh: 1.45 })}>{CONFIRMED_NOTE}</Text>
+      <ProfileContext />
+
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
         {RISK_FILTERS.map(([k, label]) => (
           <FilterChip key={k} testID={`risk-filter-${k}`} label={`${label} ${r.ready ? r.counts[k] : ''}`.trim()} px={12} active={filter === k} onPress={() => setFilter(k)} />
@@ -84,5 +96,21 @@ export default function RiskRoute() {
       ))}
       <Text style={type(11, 400, { color: C.t3, lh: 1.5 })}>Bu ekran puan, sıralama ya da hukuki görüş değildir; denetimde bulgu olabilecek açık kayıtları gösterir.</Text>
     </Screen>
+  );
+}
+
+type Fact = { value: unknown };
+/** The list is built for this business: it names the profile answers (activity, equipment, staff) the rules read. */
+function ProfileContext() {
+  const { company, siteId } = useSession();
+  const facts = useApi<Record<string, Fact>>(company && siteId ? `/companies/${company.id}/sites/${siteId}/profile` : null);
+  const catalog = useApi<{ key: string; label: string; type: string }[]>('/fact-catalog');
+  if (!facts.data || !catalog.data) return null;
+  const yes = catalog.data.filter(c => c.type === 'boolean' && facts.data![c.key]?.value === true).map(c => c.label);
+  const no = catalog.data.filter(c => c.type === 'boolean' && facts.data![c.key]?.value === false).length;
+  return (
+    <Text testID="risk-profile" style={type(11, 500, { color: C.t2, lh: 1.5 })}>
+      {yes.length ? `Bu liste işletme profiline göre hazırlandı: ${yes.join(' · ')}${no ? ` (${no} alan "hayır")` : ''}.` : 'İşletme profili henüz yanıtlanmadı; riskler profil yanıtlarına göre belirlenir. Farklı işletme türünde farklı kalemler çıkar.'}
+    </Text>
   );
 }

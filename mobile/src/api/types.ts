@@ -17,7 +17,7 @@ export type Company = {
 export type TaskRow = {
   id: string; site_id: string; status: 'open' | 'done' | 'missed' | 'cancelled'; outcome: 'conforming' | 'nonconforming' | null;
   due_at: string; period_key: string; review_flag: string | null; title: string; severity: 'minor' | 'major' | 'critical'; equipment_name: string | null;
-  assignee_id: string | null; assignee_name: string | null;
+  assignee_id: string | null; assignee_name: string | null; open_services?: number;
 };
 
 export type Requirement =
@@ -34,7 +34,10 @@ export type TaskDetail = {
   id: string; status: TaskRow['status']; outcome: TaskRow['outcome']; dueAt: string; reviewFlag: string | null;
   title: string; instructions: string; severity: TaskRow['severity'];
   equipment: { id: string; name: string; type: string } | null;
-  rule: { version: number; kind: string; isExample: boolean };
+  rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string };
+  legalBasis?: { ref: string; excerpt: string; version_label: string | null; source_title: string; issuer: string | null; is_example: boolean }[];
+  lastCompletedAt?: string | null; nextDueAt?: string | null; hazardType?: string;
+  services?: { id: string; title: string; status: string; created_at: string }[];
   obligationId: string; requirements: Requirement[];
   limits: { quantity: string; equipmentType: string; unit: string; min: number | null; max: number | null; basis: string; note?: string }[];
   emergencyInstruction: string | null;

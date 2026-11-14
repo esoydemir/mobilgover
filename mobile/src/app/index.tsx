@@ -60,7 +60,7 @@ function HomeScreen() {
       const done = dayTasks.filter(t => t.status === 'done').length;
       return { label: shortDay(d), isToday: k === todayKey, total: dayTasks.length, done };
     });
-    return { todays, overdue, upcoming, week, done: todays.filter(t => t.status === 'done').length };
+    return { todays, overdue, upcoming, week, done: todays.filter(t => t.status === 'done').length, counts: { critical: b.critical.length, todo: b.todo.length, service: b.service.length } };
   }, [tasks.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const risk = useRiskItems('site');
@@ -132,6 +132,17 @@ function HomeScreen() {
           </Tap>
         </View>
       )}
+
+      {!isStaff && tasks.data ? (
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          {([['critical', 'Kritik görev'], ['todo', 'Yapılacak'], ['service', 'Servis bekleyen']] as const).map(([k, label]) => (
+            <Tap key={k} testID={`home-count-${k}`} onPress={() => router.push(`/tasks?filter=${k}`)} style={{ flexDirection: 'row', gap: 6, alignItems: 'center', height: 34, paddingHorizontal: 13, borderRadius: 999, borderWidth: 1, borderColor: k === 'critical' && derived.counts.critical ? tint.crit(0.3) : C.bd, backgroundColor: C.chip }}>
+              <Text style={type(13, 700, { color: k === 'critical' && derived.counts.critical ? C.crit : C.t1 })}>{derived.counts[k]}</Text>
+              <Text style={type(12, 600, { color: C.t2 })}>{label}</Text>
+            </Tap>
+          ))}
+        </View>
+      ) : null}
 
       {!isStaff && topRisk ? (
         <View testID="home-top-risk" style={{ borderWidth: 1, borderColor: tint.crit(0.3), borderRadius: 26, overflow: 'hidden', paddingTop: 18, paddingHorizontal: 19, paddingBottom: 16, marginTop: 5 }}>
@@ -218,7 +229,7 @@ function Ring({ done, total }: { done: number; total: number }) {
   );
 }
 
-export function TaskLine({ t, showAssignee = false }: { t: Task; showAssignee?: boolean }) {
+export function TaskLine({ t, showAssignee = false, note }: { t: Task; showAssignee?: boolean; note?: string }) {
   const done = t.status === 'done';
   return (
     <Tap testID={`task-${t.id}`} onPress={() => router.push(`/task/${t.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, borderWidth: 1, borderColor: C.bd, borderRadius: 24, backgroundColor: C.card, paddingVertical: 16, paddingHorizontal: 17 }}>
@@ -232,6 +243,8 @@ export function TaskLine({ t, showAssignee = false }: { t: Task; showAssignee?: 
           {[t.equipment_name, fmtTime(t.due_at), done ? (t.outcome === 'nonconforming' ? 'yapıldı · uygunsuz' : 'yapıldı · uygun') : t.status === 'missed' ? 'kaçırıldı' : null,
             showAssignee && !done ? (t.assignee_name ?? 'atanmadı') : null].filter(Boolean).join(' · ')}
         </Text>
+        {note ? <Text testID={`task-note-${t.id}`} style={[type(11.5, 500, { color: C.warn, lh: 1.4 }), { marginTop: 4 }]}>{note}</Text> : null}
+        {(t.open_services ?? 0) > 0 ? <Text style={[type(11, 600, { color: C.info }), { marginTop: 3 }]}>{`${t.open_services} servis talebi sürüyor`}</Text> : null}
       </View>
       <SevPill sev={t.severity === 'critical' ? 'crit' : t.severity === 'major' ? 'imp' : 'low'} />
     </Tap>

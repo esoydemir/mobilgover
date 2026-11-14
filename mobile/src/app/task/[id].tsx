@@ -82,6 +82,8 @@ export default function TaskDetailRoute() {
         <Chevron size={14} />
       </Tap>
 
+      <TaskWhy t={t} role={role} />
+
       {windowed.data ? (() => {
         const same = bucketTasks(windowed.data).all.filter(x => x.id !== t.id && x.title === t.title && (x.equipment_name ?? null) === (t.equipment?.name ?? null) && new Date(x.due_at) <= new Date());
         const bad = same.filter(x => x.outcome === 'nonconforming').length;
@@ -181,6 +183,63 @@ export default function TaskDetailRoute() {
       ) : null}
       {open ? <Text style={[type(11.5, 400, { color: C.t3 }), { textAlign: 'center' }]}>Zorunlu kanıt eksikse sunucu görevi kapatmaz.</Text> : null}
     </Screen>
+  );
+}
+
+const REQ_TEXT = (r: Requirement) => r.kind === 'measurement' ? `${r.quantity === 'temperature' ? 'Sıcaklık' : r.quantity} ölçümü gir (${r.unit})`
+  : r.kind === 'photo' ? `En az ${r.min} fotoğraf ekle` : r.kind === 'document' ? `En az ${r.min} belge ekle`
+  : r.kind === 'checklist' ? `Kontrol listesini yanıtla (${r.items.length} madde)` : r.kind === 'note' ? 'Açıklama yaz' : 'Yetkili onayı al';
+const SEVERITY_RISK = { critical: "Kritik kontrol: süresi geçerse Risk Merkezi'nde kritik kalem olur ve denetimde kayıt eksikliği olarak görülebilir.",
+  major: "Önemli kontrol: süresi geçerse gecikmiş kontrol olarak Risk Merkezi'ne düşer.", minor: 'İyileştirme kontrolü: süresi geçerse gecikmiş olarak görünür.' } as const;
+
+/** Why the task exists, its legal basis, dates, who is responsible, what happens if it is not done, what to do and which services were asked for. */
+function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
+  const manager = role === 'owner' || role === 'hq_manager' || role === 'site_manager';
+  const hasLimit = t.requirements.some(r => r.kind === 'measurement');
+  return (
+    <>
+      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
+        <Eyebrow>NEDEN GEREKLİ</Eyebrow>
+        <Text testID="task-why" style={type(13, 600, { lh: 1.4 })}>{t.rule.title ?? t.title}</Text>
+        {t.rule.summary ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{t.rule.summary}</Text> : null}
+        <Text testID="task-legal" style={type(11.5, 500, { color: t.legalBasis?.length ? C.t2 : C.warn, lh: 1.45 })}>
+          {t.legalBasis?.length ? t.legalBasis.map(p => `${p.source_title}${p.issuer ? ` (${p.issuer})` : ''} · ${p.ref}${p.is_example ? ' · ÖRNEK KAYNAK' : ''}`).join(' · ')
+            : 'Doğrulanmış yasal dayanak kaydı yok (örnek kural); bu görev yasal zorunluluk olarak sunulmaz.'}
+        </Text>
+      </Card>
+      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+        <Eyebrow>TARİHLER VE SORUMLU</Eyebrow>
+        <Text testID="task-dates" style={type(12.5, 500, { color: C.t2, lh: 1.55 })}>
+          {`Son tamamlanma: ${t.lastCompletedAt ? fmtDateTime(t.lastCompletedAt) : 'henüz tamamlanmadı'}
+Bu kontrolün son tarihi: ${fmtDateTime(t.dueAt)}
+Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonraki yok'}`}
+        </Text>
+        <Text testID="task-owner" style={type(12.5, 600, { color: t.assignee ? C.t1 : C.warn })}>{t.assignee ? `Sorumlu: ${t.assignee.name ?? 'atanan kişi'}` : `Sorumlu atanmadı${t.seriesResponsible ? ` · seri sorumlusu: ${t.seriesResponsible.name}` : ''}`}</Text>
+      </Card>
+      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+        <Eyebrow>YAPILACAKLAR</Eyebrow>
+        {t.requirements.map((r, i) => <Text key={i} style={type(12.5, 500, { color: C.t2, lh: 1.45 })}>{i + 1}. {REQ_TEXT(r)}</Text>)}
+        <Text style={type(12.5, 500, { color: C.t2, lh: 1.45 })}>{t.requirements.length + 1}. Görevi tamamla; kanıt eksikse sunucu kapatmaz.</Text>
+      </Card>
+      <Card radius={22} border={tint.warn(0.25)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+        <Eyebrow color={C.warn}>TAMAMLANMAZSA</Eyebrow>
+        <Text testID="task-risk" style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>{SEVERITY_RISK[t.severity]}{hasLimit ? ' Ölçüm limit dışı çıkarsa uygunsuzluk açılır ve takip gerekir.' : ''}</Text>
+        <Text style={type(11.5, 500, { color: C.t3 })}>Olası ceza tutarı: modellenmedi (doğrulanmış ceza tablosu yok).</Text>
+      </Card>
+      {manager || (t.services?.length ?? 0) > 0 ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+          <Eyebrow>SERVİS</Eyebrow>
+          {(t.services ?? []).length === 0 ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Bu görev için servis talebi yok.</Text> : null}
+          {(t.services ?? []).map(sv => (
+            <Tap key={sv.id} testID={`task-service-${sv.id}`} onPress={() => router.push(`/service/${sv.id}`)}>
+              <Text style={type(12.5, 600, { color: C.info })}>{sv.title} · {({ open: 'teklif bekliyor', awarded: 'iş verildi', completed: 'tamamlandı', cancelled: 'iptal' } as Record<string, string>)[sv.status] ?? sv.status} ›</Text>
+            </Tap>
+          ))}
+          {manager && t.status === 'open' ? <GhostButton testID="task-find-service" label="Servis bul" height={40} size={12.5} color={C.lime} border={tint.lime(0.35)}
+            onPress={() => router.push(`/service/new?taskId=${t.id}&title=${encodeURIComponent(`${t.title}${t.equipment ? ` · ${t.equipment.name}` : ''}`)}` as never)} /> : null}
+        </Card>
+      ) : null}
+    </>
   );
 }
 

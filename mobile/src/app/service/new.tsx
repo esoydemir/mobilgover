@@ -14,7 +14,7 @@ type Provider = { id: string; display_name: string; headline: string; city: stri
 
 /** The user describes the problem in their own words; the category is a routing choice, not a diagnosis. */
 export default function NewServiceRoute() {
-  const params = useLocalSearchParams<{ ncrId?: string; title?: string; category?: string; providerId?: string; providerName?: string; categories?: string }>();
+  const params = useLocalSearchParams<{ ncrId?: string; taskId?: string; title?: string; category?: string; providerId?: string; providerName?: string; categories?: string }>();
   const only = params.categories ? params.categories.split(',') : null;
   const { company, siteId, call } = useSession();
   const cats = useApi<Category[]>('/service-categories');
@@ -41,7 +41,7 @@ export default function NewServiceRoute() {
     if (!company || !cat || title.trim().length < 3 || description.trim().length < 5 || city.trim().length < 2) { setPreview(null); return; }
     const t = setTimeout(() => {
       call<Preview>('POST', `/companies/${company.id}/service-requests/preview`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(),
-        ncrId: params.ncrId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null }).then(d => setPreview({ key: pkey, data: d })).catch(() => setPreview(null));
+        ncrId: params.ncrId ?? null, taskId: params.taskId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null }).then(d => setPreview({ key: pkey, data: d })).catch(() => setPreview(null));
     }, 300);
     return () => clearTimeout(t);
   }, [pkey, company, siteId, call]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -51,7 +51,7 @@ export default function NewServiceRoute() {
   const submit = async () => {
     setBusy(true); setError(null);
     try {
-      const r = await call<{ id: string }>('POST', `/companies/${company!.id}/service-requests`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(), ncrId: params.ncrId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null });
+      const r = await call<{ id: string }>('POST', `/companies/${company!.id}/service-requests`, { siteId, categoryCode: cat, title: title.trim(), description: description.trim(), city: city.trim(), ncrId: params.ncrId ?? null, taskId: params.taskId ?? null, shareNcrSummary: !!params.ncrId && shareNcr, invitedProfileId: params.providerId ?? null });
       router.replace(`/service/${r.id}`);
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };

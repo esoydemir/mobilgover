@@ -20,21 +20,24 @@ export type RiskItem = {
   href: Href; /** Opens the service-request form prefilled; the market entry of this item. */ service?: Href;
   siteId: string | null; rank: number;
 };
-export type RiskFilter = 'all' | 'crit' | RiskKind;
+/** Not the same thing: a confirmed penalty (applied to the business), a potential risk (finding that could become one) and a missing/expired document. */
+export type RiskFilter = 'all' | 'crit' | 'potential' | RiskKind;
 
-export const RISK_FILTERS: [RiskFilter, string][] = [['all', 'Tümü'], ['crit', 'Kritik'], ['ncr', 'Uygunsuzluk'], ['task', 'Gecikmiş görev'], ['doc', 'Belge'], ['info', 'Bilgi eksik']];
+export const RISK_FILTERS: [RiskFilter, string][] = [['all', 'Tümü'], ['crit', 'Kritik'], ['potential', 'Potansiyel risk'], ['ncr', 'Uygunsuzluk'], ['task', 'Gecikmiş görev'], ['doc', 'Belge'], ['info', 'Bilgi eksik']];
 export const isRiskFilter = (v: unknown): v is RiskFilter => RISK_FILTERS.some(([k]) => k === v);
 export const KIND_LABEL: Record<RiskKind, string> = { ncr: 'UYGUNSUZLUK', task: 'GECİKMİŞ KONTROL', doc: 'BELGE', info: 'BİLGİ EKSİK' };
+/** No confirmed-penalty records exist in the product (nothing records an applied penalty), so that class is always 0 and says so. */
+export const CONFIRMED_NOTE = 'Kesinleşmiş ceza: kayıtlı ceza işlemi yok. Henüz uygulanmamış bir ceza uygulanmış gibi gösterilmez.';
 export const PENALTY_NOTE = 'Ceza tutarı hesaplanmadı: doğrulanmış bir ceza tablosu henüz yok ve uydurma tutar göstermiyoruz. Aşağıdaki sayı kalem sayısıdır, tutar değildir.';
 
 type Ncr = { id: string; site_id?: string | null; title: string; risk_level: string; status: string; due_at: string | null };
 type Doc = { id: string; title: string; siteId: string | null; status: string; expiring: boolean; validUntil: string | null; equipmentName: string | null };
 
 const SEV_RANK: Record<RiskSev, number> = { crit: 0, imp: 1, low: 2 };
-const svc = (title: string, ncrId?: string): Href => `/service/new?${ncrId ? `ncrId=${ncrId}&` : ''}title=${encodeURIComponent(title)}` as Href;
+const svc = (title: string, ncrId?: string, taskId?: string): Href => `/service/new?${ncrId ? `ncrId=${ncrId}&` : ''}${taskId ? `taskId=${taskId}&` : ''}title=${encodeURIComponent(title)}` as Href;
 
 export function filterRisk(items: RiskItem[], f: RiskFilter) {
-  return f === 'all' ? items : f === 'crit' ? items.filter(i => i.sev === 'crit') : items.filter(i => i.kind === f);
+  return f === 'all' ? items : f === 'crit' ? items.filter(i => i.sev === 'crit') : f === 'potential' ? items.filter(i => i.kind === 'ncr' || i.kind === 'task') : items.filter(i => i.kind === f);
 }
 export function countRisk(items: RiskItem[]) {
   return Object.fromEntries(RISK_FILTERS.map(([k]) => [k, filterRisk(items, k).length])) as Record<RiskFilter, number>;
@@ -65,7 +68,7 @@ export function useRiskItems(scope: 'site' | 'all' = 'site') {
       const sev: RiskSev = t.severity === 'critical' ? 'crit' : t.severity === 'major' ? 'imp' : 'low';
       out.push({ key: `task-${t.id}`, kind: 'task', sev, title: t.title, basis: 'Zamanında yapılmamış kontrol', siteId: t.site_id,
         sub: `${t.equipment_name ? `${t.equipment_name} · ` : ''}${t.status === 'missed' ? 'kaçırıldı' : 'gecikmiş'} · son tarih ${fmtDate(t.due_at)}`,
-        href: `/task/${t.id}`, service: t.equipment_name ? svc(`${t.title} · ${t.equipment_name}`) : undefined, rank: SEV_RANK[sev] });
+        href: `/task/${t.id}`, service: t.equipment_name ? svc(`${t.title} · ${t.equipment_name}`, undefined, t.id) : undefined, rank: SEV_RANK[sev] });
     }
     for (const d of docs.data ?? []) {
       if (site && d.siteId && d.siteId !== site) continue;

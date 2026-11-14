@@ -9,7 +9,7 @@ import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Loading, StaleNote } from '../components/states';
 import { FilterChip, GhostButton } from '../components/ui';
 import { addDays, dayKey } from '../features/dates';
-import { TASK_FILTERS, bucketTasks, isTaskFilter, taskWindowPath, type TaskFilter } from '../features/work';
+import { FILTER_NOTE, TASK_FILTERS, bucketTasks, criticalReason, isTaskFilter, taskWindowPath, type TaskFilter } from '../features/work';
 import { C, tint, type } from '../theme';
 import { TaskLine } from './index';
 
@@ -73,12 +73,13 @@ export default function TasksRoute() {
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7, paddingBottom: 2 }}>
         {TASK_FILTERS.map(([k, label]) => <FilterChip key={k} testID={`tasks-filter-${k}`} label={q.data ? `${label} ${buckets[k].length}` : label} px={13} active={filter === k} onPress={() => setFilter(k)} />)}
       </View>
+      <Text testID="tasks-filter-note" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{FILTER_NOTE[filter]}</Text>
       {q.stale ? <StaleNote /> : null}
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
       {q.data && list.length === 0 ? <Empty title="Bu listede görev yok" body={role === 'staff' ? 'Yalnızca sana atanan görevler görünür.' : undefined} /> : null}
       {q.data && q.data.length === 0 && role !== 'staff' && company && siteId ? <NoTasksReason companyId={company.id} siteId={siteId} /> : null}
-      {list.map(t => <TaskLine key={t.id} t={t} showAssignee={role !== 'staff'} />)}
+      {list.map(t => <TaskLine key={t.id} t={t} showAssignee={role !== 'staff'} note={filter === 'critical' ? (() => { const r = criticalReason(t); return `Neden kritik: ${r.why || '—'}. ${r.exit}`; })() : undefined} />)}
       <Text style={[type(12, 400, { lh: 1.5, color: C.t3 }), { paddingTop: 8, paddingHorizontal: 4 }]}>
         "Yapıldı" ile "uygun" ayrı gösterilir: limit dışı sonuç da kayda geçer ve uygunsuzluk olarak izlenir.
       </Text>
