@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, type ReactNode } from 'react';
-import { RefreshControl, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { RefreshControl, ScrollView, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../api/queue';
 import { useSession } from '../api/session';
@@ -60,14 +60,16 @@ export function EnvBadge() {
 /** Shows how many records are still only on this device. */
 export function SyncChip() {
   const { ops, online, syncing } = useQueue();
+  // Narrow phone: the status shows as a dot (its label stays in the accessibility label) so the business name has room.
+  const narrow = useWindowDimensions().width < 360;
   const waiting = ops.length;
   const problem = ops.some(o => o.status === 'failed' || o.status === 'conflict');
   const label = problem ? `${waiting} kayıt sorunlu` : waiting ? `${waiting} kayıt cihazda` : online === false ? 'Çevrimdışı' : syncing ? 'Eşitleniyor' : 'Eşitlendi';
   const color = problem ? C.crit : waiting || online === false ? C.warn : C.lime;
   return (
-    <Tap accessibilityLabel={`Eşitleme durumu: ${label}`} onPress={() => router.push('/sync')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 11, borderRadius: 999, borderWidth: 1, borderColor: tint.white(0.09), backgroundColor: '#141414' }}>
+    <Tap accessibilityLabel={`Eşitleme durumu: ${label}`} onPress={() => router.push('/sync')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: narrow ? 10 : 11, borderRadius: 999, borderWidth: 1, borderColor: tint.white(0.09), backgroundColor: '#141414' }}>
       <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: color }} />
-      <Text style={type(11, 600, { color: C.t2 })}>{label}</Text>
+      {narrow && !problem && !waiting ? null : <Text style={type(11, 600, { color: C.t2 })}>{narrow && waiting ? String(waiting) : label}</Text>}
     </Tap>
   );
 }
