@@ -182,11 +182,12 @@ export async function providersFor(tx: Tx, categoryCode: string) {
     .map(r => ({ ...r, sponsored: false }));
 }
 
-export async function createRequest(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; ncrId?: string | null; city: string; shareNcrSummary?: boolean;
+export async function createRequest(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; ncrId?: string | null; taskId?: string | null; city: string; shareNcrSummary?: boolean;
   invitedProfileId?: string | null }) {
   if (!can(p, 'service.request', { companyId, siteId: b.siteId }).ok) throw forbidden();
   if (!(await tx.query(`SELECT 1 FROM service_categories WHERE code = $1`, [b.categoryCode])).rowCount) throw notFound('Hizmet kategorisi');
   if (b.ncrId && !(await tx.query(`SELECT 1 FROM nonconformities WHERE id = $1 AND company_id = $2`, [b.ncrId, companyId])).rowCount) throw notFound('Uygunsuzluk');
+  if (b.taskId && !(await tx.query(`SELECT 1 FROM tasks WHERE id = $1 AND company_id = $2 AND site_id = $3`, [b.taskId, companyId, b.siteId])).rowCount) throw notFound('Görev');
   if (b.shareNcrSummary && !b.ncrId) throw invalid('Paylaşmak için bir uygunsuzluk seç.');
   // From a network profile: the request goes to that provider only, and only within a category they hold
   // a live approval for. A network profile alone is not an approval.
@@ -196,8 +197,8 @@ export async function createRequest(tx: Tx, p: Principal, companyId: string, b: 
     if (!ok) throw new AppError(422, 'PROVIDER_NOT_APPROVED_FOR_CATEGORY', 'Bu uzmanın seçilen kategoride geçerli hizmet onayı yok; talep ona gönderilemez.');
   }
   const r = await tx.query<{ id: string }>(
-    `INSERT INTO service_requests (company_id, site_id, category_code, title, description, ncr_id, city, created_by, share_ncr_summary, invited_profile_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-    [companyId, b.siteId, b.categoryCode, b.title, b.description, b.ncrId ?? null, b.city, p.userId, !!b.shareNcrSummary, b.invitedProfileId ?? null]);
+    `INSERT INTO service_requests (company_id, site_id, category_code, title, description, ncr_id, city, created_by, share_ncr_summary, invited_profile_id, task_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+    [companyId, b.siteId, b.categoryCode, b.title, b.description, b.ncrId ?? null, b.city, p.userId, !!b.shareNcrSummary, b.invitedProfileId ?? null, b.taskId ?? null]);
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'service.requested', entityType: 'service_request', entityId: r.rows[0]!.id,
     payload: { category: b.categoryCode, ncrId: b.ncrId ?? null, sharedWithProviders: sharedFields(!!b.shareNcrSummary) } });
   // Providers approved for this category hear about it (no business name: it is revealed only on award).

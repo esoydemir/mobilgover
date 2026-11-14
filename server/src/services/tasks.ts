@@ -77,7 +77,7 @@ export async function topUpSite(tx: Tx, companyId: string, siteId: string, days 
 async function loadTask(tx: Tx, p: Principal, companyId: string, taskId: string, action: 'task.read' | 'task.execute') {
   const t = (await tx.query(
     `SELECT t.*, tt.title, tt.instructions, tt.evidence, tt.limits, tt.severity, tt.hazard_type, tt.emergency_instruction, tt.emergency_approved_by,
-            e.type AS equipment_type, e.name AS equipment_name, rv.is_example, rv.kind AS rule_kind, rv.version AS rule_version,
+            e.type AS equipment_type, e.name AS equipment_name, rv.is_example, rv.kind AS rule_kind, rv.version AS rule_version, rv.obligation_title, rv.obligation_summary, rv.provision_ids,
             (SELECT code FROM rules WHERE id = rv.rule_id) AS rule_code
        FROM tasks t JOIN task_templates tt ON tt.id = t.template_id JOIN rule_versions rv ON rv.id = tt.rule_version_id
        LEFT JOIN equipment e ON e.id = t.equipment_id
@@ -91,7 +91,9 @@ export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { si
   const assignedOnly = onlyAssignedTasks(p, companyId);
   const r = await tx.query(
     `SELECT t.id, t.site_id, t.status, t.outcome, t.due_at, t.period_key, t.review_flag, t.assignee_id, t.equipment_id,
-            tt.title, tt.severity, e.name AS equipment_name, au.display_name AS assignee_name
+            tt.title, tt.severity, e.name AS equipment_name, au.display_name AS assignee_name,
+            (SELECT count(*)::int FROM service_requests sr LEFT JOIN nonconformities n ON n.id = sr.ncr_id
+              WHERE sr.status IN ('open','awarded') AND (sr.task_id = t.id OR n.task_id = t.id)) AS open_services
        FROM tasks t JOIN task_templates tt ON tt.id = t.template_id LEFT JOIN equipment e ON e.id = t.equipment_id
        LEFT JOIN users au ON au.id = t.assignee_id
       WHERE t.company_id = $1 AND ($2::uuid IS NULL OR t.site_id = $2)
@@ -108,6 +110,25 @@ async function collected(tx: Tx, taskId: string) {
   return { measurements: m.rows, evidence: e.rows };
 }
 
+/**
+ * Why this task exists and how it fits its series: the legal basis the rule rests on, when the same check was last
+ * done and when the next one is due, and the service requests opened for it (directly or through its nonconformity).
+ */
+async function taskContext(tx: Tx, companyId: string, t: any) {
+  const legalBasis = (await tx.query(
+    `SELECT p.ref, p.excerpt, sv.version_label, ls.title AS source_title, ls.issuer, ls.is_example
+       FROM provisions p JOIN source_versions sv ON sv.id = p.source_version_id JOIN legal_sources ls ON ls.id = sv.source_id
+      WHERE p.id = ANY($1)`, [t.provision_ids ?? []])).rows;
+  const same = `company_id = $1 AND site_id = $2 AND rule_id = $3 AND template_code = $4 AND equipment_id IS NOT DISTINCT FROM $5::uuid AND status <> 'cancelled'`;
+  const args = [companyId, t.site_id, t.rule_id, t.template_code, t.equipment_id];
+  const last = (await tx.query(`SELECT max(completed_at) AS at FROM tasks WHERE ${same} AND status = 'done'`, args)).rows[0]?.at ?? null;
+  const next = (await tx.query(`SELECT min(due_at) AS at FROM tasks WHERE ${same} AND due_at > $6`, [...args, t.due_at])).rows[0]?.at ?? null;
+  const services = (await tx.query(
+    `SELECT sr.id, sr.title, sr.status, sr.created_at FROM service_requests sr LEFT JOIN nonconformities n ON n.id = sr.ncr_id
+      WHERE sr.company_id = $1 AND (sr.task_id = $2 OR n.task_id = $2) ORDER BY sr.created_at DESC`, [companyId, t.id])).rows;
+  return { legalBasis, lastCompletedAt: last, nextDueAt: next, services, hazardType: t.hazard_type };
+}
+
 export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId: string) {
   const t = await loadTask(tx, p, companyId, taskId, 'task.read');
   const c = await collected(tx, taskId);
@@ -117,7 +138,8 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     id: t.id, status: t.status, outcome: t.outcome, dueAt: t.due_at, periodKey: t.period_key, reviewFlag: t.review_flag,
     title: t.title, instructions: t.instructions, severity: t.severity,
     equipment: t.equipment_id ? { id: t.equipment_id, name: t.equipment_name, type: t.equipment_type } : null,
-    rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example },
+    rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example, title: t.obligation_title, summary: t.obligation_summary },
+    ...(await taskContext(tx, companyId, t)),
     obligationId: t.obligation_id,
     requirements: reqs,
     limits: t.limits,

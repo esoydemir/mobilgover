@@ -805,7 +805,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/service-requests', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().trim().min(3).max(200), description: z.string().trim().min(5).max(4000),
-      ncrId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false),
+      ncrId: uuid.nullable().optional(), taskId: uuid.nullable().optional(), city: z.string().trim().min(2).max(60), shareNcrSummary: z.boolean().default(false),
       invitedProfileId: uuid.nullable().default(null) }).parse(req.body);
     return mutate(req, reply, companyId, tx => mk.createRequest(tx, req.principal, companyId, b), 201);
   });
