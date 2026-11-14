@@ -75,5 +75,8 @@ Referanslar: `TASARIM_V2_GELISTIRME_MADDELERI.md` (GM-xx), `TASARIM_V2_EKRAN_ESL
 | Chromium (Pixel 7 öykünmesi) | `/admin` platform yöneticisi: genel durum, rol ver (gerekçesiz engel, gerekçeli verildi), denetim kaydı | Gerekçe 10 karakterden kısaysa "Önce en az 10 karakterlik gerekçeyi yaz."; rol verilince denetimde "Platform rolü verildi · Gerekçe: Moderasyon vardiyası için görevlendirildi" |
 | Bulgu ve düzeltme | İncelenmiş sürümde tarih alanlarını onaylamak 409 veriyordu (sunucu doğru reddediyor, ekran yönlendirmiyordu) | Kart, incelenmiş sürümde tarihleri göstermez ve nedenini yazar; yalnız belge bilgileri kaydedilir. Aynı akış yeniden denendi: tür ve belge no yazıldı, tarihler ve inceleme durumu değişmedi |
 
+| 320 px (iPhone SE öykünmesi, WebKit) | `/more`, `/assistant`, `/scan`, `/admin` | `scrollWidth = innerWidth = 320`: yatay taşma yok |
+| Rol rol menü (WebKit, `/more`) | sahip, müdür, personel, uzman, yönetici ile oturum açıldı; menü kimlikleri okundu | Sahip 22 giriş (profil, ekip, dış doğrulayıcı dahil); müdür bunlar olmadan; personel yalnız pano, bildirim, eğitim, uygunsuzluk, QR, asistan, eşitleme, ağ; uzman `/pro`'ya iner; platform yöneticisi şirket menüleri yerine `admin`. **Not:** "Kurum görünümü (demo)" demo kipinde personele de görünüyor (sentetik veri; sunucu kapısı ayrı) |
+
 Kanıt dosyaları: `kanit-g45/wk/ekran`, `kanit-g45/cr/ekran` (ekran görüntüleri), `tools/g45check.cjs`.
-**Doğrulanamayanlar (açık):** fiziksel iPhone Safari (kamera QR, PDF indirme, yazdırma); kamerayla QR okuma; gerçek OCR motoru; 320 px genişlikte (iPhone SE) Grup 4–5 ekranları (oturum açma sınırlaması yüzünden bu turda taranamadı); rol rol menü ekran taraması yalnız sunucu matrisiyle kapalı.
+**Doğrulanamayanlar (açık):** fiziksel iPhone Safari (kamera QR, PDF indirme, yazdırma); kamerayla QR okuma; gerçek OCR motoru; gerçek cihazda 320 px dışındaki genişlikler.
