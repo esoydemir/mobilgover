@@ -1,6 +1,10 @@
 # Tasarım v2 · Ekran eşlemesi
 
-Kaynak (2. tur, 14.11.2026): `GoverHub Mobile Standalone.dc.html` (görsel referans; çelişkide koyu tema + lime vurgusu esas; "…dc(2).html" ve "Yapıştırılan markdown…" adlı ekler diskte bulunamadı, ekli `dc.html` ile aynı) ve işlev gereksinimi olarak **`GoverHub_GoverUp_Hizmet_Ekosistemi_ve_CAPA_Master_Gereksinimleri.md`** (Downloads; §6 keşif, §7 uygunsuzluktan talebe, §8 teklif, §9 sıralama, §15 işletme mobil ekranları). Bu md'nin ayrı bir "Ceza ve Yasal Risk Merkezi" bölümü yoktur; Risk Merkezi referans HTML'deki "Ceza riski" kartından türetilmiştir. Referansta olup elde karşılığı olmayan her şey `TASARIM_V2_GELISTIRME_MADDELERI.md` içinde ayrı maddedir.
+Kaynaklar (3. tur, 14.11.2026) — açılıp okunan dosyalar:
+- Görsel referans: `C:UsersgkhnoOneDriveMasaüstücodexileGoverHub Mobile Standalone.dc.html` (253 556 B, 10 Kasım).
+- İşlev gereksinimi: `C:UsersgkhnoDownloadsİşlev gereksinimleri — 14 Kasım.md` (23 695 B, 14 Kasım 14:41; "md §n" = bu dosyanın numaralı bölümleri). Önceki turdan `GoverHub_GoverUp_Hizmet_Ekosistemi_ve_CAPA_Master_Gereksinimleri.md` Pazar ayrıntıları için tamamlayıcıdır.
+- **Ad uyuşmazlığı:** istekte geçen `GoverHub Mobile Standalone.dc(2).html` ve `Yapıştırılan markdown(20261114-102710).md` adlı dosyalar diskte **yok**; mesajda @ ile eklenen yukarıdaki iki dosya kullanıldı. "dc(2)"nin eklenen dc.html'den farklı bir sürüm olması hâlinde karşılaştırma o sürümle yinelenmelidir.
+Risk Merkezi, md §1 "Ceza ve Yasal Risk Merkezi" ve referanstaki "Ceza riski" kartından türetilmiştir. Referansta/gereksinimde olup elde karşılığı olmayan her şey `TASARIM_V2_GELISTIRME_MADDELERI.md` içinde ayrı maddedir.
 Dal: `feat/tasarim-v2-ilk-teslim` (PR #3, taban `fix/pilot-d21e647-bulgular` = PR #1). Test ortamı: 8091 yığını.
 
 Durum: **TAMAM** = bu teslimde uygulandı/değişti · **VAR** = uygulamada zaten karşılığı var, referansla uyumlu · **KISMİ** = karşılık var, referanstan eksikleri var · **YOK** = karşılık yok (geliştirme maddesi).
@@ -81,3 +85,20 @@ Not: Risk Merkezi açıkken alt çubukta **Ana Sayfa** seçili görünür (ekran
 | Uzman içerikleri | Pazar → Profesyonel akış |
 | Rapor al | Rapor ve denetim dosyası (`/report`) |
 | Ayarlar | Hesap ve güvenlik (`/account`) |
+
+## 7. 3. tur: değişiklik → referans bölümü bağı
+
+| Değişiklik | Referans (dc.html) | Gereksinim (md) | Kod | Doğrulama |
+|---|---|---|---|---|
+| Ana ekranda **Kritik görev / Yapılacak / Servis bekleyen** sayaçları, her biri aynı filtreyle liste açar | Ana ekran · "BUGÜNÜN GÖREVLERİ" + sayaç kartları | md §1 "Kalan görevler", §2 "Kritik görevler: 4 neden 4?" | `app/index.tsx`, `features/work.ts` | sayaç = liste satırı sayısı (senaryo S1) |
+| Görevler: **Bugün · Yapılacaklar · Kritik · Gecikmiş · Yaklaşan · Servis bekleyen · Tamamlanan**; her listenin anlamı yazılı; Kritik'te her satırda "neden kritik / ne zaman çıkar" | Görev listesi (Görevler sekmesi) | md §2 tablo (Yapılacaklar, Kritik, Tamamlananlar, Yaklaşan, Servis bekleyenler) | `app/tasks.tsx`, `features/work.ts` | S1 |
+| Kritik tanımı: gecikmiş **veya bugün yapılması gereken kritik**; ileri tarihli kritik kontroller sayıyı şişirmez (önce 17, sonra gerçek) | — | md §2 "bu sayı rastgele oluşturulmamalı" | `features/work.ts` | önce/sonra ekran görüntüsü |
+| Görev detayı: **Neden gerekli, yasal dayanak, son tamamlanma / son tarih / sonraki kontrol, sorumlu, yapılacaklar, tamamlanmazsa risk, servis** | Görev detayı ("Bunu neden yapmam gerekiyor?", KANIT, GEÇMİŞ) | md §1 görev detayı listesi | `app/task/[id].tsx`, sunucu `taskDetail` | S2 |
+| Görev → **Servis bul** artık talebe görevi bağlar (`taskId`); görevde "Servis" kartı, listede "Servis bekleyen" | Uygunsuzluk → servis köprüsü | md §2 "görev, servis, belge, bildirim ve risk ekranları birbirine bağlı", §11 | migration 017, `marketplace.createRequest`, `app/service/new.tsx` | S2, sunucu testi `task-context.test.ts` |
+| Risk Merkezi: **Kesinleşmiş ceza / Potansiyel risk / Eksik belge** ayrı; kesinleşmiş ceza kaydı yok → 0 ve açıklama; işletme profiline göre hazırlandığı satırı | "Ceza riski" kartı | md §1 "kesinleşmiş ceza, potansiyel ceza riski ve eksik belge birbirinden ayrılmalı", "işletmeye özel" | `app/risk.tsx`, `features/risk.ts` | S3 |
+| Ceza tutarı | "₺29k" | md §6 "ceza tutarlarını uydurmamalı" + `PILOT.md` §5 | `PENALTY_NOTE` | S3 (tutar yok, not var) |
+| Pazar **üç ayrı bölüm**: Uzmanlar · Servisler ve Teklifler · Profesyonel Akış | Uzman bul · Teklifler · İçerik akışı | md §3 "Pazar sayfasında üç temel alan" | `app/market.tsx` | S4 |
+| Uzmanlar: kart → **Profili aç** → profil (hakkında, bölge, doğrulanmış belgeler, onaylı kategoriler, hizmet geçmişi/değerlendirme) → **Bu uzmandan teklif iste** (gerçek talep) | Uzman profili | md §3 "Uzman profili gerçekten açılmalı" | `app/pro.tsx`, `app/market.tsx` | S4 |
+| Servisler ve Teklifler: özet (açık, karşılaştır, iş verildi, tamamlanan), yeni talep, talep listesi → karşılaştırma → kabul | Teklif karşılaştırma | md §3 | `app/market.tsx` | S4 |
+| Profesyonel Akış **Pazar içinde**: akış, takip ettiklerim, paylaş, uzman ara, gönderi → tam içerik/yorum/profil | Uzman içerik akışı | md §3 | `app/market.tsx`, `features/network.tsx` | S4 |
+| "Servis bul" kısayolları (görev, uygunsuzluk, belge, ana ekran/Risk) **ayrı tutuldu** ve Pazar'dan farklı: kayda bağlı ön dolu talep açar | Kritik kart "Servis bul" | md §3 "servis talebi... ilgili görevden veya pazardan" | `features/risk.ts`, `task/[id]`, `documents/[id]` | S2, S4 |

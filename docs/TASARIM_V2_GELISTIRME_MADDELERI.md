@@ -28,5 +28,19 @@ Güncelleme 14.11.2026 (2. tur): işlev gereksinimi olarak `GoverHub_GoverUp_Hiz
 | GM-21 | Aynı talebi birden çok seçili sağlayıcıya göndermek; “açık pazara yayınla” ile “seçili sağlayıcıya gönder” ayrımı (md §8) | şu an ya tek uzman ya kategori geneli |
 | GM-22 | Uzman kartında doğrulanmış değerlendirme sayısı/dağılımı ve yanıt süresi (md §6, §9) | veri modeli ve yeterli örneklem yok; uydurma gösterilmez |
 
+| GM-23 | QR yönetimi: kart detayı, oluşturma, önizleme, içerik bağlama, düzenleme, yazdırma, aktif/pasif, benzersiz bağlantı (md §5/§6) | QR modeli ve ekranları yok |
+| GM-24 | Personel QR okutma: kamera ekranı, izin isteği, geçersiz QR (md §8) | GM-04 ile birlikte; cihaz gerekir |
+| GM-25 | Smart Vault: yüklenen belgeden OCR ile tür/firma/tarih çıkarma, kullanıcı doğrulayınca görev ve hatırlatma (md §5/§7) | GM-02; doğrulamasız kesin kabul edilmez |
+| GM-26 | AI asistan: soruyu anlayan, profile ve doğrulanmış mevzuata dayanan, kaynaklı yanıt; sabit yanıt yok (md §6) | GM-11; kaynak/doğrulama altyapısı ve onay akışı gerekir |
+| GM-27 | Çok şubeli: şube detay ekranı, toplu/şubeye özel görev atama, Şubeler Arası Risk Radarı (md §7/§9) | GM-14 ile; `/board` karşılaştırma var |
+| GM-28 | Uzman paneli: ana sayfa, bölgesel talep detayı, tekliflerim, işlerim, takvim, belgeler, mesajlar (md §9/§11) | yalnız talepler/işler var (`/pro`); takvim ve mesaj yok |
+| GM-29 | Süper admin: ayrı mimari (işletmeler, kullanıcılar, mevzuat merkezi, uzman doğrulama, kural motoru, pazar yönetimi, analitik) (md §10/§12) | bugün yalnız `/admin` kural/pazar incelemesi |
+| GM-30 | Servis tamamlanınca servis raporunun **işletmenin belge kasasına** kaydı ve görevin güncellenmesi (md §2/§3/§11) | rapor serviste kalıyor; belge/görev bağı yok. Görev↔servis talebi bağı bu turda kuruldu |
+| GM-31 | Akışta mevzuat paylaşımına "İşletmenizi etkileyebilir" analizi (md §3) | mevzuat-gönderi eşlemesi yok |
+| GM-32 | Gönderide "faydalı bul" ve "kaydet" (md §3) | yorum/takip var; bu iki eylem yok |
+| GM-33 | Uzman profili: fotoğraf, deneyim yılı, hizmet bölgeleri listesi, önceki hizmet başlıkları (md §3) | profil modelinde yalnız ad, başlık, şehir/ilçe, tanıtım |
+| GM-34 | Randevu planlama (teklif kabulünden sonra tarih seçimi) (md §3) | iş "planlandı" durumda; takvim yok |
+| GM-35 | Kurulum sorularının işletme türüne göre dinamik değişmesi; Ayarlar → İşletme Profili'nde yeniden değerlendirme ve pasifleştirme gerekçesi (md §4) | profil soruları sabit listeden; tür seçimi yok |
+
 ## Öneri sırası (onay beklemez)
 1. GM-03, GM-09, GM-07 (küçük, arayüz); 2. GM-08, GM-19 (veri var, ekran yok); 3. GM-18, GM-21 (pazar derinliği); 4. GM-04, GM-14, GM-13; 5. OCR/AI/ödeme/SMS bağımlı olanlar (GM-01, 02, 10, 11, 15, 16) sağlayıcı kararı sonrası; GM-12 doğrulanmış ceza tablosu gelince; GM-17 fiziksel cihaz.

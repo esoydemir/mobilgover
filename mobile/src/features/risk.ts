@@ -23,7 +23,7 @@ export type RiskItem = {
 /** Not the same thing: a confirmed penalty (applied to the business), a potential risk (finding that could become one) and a missing/expired document. */
 export type RiskFilter = 'all' | 'crit' | 'potential' | RiskKind;
 
-export const RISK_FILTERS: [RiskFilter, string][] = [['all', 'Tümü'], ['crit', 'Kritik'], ['potential', 'Potansiyel risk'], ['ncr', 'Uygunsuzluk'], ['task', 'Gecikmiş görev'], ['doc', 'Belge'], ['info', 'Bilgi eksik']];
+export const RISK_FILTERS: [RiskFilter, string][] = [['all', 'Tümü'], ['crit', 'Kritik kalem'], ['potential', 'Potansiyel risk'], ['ncr', 'Uygunsuzluk'], ['task', 'Gecikmiş görev'], ['doc', 'Belge'], ['info', 'Bilgi eksik']];
 export const isRiskFilter = (v: unknown): v is RiskFilter => RISK_FILTERS.some(([k]) => k === v);
 export const KIND_LABEL: Record<RiskKind, string> = { ncr: 'UYGUNSUZLUK', task: 'GECİKMİŞ KONTROL', doc: 'BELGE', info: 'BİLGİ EKSİK' };
 /** No confirmed-penalty records exist in the product (nothing records an applied penalty), so that class is always 0 and says so. */
