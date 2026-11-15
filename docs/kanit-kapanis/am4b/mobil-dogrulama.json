@@ -1,0 +1,49 @@
+{
+  "cihazlar": {
+    "chromium-Pixel7": {
+      "motor": "chromium",
+      "profil": "Pixel 7",
+      "ekran": {
+        "width": 412,
+        "height": 839
+      },
+      "kucukDokunmaHedefi": {},
+      "guvenliAlan": {
+        "vf": true,
+        "env": true
+      },
+      "dokunmaUyarisi": 0
+    },
+    "webkit-iPhone14": {
+      "motor": "webkit",
+      "profil": "iPhone 14",
+      "ekran": {
+        "width": 390,
+        "height": 664
+      },
+      "kucukDokunmaHedefi": {},
+      "guvenliAlan": {
+        "vf": true,
+        "env": true
+      },
+      "dokunmaUyarisi": 0
+    },
+    "webkit-iPhoneSE": {
+      "motor": "webkit",
+      "profil": "iPhone SE",
+      "ekran": {
+        "width": 320,
+        "height": 568
+      },
+      "kucukDokunmaHedefi": {},
+      "guvenliAlan": {
+        "vf": true,
+        "env": true
+      },
+      "dokunmaUyarisi": 0
+    }
+  },
+  "tarih": "2026-11-15T10:33:34.486Z",
+  "base": "http://localhost:8091",
+  "not": "Öykünme: gerçek telefon değildir."
+}
