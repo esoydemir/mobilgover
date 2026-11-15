@@ -104,8 +104,8 @@ export async function createExtraction(tx: Tx, p: Principal, companyId: string, 
   // Older, still-pending suggestions for the same version are replaced by the newest reading.
   await tx.query(`UPDATE document_extractions SET status = 'dismissed', decided_by = $2, decided_at = now() WHERE version_id = $1 AND status = 'pending'`, [versionId, p.userId]);
   const r = (await tx.query<{ id: string }>(
-    `INSERT INTO document_extractions (company_id, document_id, version_id, source, text_sha256, suggestions, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [companyId, documentId, versionId, b.source, sha, JSON.stringify(suggestions), p.userId])).rows[0]!;
+    `INSERT INTO document_extractions (company_id, document_id, version_id, source, text_sha256, suggestions, created_by, source_text) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [companyId, documentId, versionId, b.source, sha, JSON.stringify(suggestions), p.userId, text])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.extraction_proposed', entityType: 'document', entityId: documentId, payload: { extractionId: r.id, versionId, fields: suggestions.map(s => s.field), source: b.source } });
   return { id: r.id, status: 'pending', suggestions, ocr: ocrStatus(), note: 'Bunlar öneridir; onaylamadıkça belgeye yazılmaz ve belge geçerli sayılmaz.' };
 }

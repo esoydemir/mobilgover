@@ -1,4 +1,5 @@
 import type { SmtpConfig } from './services/smtp';
+import { llmConfigFromEnv, type LlmConfig } from './services/llm';
 /** Runtime configuration from the environment. No secrets have defaults. */
 function required(name: string): string {
   const v = process.env[name];
@@ -32,6 +33,8 @@ export type Config = {
   corsOrigins: string[];
   /** Reverse proxy addresses whose X-Forwarded-For is trusted. Explicit IP addresses or CIDR ranges only. */
   trustProxy: string[];
+  /** Optional language model for the assistant (LLM_BASE_URL + LLM_MODEL); null = answers from the sources alone. */
+  llm: LlmConfig | null;
   /** Address the API listens on. Loopback in pilot: only the reverse proxy on the same server reaches it. */
   host: string;
 };
@@ -54,6 +57,7 @@ export function loadConfig(): Config {
     corsOrigins: (process.env.CORS_ORIGINS ?? '').split(',').map(s => s.trim()).filter(Boolean),
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
     host: listenHost(process.env.HOST, demoMode),
+    llm: llmConfigFromEnv(),
   };
 }
 

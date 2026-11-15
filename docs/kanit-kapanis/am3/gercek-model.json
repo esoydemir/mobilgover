@@ -1,0 +1,106 @@
+{
+  "model": "qwen2.5-coder:7b",
+  "baseUrl": "http://127.0.0.1:11434/v1",
+  "at": "2026-11-15T03:10:02.910Z",
+  "sourced": {
+    "question": "Yüzeyler ne zaman dezenfekte edilir ve kaydı kim tutar?",
+    "outcome": "answered",
+    "mode": "model",
+    "model": {
+      "status": "used",
+      "name": "qwen2.5-coder:7b"
+    },
+    "answer": "Yüzeyler her vardiya sonunda dezenfekte edilir [1]. Dezenfektan kaydı vardiya sorumlusu tarafından tutulur [1].",
+    "sources": [
+      {
+        "n": 1,
+        "title": "Temizlik planı",
+        "locator": "Belge · sürüm 1 · bölüm 1 (dosyadan OCR ile okunan metin, doğrulanmamış)",
+        "cited": true,
+        "route": "/documents/e5d1baf0-b303-4ac8-865c-15aca5b90643"
+      }
+    ],
+    "notes": [
+      "Yanıtı bir dil modeli yazdı; her cümlenin dayandığı kaynağı aç ve kontrol et.",
+      "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez.",
+      "OCR ile okunan metin hatalı olabilir; asıl dosyayla karşılaştır."
+    ],
+    "ms": 2951
+  },
+  "insufficient": {
+    "question": "Soğuk oda talimatındaki sıcaklık kaydını hangi çalışan imzalar?",
+    "outcome": "insufficient",
+    "mode": "model",
+    "model": {
+      "status": "used",
+      "name": "qwen2.5-coder:7b"
+    },
+    "answer": "\nBu soruyu eldeki kaynaklar yeterince karşılamıyor; bu yüzden kesin bir şey söylemiyorum.",
+    "sourcesShownAsSupport": 0,
+    "notes": [
+      "Yetersiz kaynak: model de kaynakları yetersiz buldu."
+    ],
+    "ms": 894
+  },
+  "conflict": {
+    "question": "Soğuk oda sıcaklığı en fazla kaç derece olabilir?",
+    "outcome": "conflict",
+    "mode": "model",
+    "model": {
+      "status": "used",
+      "name": "qwen2.5-coder:7b"
+    },
+    "answer": "Kaynaklar birbiriyle çelişiyor: [1] 4 °C, [2] 8 °C. Hangisinin geçerli olduğu kaynaklardan anlaşılmıyor.",
+    "sources": [
+      {
+        "n": 1,
+        "title": "Soğuk oda talimatı A",
+        "locator": "Belge · sürüm 1 · bölüm 1 (dosyadan OCR ile okunan metin, doğrulanmamış)",
+        "cited": true,
+        "route": "/documents/c2d033bc-92f2-41c1-a1bc-0274189bbc16"
+      },
+      {
+        "n": 2,
+        "title": "Soğuk oda talimatı B",
+        "locator": "Belge · sürüm 1 · bölüm 1 (dosyadan OCR ile okunan metin, doğrulanmamış)",
+        "cited": true,
+        "route": "/documents/801f9f7a-9d58-4ae8-8ebc-f779c25c49a5"
+      },
+      {
+        "n": 3,
+        "title": "Soğuk muhafaza ünitelerinin sıcaklığını kayıt altında tut",
+        "locator": "Kural EX-COLD-CHAIN · sürüm 1",
+        "cited": false,
+        "route": "/obligations"
+      },
+      {
+        "n": 4,
+        "title": "Soğuk oda talimatı A",
+        "locator": "Belge · sürüm 1 · kayıt bilgileri",
+        "cited": false,
+        "route": "/documents/c2d033bc-92f2-41c1-a1bc-0274189bbc16"
+      },
+      {
+        "n": 5,
+        "title": "Soğuk oda talimatı B",
+        "locator": "Belge · sürüm 1 · kayıt bilgileri",
+        "cited": false,
+        "route": "/documents/801f9f7a-9d58-4ae8-8ebc-f779c25c49a5"
+      },
+      {
+        "n": 6,
+        "title": "Soğutucu sıcaklık kontrolü",
+        "locator": "Açık görev",
+        "cited": false,
+        "route": "/task/0d8ea32a-2da4-4e95-9eb3-f1332c0d5a4e"
+      }
+    ],
+    "notes": [
+      "Kaynaklar birbiriyle çelişiyor; hangisinin geçerli olduğunu asistan seçmedi. Kaynakları aç, gerekirse uzmanına danış.",
+      "Yanıtı bir dil modeli yazdı; her cümlenin dayandığı kaynağı aç ve kontrol et.",
+      "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez.",
+      "OCR ile okunan metin hatalı olabilir; asıl dosyayla karşılaştır."
+    ],
+    "ms": 3048
+  }
+}

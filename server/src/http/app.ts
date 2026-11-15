@@ -15,6 +15,7 @@ import { bulkAssignApply, bulkAssignPreview } from '../services/bulk-assign';
 import * as depth from '../services/market-depth';
 import * as qr from '../services/qr';
 import * as extraction from '../services/extraction';
+import type { LlmConfig } from '../services/llm';
 import { ask as askAssistant } from '../services/assistant';
 import * as padmin from '../services/platform-admin';
 import { institutionView } from '../services/institution';
@@ -54,6 +55,8 @@ const companyParams = z.object({ companyId: uuid });
 export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[]; mailProductionReady?: boolean;
   /** Addresses of the reverse proxy whose X-Forwarded-For is trusted (e.g. 127.0.0.1). Without it, every client behind the proxy shares one rate limit. */
   trustProxy?: string[];
+  /** Optional language model for the assistant (llm.ts); without it the assistant answers from the sources alone. */
+  llm?: LlmConfig | null;
   /** Separate test environment only (DEMO_MODE=true): sign-in and invitations are limited to this
    *  address domain (e.g. demo.goverhub.test), so no real person's address is entered there. */
   demoLoginDomain?: string };
@@ -980,7 +983,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/assistant/ask', async req => {
     const companyId = company(req);
     const b = z.object({ question: z.string().max(600), siteId: uuid.nullable().optional() }).parse(req.body);
-    return db.tenant(companyId, tx => askAssistant(tx, req.principal, companyId, b));
+    return askAssistant(db, config.llm ?? null, req.principal, companyId, b);
   });
   app.post('/companies/:companyId/service-requests/preview', async req => {
     const companyId = company(req);
