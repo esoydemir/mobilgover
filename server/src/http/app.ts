@@ -960,6 +960,13 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ text: z.string().max(20000), source: z.enum(['device_text', 'typed_text']).default('typed_text') }).parse(req.body);
     return mutate(req, reply, companyId, tx => extraction.createExtraction(tx, req.principal, companyId, id, versionId, b), 201);
   });
+  // Reads the version's stored file (PDF text layer, scan or photo). The reading runs outside the transaction; the result is a pending proposal.
+  app.post('/companies/:companyId/documents/:id/versions/:versionId/extract-file', async (req, reply) => {
+    const companyId = company(req);
+    const { id, versionId } = z.object({ id: uuid, versionId: uuid }).parse(req.params);
+    const out = await extraction.extractFromFile(db, store, req.principal, companyId, id, versionId);
+    return reply.code(out.reused ? 200 : 201).send(out);
+  });
   app.post('/companies/:companyId/extractions/:id/decision', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);

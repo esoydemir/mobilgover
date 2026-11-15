@@ -54,7 +54,8 @@ export function QrCard({ kind, refId }: { kind: 'equipment' | 'document'; refId:
 /* ── Smart Vault: fields proposed from document text; a person edits and confirms ── */
 
 type Suggestion = { field: 'docType' | 'issuer' | 'documentNo' | 'validFrom' | 'validUntil'; value: string; snippet: string; confidence: 'medium' | 'low'; note?: string };
-type Extraction = { id: string; version: number; status: string; suggestions: Suggestion[]; createdAt: string };
+type Extraction = { id: string; version: number; status: string; suggestions: Suggestion[]; createdAt: string; method?: string | null; sourceText?: string | null; readConfidence?: number | null };
+const METHOD_TR: Record<string, string> = { pdf_text: 'PDF metin katmanından okundu', ocr_pdf: 'Taranmış PDF, OCR ile okundu', ocr_image: 'Fotoğraf, OCR ile okundu' };
 const FIELD_TR: Record<string, string> = { docType: 'Belge türü', issuer: 'Düzenleyen kurum', documentNo: 'Belge no', validFrom: 'Başlangıç', validUntil: 'Bitiş' };
 
 export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: { documentId: string; versionId: string | null; reviewed: boolean; onApplied: () => void }) {
@@ -70,6 +71,14 @@ export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: {
       setVals(Object.fromEntries(r.suggestions.map(s => [s.field, s.value]))); setText(''); await q.reload();
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };
+  const [fileErr, setFileErr] = useState<string | null>(null); const [showSrc, setShowSrc] = useState(false);
+  const readFile = async () => {
+    setBusy(true); setError(null); setFileErr(null);
+    try {
+      const r = await call<{ id: string; suggestions: Suggestion[] }>('POST', `/companies/${company!.id}/documents/${documentId}/versions/${versionId}/extract-file`, {});
+      setVals(Object.fromEntries(r.suggestions.map(s => [s.field, s.value]))); await q.reload();
+    } catch (e) { setFileErr(errorText(e)); } finally { setBusy(false); }
+  };
   const decide = async (confirm: boolean) => {
     if (!pending) return;
     setBusy(true); setError(null);
@@ -84,9 +93,10 @@ export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: {
   return (
     <Card radius={22} style={{ padding: 15, gap: 8 }}>
       <View testID="extract-card"><Eyebrow>BELGE METNİNDEN ALAN OKU</Eyebrow></View>
-      <Text testID="extract-ocr-note" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{q.data?.ocr.note ?? 'Metin telefonun metin tanımasından alınır ya da yapıştırılır; sistem yalnızca öneri çıkarır.'}</Text>
+      <Text testID="extract-ocr-note" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{q.data?.ocr.note ?? 'Yüklenen dosyadan okunur ya da metin yapıştırılır; sistem yalnızca öneri çıkarır.'}</Text>
       {pending ? (
         <View style={{ gap: 8 }}>
+          {pending.method ? <Text testID="extract-method" style={type(11.5, 500, { color: C.t2, lh: 1.45 })}>{METHOD_TR[pending.method] ?? pending.method}{pending.readConfidence != null ? ` · okuma güveni %${pending.readConfidence}` : ''}</Text> : null}
           <Text style={type(12.5, 600, { color: C.warn })}>Öneriler onayını bekliyor · sürüm {pending.version}. Onaylamadıkça belgeye yazılmaz; onaylasan da belge "incelendi" sayılmaz.</Text>
           {reviewed ? <Text testID="extract-reviewed-note" style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Bu sürüm incelendi: tarihler değişmez, yalnız belge bilgileri kaydedilir. Tarih değiştiyse yeni sürüm yükle.</Text> : null}
           {shown.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Metinden alan çıkarılamadı. Alanları elle gir.</Text> : null}
@@ -96,11 +106,25 @@ export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: {
               <Text style={type(10.5, 400, { color: C.t3, lh: 1.35 })}>Kaynak satır: “{s.snippet}”{s.field === 'docType' ? ` · ${DOC_TYPE[s.value] ?? s.value}` : ''}{s.note ? ` · ${s.note}` : ''}</Text>
             </View>
           ))}
+          {pending.sourceText ? (
+            <View style={{ gap: 6 }}>
+              <GhostButton testID="extract-source-toggle" label={showSrc ? 'Okunan metni gizle' : 'Okunan metni göster'} height={34} size={12} onPress={() => setShowSrc(x => !x)} />
+              {showSrc ? <Text testID="extract-source-text" selectable style={type(11.5, 400, { color: C.t2, lh: 1.5 })}>{pending.sourceText}</Text> : null}
+            </View>
+          ) : null}
           <PrimaryButton testID="extract-confirm" label="Onayla ve belgeye kaydet" disabled={busy} onPress={() => decide(true)} />
           <GhostButton testID="extract-dismiss" label="Vazgeç, hiçbir şey yazma" height={36} size={12} disabled={busy} onPress={() => decide(false)} />
         </View>
       ) : (
         <View style={{ gap: 8 }}>
+          <PrimaryButton testID="extract-file" label={busy ? 'Okunuyor…' : 'Yüklenen dosyadan oku'} disabled={busy} onPress={readFile} />
+          {fileErr ? (
+            <View testID="extract-file-error" style={{ gap: 6 }}>
+              <ErrorBox message={fileErr} />
+              <GhostButton testID="extract-file-retry" label="Yeniden dene" height={36} size={12} disabled={busy} onPress={readFile} />
+              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Ya da aşağıya metni yapıştırıp alanları elle öner.</Text>
+            </View>
+          ) : null}
           <Field label="Belgenin metni (okunan ya da yapıştırılan)" testID="extract-text" value={text} onChangeText={setText} multiline />
           <PrimaryButton testID="extract-propose" label="Alanları öner" disabled={busy || text.trim().length < 20} onPress={propose} />
         </View>

@@ -28,11 +28,15 @@
     "pilot:check": "tsx src/ops/pilotcheck.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.1",
+    "@tesseract.js-data/tur": "^1.0.0",
     "dejavu-fonts-ttf": "^2.37.3",
     "fastify": "^5.12.7",
+    "pdfjs-dist": "^6.5.438",
     "pdfkit": "^0.20.2",
     "pg": "^8.23.1",
     "qrcode": "^1.5.4",
+    "tesseract.js": "^7.0.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
