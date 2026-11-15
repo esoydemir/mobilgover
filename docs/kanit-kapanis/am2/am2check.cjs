@@ -1,5 +1,6 @@
 // AM-2 uçtan uca: 8091 üzerinde dosya yükle -> ekranda "Yüklenen dosyadan oku" -> öneriler/kaynak metin -> onay. node am2check.cjs
-const { chromium, devices } = require('playwright');
+const { chromium, webkit, devices } = require('playwright');
+const ENGINE = process.env.ENGINE === 'webkit' ? webkit : chromium, DEV = process.env.DEVICE || 'Pixel 7', SUF = process.env.ENGINE === 'webkit' ? '-webkit' : '';
 const crypto = require('crypto'); const fs = require('fs'); const path = require('path');
 const { req, login, BASE } = require('./api.cjs');
 const SRC = path.join(__dirname, '..', 'src', 'docs', 'kanit-kapanis', 'am2', 'ornekler');
@@ -19,8 +20,8 @@ const SF = path.join(__dirname, '.qr-state.json'); const STATE = JSON.parse(fs.r
   };
   const stamp = Date.now() % 100000;
   const cases = [['metinli.pdf', 'application/pdf', 'pdf_text', 'metin-katmanli-pdf'], ['taranmis.pdf', 'application/pdf', 'ocr_pdf', 'taranmis-pdf'], ['fotograf.jpg', 'image/jpeg', 'ocr_image', 'turkce-fotograf']];
-  const browser = await chromium.launch({ args: ['--no-proxy-server'] });
-  const ctx = await browser.newContext({ ...devices['Pixel 7'], storageState: STATE });
+  const browser = await ENGINE.launch({ args: process.env.ENGINE === 'webkit' ? [] : ['--no-proxy-server'] });
+  const ctx = await browser.newContext({ ...devices[DEV], storageState: STATE });
   const page = await ctx.newPage();
   for (const [file, mime, method, slug] of cases) {
     const id = await mk(file, mime, `AM2 ${slug} ${stamp}`);
@@ -34,7 +35,7 @@ const SF = path.join(__dirname, '.qr-state.json'); const STATE = JSON.parse(fs.r
     const src = await page.getByTestId('extract-source-text').innerText().catch(() => '');
     ok(`${slug}: alanlar dosyadan geldi (${method})`, no === 'RHS-2031-0457' && until === '2036-03-04' && /RHS-2031-0457/.test(src), `${m} | no=${no} bitiş=${until}`);
     await page.getByTestId('extract-method').scrollIntoViewIfNeeded().catch(() => { });
-    await page.screenshot({ path: path.join(OUT, `${slug}.png`), fullPage: false });
+    await page.screenshot({ path: path.join(OUT, `${slug}${SUF}.png`), fullPage: false });
     if (slug === 'metin-katmanli-pdf') {
       // düzeltip onayla; sürüm incelendi sayılmaz
       await page.getByTestId('extract-documentNo').fill('RHS-2031-0458'); await page.getByTestId('extract-confirm').click(); await page.waitForTimeout(1500);
@@ -50,7 +51,7 @@ const SF = path.join(__dirname, '.qr-state.json'); const STATE = JSON.parse(fs.r
     await page.getByTestId('extract-file-error').waitFor({ timeout: 60000 }).catch(() => { });
     const err = await page.getByTestId('extract-file-error').innerText().catch(() => '');
     ok(`${slug}: hata, yeniden deneme ve elle giriş yolu görünür`, /elle gir/.test(err) && (await page.getByTestId('extract-file-retry').count()) > 0 && (await page.getByTestId('extract-text').count()) > 0, err.replace(/\n/g, ' | ').slice(0, 110));
-    await page.screenshot({ path: path.join(OUT, `${slug}.png`) });
+    await page.screenshot({ path: path.join(OUT, `${slug}${SUF}.png`) });
     if (slug === 'okunamayan-bozuk-pdf') {
       await page.getByTestId('extract-text').fill('İŞYERİ AÇMA RUHSATI\nBelge No: RHS-9-111\nGeçerlilik Bitişi: 01.01.2040\nelle yapıştırıldı'); await page.getByTestId('extract-propose').click();
       await page.getByTestId('extract-confirm').waitFor({ timeout: 15000 }).catch(() => { });

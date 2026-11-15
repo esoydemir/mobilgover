@@ -1,0 +1,115 @@
+{
+  "adimlar": [
+    {
+      "ad": "İşletme kuruldu (kendi test işletmesi)",
+      "tamam": true,
+      "ayrinti": "rgdak5 · 4ce69779-6d38-423d-91e5-4dce38423778"
+    },
+    {
+      "ad": "Yeni şube eklendi ve işletmede görünür",
+      "tamam": true,
+      "ayrinti": "2 şube"
+    },
+    {
+      "ad": "Servis raporunu kanıt kabul eden açık görev var",
+      "tamam": true,
+      "ayrinti": "Soğutucu servis raporu kaydı · Buzdolabı · Mutfak arka"
+    },
+    {
+      "ad": "Hizmet talebi oluşturuldu",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Uzman teklif verdi",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Teklif kabul edildi, iş doğdu",
+      "tamam": true,
+      "ayrinti": "0ad42238-f34f-4112-b213-6181f7d65076"
+    },
+    {
+      "ad": "Randevu: öneri, karşı öneri, kabul; geçmiş sıralı ve eski öneri geçersiz",
+      "tamam": true,
+      "ayrinti": "superseded → confirmed"
+    },
+    {
+      "ad": "Uzman yerinde giriş kaydı yaptı",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Rapor belge olarak işletmenin kasasına düştü",
+      "tamam": true,
+      "ayrinti": "Servis raporu · Regresyon soğutucu servisi rgdak5 · sürüm 1"
+    },
+    {
+      "ad": "Belge sürümü başka bir yetkili tarafından incelendi",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "İş teslimi kabul edildi",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Servis raporu görev kanıtı olarak bağlandı",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Görev kanıtı: fotoğraf yüklendi ve mühürlendi",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Görev kanıtı: kısa not eklendi",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Görev kapandı (tamamlandı)",
+      "tamam": true,
+      "ayrinti": "durum done"
+    },
+    {
+      "ad": "Personel işletme raporunu göremez (yetki ayrımı)",
+      "tamam": true,
+      "ayrinti": "görmüyor"
+    },
+    {
+      "ad": "Eski demo görevleri listeleniyor",
+      "tamam": true,
+      "ayrinti": "67 görev"
+    },
+    {
+      "ad": "Eski bir görev ayrıntısıyla açılıyor",
+      "tamam": true,
+      "ayrinti": "open"
+    },
+    {
+      "ad": "Eski belgelerin sürümleri açılıyor ve sayıları tutuyor",
+      "tamam": true,
+      "ayrinti": "18 belge; 5 örnek tamam"
+    },
+    {
+      "ad": "Eski işlerin randevu geçmişi açılıyor",
+      "tamam": true,
+      "ayrinti": "1 iş, 1 geçmiş açıldı"
+    }
+  ],
+  "gorevBasliklari": [
+    "Eldiven ve önlük kontrolü",
+    "Soğutucu sıcaklık kontrolü",
+    "Aylık LPG bağlantı kontrolü",
+    "Soğutucu servis raporu kaydı",
+    "Servis sonrası sıcaklık doğrulaması"
+  ],
+  "calistirma": "rgdak5",
+  "isletme": "4ce69779-6d38-423d-91e5-4dce38423778",
+  "base": "http://localhost:8091",
+  "tarih": "2026-11-15T03:33:43.007Z"
+}
