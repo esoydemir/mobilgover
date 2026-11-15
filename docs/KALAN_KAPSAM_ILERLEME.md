@@ -118,3 +118,11 @@ Kanıt dosyaları: `kanit-g45/wk/ekran`, `kanit-g45/cr/ekran` (ekran görüntül
 | `new-site-tasks › repeating the operation…` (CI ve yerel, UTC 21:00–24:00) | **Test zamanlaması** | Yerelde gece yarısından sonra yeniden üretildi; test UTC gününü, şube İstanbul gününü kullanıyordu | Test günü `Europe/Istanbul` ile hesaplıyor (`8d7814f`) |
 
 Düzeltmeler sonrası tam takım (Windows, backup-restore hariç): art arda 2 koşu 38/38, 318/318.
+
+# Kapanış turu (dal `feat/kapanis-am-maddeleri`, taban `goverhub-mobile` @ `101de53`)
+Tasarım referansı `GoverHub Mobile Standalone.dc(2).html` bu oturumdan erişilemiyor (yalnız `...Standalone.dc.html` var); görsel karşılaştırma **yapılamadı**, işlevsel doğrulama yapıldı. Alt ajan kullanılmadı.
+
+## Aşama 1 — AM-6 kural onay/yayın gerekçesi zorunlu
+- **Değişiklik:** `approve`/`publish` gerekçe ister (`needReason`: boş, yalnız boşluk, eksik → 422 "Kuralı onaylamak/yayımlamak için gerekçe yazmalısın."); doğrulama durum değişmeden önce. Denetim olayına kural kodu ve sürümü eklendi. Ekran: gerekçe alanı zorunlu, eksikse işlemin adı Türkçe yazılır; denetim kaydı kural kodu+sürümünü gösterir. Eski gerekçesiz kayıtlar "Gerekçe kaydedilmemiş" görünür.
+- **Kabul:** `platform-admin.test.ts` "AM-6": taslak → inceleme → gerekçeli onay → gerekçeli yayın; 5 eksik/boş biçim onayda, 2 yayında reddedilir ve durum değişmez; yazar gerekçeyle bile onaylayamaz (403); her adım ayrı kayıt; eski kayıt okunur.
+- **Test ortamı / sonuç:** Windows + PostgreSQL 16 (Docker); `platform-admin`, `rule-writing`, `production-guards`, `slice`, `ops` 49/49 (6'sı yeni). Mobil ve sunucu `tsc` temiz. Mevcut çağıranlar (seed, e2e, testler) gerekçe gönderecek şekilde güncellendi.

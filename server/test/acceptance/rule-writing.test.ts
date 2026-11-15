@@ -81,8 +81,8 @@ describe('rule writing screen', () => {
       templates: base.templates.map(t => ({ ...t, limits: (t.limits ?? []).map(l => ({ ...l, max: 5 })) })) })).body.id;
     await author().post(`/admin/rule-versions/${v2}/submit`);
     await specialist().post(`/admin/rule-versions/${v2}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Limit değişikliği incelendi.' });
-    expect((await reviewer().post(`/admin/rule-versions/${v2}/approve`)).status).toBe(200);
-    expect((await admin().post(`/admin/rule-versions/${v2}/publish`)).status).toBe(200);
+    expect((await reviewer().post(`/admin/rule-versions/${v2}/approve`, { reason: 'Test: onay gerekçesi' })).status).toBe(200);
+    expect((await admin().post(`/admin/rule-versions/${v2}/publish`, { reason: 'Test: yayın gerekçesi' })).status).toBe(200);
     const day = (n: number) => new Date(Date.now() + n * 86400_000).toISOString().slice(0, 10);
     await client(env, demo.users.owner.token).post(`${C()}/tasks/generate`, { siteId: demo.siteId, fromDay: day(5), toDay: day(5) });
     const after = (await env.ownerDb.query(`SELECT t.id, rv.version FROM tasks t JOIN task_templates tt ON tt.id = t.template_id JOIN rule_versions rv ON rv.id = tt.rule_version_id

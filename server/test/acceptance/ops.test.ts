@@ -84,8 +84,8 @@ describe('pilot readiness check', () => {
       const d = await createDraft(tx, p(ids['yazar@ornek.com.tr']!, ['rule_author']), base);
       await submitForReview(tx, p(ids['yazar@ornek.com.tr']!, ['rule_author']), d.id);
       await areaReview(tx, p(ids['uzman@ornek.com.tr']!, ['rule_reviewer']), d.id, 'food_safety', 'approved', 'Kaynakla karşılaştırıldı');
-      await approve(tx, p(ids['onay@ornek.com.tr']!, ['rule_reviewer']), d.id);
-      await publish(tx, p(ids['yonetici@ornek.com.tr']!, ['platform_admin']), d.id, { allowExampleRules: false });
+      await approve(tx, p(ids['onay@ornek.com.tr']!, ['rule_reviewer']), d.id, 'Test: onay gerekçesi');
+      await publish(tx, p(ids['yonetici@ornek.com.tr']!, ['platform_admin']), d.id, { allowExampleRules: false, reason: 'Test: yayın gerekçesi' });
     });
     await writeHead(new DirTarget(join(work, 'hedef')), { id: '20261101T000000Z', snapshotAt: new Date(Date.now() - 10 * 60_000).toISOString(), evidence: [] } as any, new Date());
     await new DirTarget(join(work, 'hedef')).put('db/20261101T000000Z.manifest.enc', join(work, 'hedef', 'status', 'latest-verified.json'));

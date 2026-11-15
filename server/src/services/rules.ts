@@ -116,7 +116,7 @@ export async function areaReview(tx: Tx, p: Principal, id: string, area: string,
   if (!ok) throw forbidden(`"${area}" alanında inceleme yetkin yok.`);
   if (notes.trim().length < 5) throw invalid('İnceleme notu yaz.');
   await tx.query(`INSERT INTO rule_area_reviews (rule_version_id, area, reviewer_id, decision, notes) VALUES ($1,$2,$3,$4,$5)`, [id, area, p.userId, decision, notes]);
-  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.area_reviewed', entityType: 'rule_version', entityId: id, payload: { area, decision, reason: notes.trim() } });
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.area_reviewed', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, area, decision, reason: notes.trim() } });
 }
 
 /** Area reviews still missing (latest decision per area must be "approved"). */
@@ -136,8 +136,16 @@ export async function listRuleVersions(tx: Tx, p: Principal, status?: string) {
 }
 
 /** Human review gate. The reviewer must differ from the author and also approves any emergency instruction. */
-export async function approve(tx: Tx, p: Principal, id: string, reason: string | null = null) {
+/** A decision on a rule needs a written reason; empty or whitespace-only text is refused before anything changes. */
+export function needReason(reason: string | null | undefined, what: string): string {
+  const r = (reason ?? '').trim();
+  if (r.length === 0) throw invalid(`${what} için gerekçe yazmalısın.`);
+  return r;
+}
+
+export async function approve(tx: Tx, p: Principal, id: string, reason: string | null | undefined) {
   if (!has(p, 'rule_reviewer')) throw forbidden('Onay yalnızca kural inceleyicisi tarafından verilebilir.');
+  const why = needReason(reason, 'Kuralı onaylamak');
   const rv = await version(tx, id);
   if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını onaylayamaz.');
@@ -145,21 +153,22 @@ export async function approve(tx: Tx, p: Principal, id: string, reason: string |
   if (missing.length) throw conflict('AREA_REVIEW_MISSING', `Önce alan uzmanı incelemesi gerekiyor: ${missing.join(', ')}`, { missing });
   await tx.query(`UPDATE task_templates SET emergency_approved_by = $2 WHERE rule_version_id = $1 AND emergency_instruction IS NOT NULL`, [id, p.userId]);
   await tx.query(`UPDATE rule_versions SET status = 'approved', reviewer_id = $2, reviewed_at = now() WHERE id = $1`, [id, p.userId]);
-  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.approved', entityType: 'rule_version', entityId: id, payload: { code: rv.code, reason: reason?.trim() || null } });
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.approved', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, reason: why } });
 }
 
 /**
  * Publishes an approved version, retires the previous one and re-evaluates
  * every company. Example rules are refused outside demo deployments.
  */
-export async function publish(tx: Tx, p: Principal, id: string, opts: { allowExampleRules: boolean; reason?: string | null }) {
+export async function publish(tx: Tx, p: Principal, id: string, opts: { allowExampleRules: boolean; reason: string | null | undefined }) {
   if (!has(p, 'platform_admin') && !has(p, 'rule_reviewer')) throw forbidden();
+  const why = needReason(opts.reason, 'Kuralı yayımlamak');
   const rv = await version(tx, id);
   if (rv.status !== 'approved') throw conflict('INVALID_STATE', 'Yalnızca onaylanmış sürüm yayınlanabilir.');
   if (rv.is_example && !opts.allowExampleRules) throw forbidden('Örnek kurallar yalnızca demo ortamında yayınlanabilir.');
   await tx.query(`UPDATE rule_versions SET status = 'retired', retired_at = now() WHERE rule_id = $1 AND status = 'published'`, [rv.rule_id]);
   await tx.query(`UPDATE rule_versions SET status = 'published', published_by = $2, published_at = now() WHERE id = $1`, [id, p.userId]);
-  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.published', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, reason: opts.reason?.trim() || null } });
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.published', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, reason: why } });
   const companies = (await tx.query<{ id: string }>(`SELECT id FROM companies`)).rows;
   for (const c of companies) await recomputeCompany(tx, c.id, p.userId);
   return { recomputedCompanies: companies.length };

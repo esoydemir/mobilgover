@@ -748,9 +748,9 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return institutionView(q);
   });
   app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
-  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason ?? null)); return { ok: true }; });
+  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason)); return { ok: true }; });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
-  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason ?? null })); });
+  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason })); });
 
   // ── Platform administration: overview, audit trail, platform roles ──
   app.get('/admin/overview', async req => { platformGate(req); return db.system(tx => padmin.overview(tx, req.principal)); });

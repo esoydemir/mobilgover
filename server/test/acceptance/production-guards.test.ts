@@ -20,8 +20,8 @@ describe('production guards', () => {
     const v = await author.post('/admin/rule-versions', { ...base, provisionIds: [], changeReason: 'Örnek: yeni sürüm denemesi' });
     expect(v.status).toBe(201);
     await author.post(`/admin/rule-versions/${v.body.id}/submit`);
-    await reviewer.post(`/admin/rule-versions/${v.body.id}/approve`);
-    const pub = await admin.post(`/admin/rule-versions/${v.body.id}/publish`);
+    await reviewer.post(`/admin/rule-versions/${v.body.id}/approve`, { reason: 'Test: onay gerekçesi' });
+    const pub = await admin.post(`/admin/rule-versions/${v.body.id}/publish`, { reason: 'Test: yayın gerekçesi' });
     expect(pub.status).toBe(403);
     expect(pub.body.error.message).toContain('demo');
   });

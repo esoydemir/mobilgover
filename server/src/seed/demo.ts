@@ -115,8 +115,8 @@ export async function ensureReportRules(db: Db) {
       if ((await tx.query(`SELECT 1 FROM rules WHERE code = $1`, [r.code])).rowCount) continue;
       const d = await createDraft(tx, principal(author, { platformRoles: ['rule_author'] }), { ...r, provisionIds: [] });
       await submitForReview(tx, principal(author, { platformRoles: ['rule_author'] }), d.id);
-      await approve(tx, principal(reviewer, { platformRoles: ['rule_reviewer'] }), d.id);
-      await publish(tx, principal(admin, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true });
+      await approve(tx, principal(reviewer, { platformRoles: ['rule_reviewer'] }), d.id, 'Örnek veri: seed sırasında onaylandı.');
+      await publish(tx, principal(admin, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true, reason: 'Örnek veri: seed sırasında yayımlandı.' });
       added++;
     }
     return added;
@@ -171,8 +171,8 @@ export async function seedPlatform(db: Db) {
       for (const area of r.requiredReviewAreas ?? []) {
         await areaReview(tx, principal(specialist.id, { platformRoles: ['rule_reviewer'] }), d.id, area, 'approved', 'Örnek içerik olarak incelendi (demo).');
       }
-      await approve(tx, principal(reviewer.id, { platformRoles: ['rule_reviewer'] }), d.id);
-      await publish(tx, principal(admin.id, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true });
+      await approve(tx, principal(reviewer.id, { platformRoles: ['rule_reviewer'] }), d.id, 'Örnek veri: seed sırasında onaylandı.');
+      await publish(tx, principal(admin.id, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true, reason: 'Örnek veri: seed sırasında yayımlandı.' });
       ruleVersionIds[r.code] = d.id;
     }
   });
