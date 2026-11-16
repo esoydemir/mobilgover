@@ -1,0 +1,76 @@
+{
+  "at": "2026-11-16T17:35:55.853Z",
+  "base": "http://localhost:8091",
+  "health": {
+    "ok": true
+  },
+  "env": {
+    "mode": "demo",
+    "demoLoginDomain": "demo.goverhub.test",
+    "exampleRulesAllowed": true,
+    "upload": {
+      "maxBytes": 15728640,
+      "types": [
+        "image/jpeg",
+        "image/png",
+        "application/pdf"
+      ]
+    },
+    "mailTransport": "dev_outbox",
+    "mailProductionReady": false
+  },
+  "ocr": {
+    "engine": "Tesseract (Türkçe, yerel)",
+    "available": true,
+    "note": "Yüklenen PDF ya da fotoğraftan metin bu sunucuda okunur (dışarı gönderilmez). Metin katmanlı PDF doğrudan okunur; tarama ve fotoğraf OCR ile okunur ve hata yapabilir. Sistem yalnızca öneri çıkarır, kayda sen onaylarsın."
+  },
+  "asistan": {
+    "mod": "kapali",
+    "outcome": "answered",
+    "mode": "sources_only",
+    "model": {
+      "status": "unreachable",
+      "name": "qwen2.5-coder:7b",
+      "detail": "Bağlantı kurulamadı"
+    },
+    "answer": "Sorunla eşleşen 6 kaynak buldum. Aşağıdaki satırlar kaynakların kendi ifadesidir; ekleme yapılmadı.\n[1] Temizlik planı 5715: Yüzeyler her vardiya sonunda dezenfekte edilir. Dezenfektan kaydı vardiya sorumlusu tarafından tutulur.\n[2] Ortam kontrolü 424187: Yüzeyler her vardiya sonunda dezenfekte edil",
+    "notes": [
+      "Dil modeline ulaşılamadı; ilgili kaynaklar olduğu gibi listelendi.",
+      "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez."
+    ],
+    "kaynak": [
+      {
+        "title": "Temizlik planı 5715",
+        "route": "/documents/0afec7fd-7826-4e82-b0ad-04753726f9a2"
+      },
+      {
+        "title": "Ortam kontrolü 424187",
+        "route": "/documents/126c9bcf-a03e-4665-9412-7234365f66b3"
+      },
+      {
+        "title": "Ortam kontrolü 534905",
+        "route": "/documents/8e9ef513-af6d-4def-800c-df8d80c567fd"
+      },
+      {
+        "title": "Ortam kontrolü 555721",
+        "route": "/documents/40612858-6bc9-493e-9a7f-6b100bd069f8"
+      },
+      {
+        "title": "Ortam kontrolü 397810",
+        "route": "/documents/a40f71b1-d618-460a-a7df-cee73b5ca685"
+      },
+      {
+        "title": "Soğutucu servis raporu kaydı",
+        "route": "/task/6f3ed99e-4787-451c-be96-1a000f90a521"
+      }
+    ]
+  },
+  "sonuc": [
+    "TAMAM  Sağlık — {\"ok\":true}",
+    "TAMAM  Ortam: demo kipi, örnek kurallar açık, e-posta üretime hazır değil — {\"mode\":\"demo\",\"mail\":\"dev_outbox\"}",
+    "TAMAM  Demo hesabıyla giriş",
+    "TAMAM  OCR bağımlılığı (Türkçe) hazır — {\"engine\":\"Tesseract (Türkçe, yerel)\",\"available\":true,\"note\":\"Yüklenen PDF ya da fotoğraftan metin bu sunucuda okunur (dışarı gönderilmez). Metin katmanlı PDF doğrudan okunur; tarama ve fotoğraf OCR ",
+    "TAMAM  Model kapalı: çökme yok, kaynaklar gösteriliyor, neden yazıyor — unreachable · Dil modeline ulaşılamadı; ilgili kaynaklar olduğu gibi listelendi. | Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez.",
+    "TAMAM  Ceza tutarı üretilmiyor, model çağrılmıyor — Ceza tutarı hesaplamıyorum: pilotta doğrulanmış bir ceza tablosu yok ve tutar ta"
+  ]
+}

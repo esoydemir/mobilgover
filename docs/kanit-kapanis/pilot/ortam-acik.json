@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-16T17:33:50.773Z",
+  "at": "2026-11-16T17:35:40.023Z",
   "base": "http://localhost:8091",
   "health": {
     "ok": true
@@ -27,15 +27,14 @@
   "asistan": {
     "mod": "acik",
     "outcome": "answered",
-    "mode": "sources_only",
+    "mode": "model",
     "model": {
-      "status": "rejected",
-      "name": "qwen2.5-coder:7b",
-      "detail": "Kaynaklarda olmayan sayı: 2"
+      "status": "used",
+      "name": "qwen2.5-coder:7b"
     },
-    "answer": "Sorunla eşleşen 4 kaynak buldum. Aşağıdaki satırlar kaynakların kendi ifadesidir; ekleme yapılmadı.\n[1] Temizlik planı 5715: Yüzeyler her vardiya sonunda dezenfekte edilir. Dezenfektan kaydı vardiya sorumlusu tarafından tutulur.\n[2] Ortam kontrolü 424187: Yüzeyler her vardiya sonunda dezenfekte edil",
+    "answer": "Yüzeyler her vardiya sonunda dezenfekte edilir ve dezenfektan kaydı vardiya sorumlusu tarafından tutulur [1, 2, 3].",
     "notes": [
-      "Dil modelinin yanıtı kurallara uymadığı için kullanılmadı; ilgili kaynaklar olduğu gibi listelendi.",
+      "Yanıtı bir dil modeli yazdı; her cümlenin dayandığı kaynağı aç ve kontrol et.",
       "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez."
     ],
     "kaynak": [
@@ -46,6 +45,10 @@
       {
         "title": "Ortam kontrolü 424187",
         "route": "/documents/126c9bcf-a03e-4665-9412-7234365f66b3"
+      },
+      {
+        "title": "Ortam kontrolü 534905",
+        "route": "/documents/8e9ef513-af6d-4def-800c-df8d80c567fd"
       },
       {
         "title": "Ortam kontrolü 397810",
@@ -62,7 +65,7 @@
     "TAMAM  Ortam: demo kipi, örnek kurallar açık, e-posta üretime hazır değil — {\"mode\":\"demo\",\"mail\":\"dev_outbox\"}",
     "TAMAM  Demo hesabıyla giriş",
     "TAMAM  OCR bağımlılığı (Türkçe) hazır — {\"engine\":\"Tesseract (Türkçe, yerel)\",\"available\":true,\"note\":\"Yüklenen PDF ya da fotoğraftan metin bu sunucuda okunur (dışarı gönderilmez). Metin katmanlı PDF doğrudan okunur; tarama ve fotoğraf OCR ",
-    "BAŞARISIZ  Model açık: model yanıtı, kaynak bağlantısı belgeyi açıyor — qwen2.5-coder:7b",
+    "TAMAM  Model açık: model yanıtı, kaynak bağlantısı belgeyi açıyor — qwen2.5-coder:7b",
     "TAMAM  Ceza tutarı üretilmiyor, model çağrılmıyor — Ceza tutarı hesaplamıyorum: pilotta doğrulanmış bir ceza tablosu yok ve tutar ta"
   ]
 }
