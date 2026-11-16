@@ -50,9 +50,14 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-60000}
+      # Yedekleme (yedek-al.cmd): şifreli yedekler ayrı birimde; anahtar dosyası ayar biriminde, yedek konumunda DEĞİL.
+      BACKUP_TARGET_DIR: /var/lib/goverhub/yedek
+      BACKUP_ENCRYPTION_KEY_FILE: /var/lib/goverhub/ayar/yedek.key
+      BACKUP_STATUS_FILE: /var/lib/goverhub/ayar/yedek-durum.json
     volumes:
       - kanit:/var/lib/goverhub/kanit
       - ayar:/var/lib/goverhub/ayar
+      - yedek:/var/lib/goverhub/yedek
     networks: [veri, web]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -114,4 +119,5 @@ volumes:
   veritabani:
   kanit:
   ayar:
+  yedek:
   kapi:

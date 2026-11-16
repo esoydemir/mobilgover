@@ -1,0 +1,5 @@
+#!/bin/sh
+# kullanım: sayac.sh <proje> -> tablo sayıları ve kanıt dosyası sayısı/özeti
+P="$1"
+docker exec ${P}-db-1 psql -U postgres -d goverhub_demo -Atc "select 'companies='||(select count(*) from companies)||' sites='||(select count(*) from sites)||' tasks='||(select count(*) from tasks)||' done_tasks='||(select count(*) from tasks where status='done')||' documents='||(select count(*) from documents)||' doc_versions='||(select count(*) from document_versions)||' appointments='||(select count(*) from service_appointments)||' ncr='||(select count(*) from nonconformities)||' evidence='||(select count(*) from evidence)||' stored='||(select count(*) from evidence where status='stored')||' audit='||(select count(*) from audit_events)||' users='||(select count(*) from users)||' rule_versions='||(select count(*) from rule_versions)||' migrations='||(select count(*) from schema_migrations)"
+docker exec ${P}-app-1 sh -c 'find /var/lib/goverhub/kanit -type f | wc -l; find /var/lib/goverhub/kanit -type f | sort | xargs sha256sum | sha256sum | cut -c1-16'

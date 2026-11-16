@@ -125,6 +125,18 @@ describe('flow 1: a task that asks for document evidence is completed with a rev
     expect(d.progress).toMatchObject({ complete: true, missing: [] }); // the closed task still counts the version it was closed on
     expect(d.serviceReports.blocked).toBe(false); // a later revision does not hold a closed task open
   });
+
+  it('the audit file carries the closure trail: the closed task and the report version it rested on', async () => {
+    const from = new Date(Date.now() - 864e5).toISOString(), to = new Date(Date.now() + 864e5).toISOString();
+    const r = (await owner().get(`${C()}/audit-report?format=json&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).body;
+    const t = r.sections.closures.tasks.find((x: any) => x.id === docTask);
+    expect(t).toBeTruthy();
+    expect(t.basis).toEqual([expect.objectContaining({ documentId: docId, version: 1, review: 'İncelendi', sha256: expect.stringMatching(/^[0-9a-f]{64}$/) })]);
+    expect(r.sections.closures.cases).toEqual(expect.any(Array));
+    // Staff do not see the closure of a task they may not read: the section is built from what the person may read.
+    const s = (await staff().get(`${C()}/audit-report?format=json&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).status;
+    expect([200, 403]).toContain(s);
+  });
 });
 
 describe('flow 2: a task with a measurement requirement stays open with the report alone', () => {

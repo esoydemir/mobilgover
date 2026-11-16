@@ -62,10 +62,21 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
          WHERE pr.id = ANY(rv.provision_ids)) AS source
      FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id JOIN rules r ON r.id = o.rule_id
      WHERE o.company_id = $1 AND o.site_id = ANY($2) ORDER BY o.site_id, o.rule_id, o.decided_at DESC`, [companyId, siteIds])).rows;
+  // Closure trail: what was closed in the period, by whom, and the document version it rested on.
+  const closedTasks = (await tx.query(`SELECT t.id, t.site_id, tt.title, t.completed_at, t.outcome, u.display_name AS by FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
+     LEFT JOIN users u ON u.id = t.completed_by WHERE t.company_id = $1 AND t.site_id = ANY($2) AND t.status = 'done' AND t.completed_at >= $3 AND t.completed_at < $4
+     ORDER BY t.completed_at DESC LIMIT 200`, [companyId, siteIds, q.from, q.to])).rows
+    .filter(t => can(p, 'task.read', { companyId, siteId: t.site_id, assigneeId: p.userId }).ok);
+  const basis = closedTasks.length ? (await tx.query(`SELECT r.task_id, r.document_id, d.title, r.version_number, r.file_sha256, v.review_status, v.reviewed_at FROM task_report_evidence r
+     JOIN documents d ON d.id = r.document_id JOIN document_versions v ON v.id = r.document_version_id WHERE r.task_id = ANY($1) AND r.completion_basis ORDER BY r.version_number`, [closedTasks.map(t => t.id)])).rows : [];
+  const closedCases = (await tx.query(`SELECT n.id, n.site_id, n.title, n.closed_at, u.display_name AS by,
+       (SELECT v.verification_mode FROM ncr_verifications v WHERE v.ncr_id = n.id ORDER BY v.verified_at DESC LIMIT 1) AS mode
+     FROM nonconformities n LEFT JOIN users u ON u.id = n.closed_by WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status = 'closed' AND n.closed_at >= $3 AND n.closed_at < $4
+     ORDER BY n.closed_at DESC LIMIT 200`, [companyId, siteIds, q.from, q.to])).rows.filter(n => can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id }).ok);
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'audit.report_generated', entityType: 'company', entityId: companyId,
-    payload: { siteIds, from: q.from, to: q.to, counts: { critical: critical.length, overdue: overdue.length, documents: docRows.length, awaiting: awaiting.length } } });
+    payload: { siteIds, from: q.from, to: q.to, counts: { critical: critical.length, overdue: overdue.length, documents: docRows.length, awaiting: awaiting.length, closedTasks: closedTasks.length, closedCases: closedCases.length } } });
   return {
     title: 'Denetim dosyası', company: company.name, sites: sites.map(s => s.name), period: { from: q.from, to: q.to }, generatedAt, generatedAtText: tr(generatedAt),
     requestedBy: { name: p.displayName ?? null, role }, example,
@@ -77,6 +88,11 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
       overdue: overdue.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), due: tr(t.due_at), assignee: t.assignee ?? 'atanmamış' })),
       documents: docRows,
       awaiting: awaiting.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), what: n.status === 'awaiting_verification' ? 'Kapanış doğrulaması' : `${n.declared} aksiyon beyanı` })),
+      closures: {
+        tasks: closedTasks.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), closed: tr(t.completed_at), by: t.by ?? '—', outcome: t.outcome ?? null,
+          basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi' })) })),
+        cases: closedCases.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama' })),
+      },
       sources: sources.map(s => ({ site: siteName(s.site_id), rule: `${s.code} v${s.version}`, title: s.obligation_title, kind: s.kind === 'legal_requirement' ? 'Mevzuat' : 'İyi uygulama',
         example: s.is_example, source: s.source ?? 'Kaynak hükmü bağlı değil', decision: s.decision })),
     },
@@ -130,6 +146,14 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     for (const n of r.sections.awaiting) p(`${n.title} · ${n.site} · ${n.what}`);
 
     h1(`5. Kaynak ve kural sürümleri (${r.sections.sources.length})`);
+    h1(`6. Kapanış izi: dönemde kapanan görevler ve kayıtlar (${r.sections.closures.tasks.length + r.sections.closures.cases.length})`);
+    if (!r.sections.closures.tasks.length && !r.sections.closures.cases.length) none();
+    for (const t of r.sections.closures.tasks) {
+      p(`${t.title} · ${t.site} · kapanış ${t.closed} · ${t.by}`, { bold: true });
+      for (const b of t.basis) p(`   Dayanak: ${b.title} · sürüm ${b.version} · ${b.review}${b.sha256 ? ` · özet ${b.sha256.slice(0, 12)}…` : ''}`, { color: '#555' });
+    }
+    for (const n of r.sections.closures.cases) p(`Kayıt kapandı: ${n.title} · ${n.site} · ${n.closed} · ${n.by} · ${n.verification}`);
+
     for (const s of r.sections.sources) {
       p(`${s.rule} · ${s.title}${s.example ? ' · ÖRNEK KURAL' : ''}`, { bold: true });
       p(`${s.site} · ${s.kind} · karar: ${s.decision} · kaynak: ${s.source}`, { color: '#555' });

@@ -1,0 +1,209 @@
+{
+  "adimlar": [
+    {
+      "ad": "İşletme ve şube kuruldu; sahip, müdür, personel ve uzman girişleri çalışıyor",
+      "tamam": true,
+      "ayrinti": "pkgkto"
+    },
+    {
+      "ad": "Yeni şube eklendi, işletmede görünür",
+      "tamam": true,
+      "ayrinti": "2 şube"
+    },
+    {
+      "ad": "Uygulanabilir kurallardan iki servis görevi üretilmiş",
+      "tamam": true,
+      "ayrinti": "Soğutucu servis raporu kaydı | Servis sonrası sıcaklık doğrulaması"
+    },
+    {
+      "ad": "Görev detayı: kural/neden, termin, gerekli kanıt ve eksik adımlar dönüyor",
+      "tamam": true,
+      "ayrinti": "{\"kural\":true,\"termin\":true,\"kanit\":true,\"eksik\":true}"
+    },
+    {
+      "ad": "Uzman, talebi bildirimden bulabiliyor (yönlendirme talebe gidiyor)",
+      "tamam": true,
+      "ayrinti": "{\"id\":\"94336e50-114d-49bb-a5d0-49cb24909ca8\",\"kind\":\"provider_new_request\",\"entity_type\":\"pro_request\",\"entity_id\":\"52d9010f-d096-44e6-ab60-"
+    },
+    {
+      "ad": "İşletme sahibi, teklife bildirimden adres girmeden ulaşıyor",
+      "tamam": true,
+      "ayrinti": "{\"id\":\"fa11663f-7d84-4894-90f6-f32a86c3e8b1\",\"kind\":\"quote_received\",\"entity_type\":\"service_request\",\"entity_id\":\"52d9010f-d096-44e6-ab60-b416993296ec\",\"title\":"
+    },
+    {
+      "ad": "Teklif kabul edildi, iş doğdu",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Randevu geçmişi: öneri, karşı öneri, kabul; eski öneri geçersiz",
+      "tamam": true,
+      "ayrinti": "superseded → confirmed"
+    },
+    {
+      "ad": "Rapor belge kasasında: doğru şube, hizmet talebi ve görevle",
+      "tamam": true,
+      "ayrinti": "{\"requestId\":\"52d9010f-d096-44e6-ab60-b416993296ec\",\"requestTitle\":\"Pilot soğutucu servisi pkgkto\",\"requestStatus\":\"awarded\",\"jobStatus\":\"report_submitted\",\"sit"
+    },
+    {
+      "ad": "İncelenmemiş rapor göreve seçilemiyor, sebep yazıyor",
+      "tamam": true,
+      "ayrinti": "Son sürüm (1) henüz incelenmedi; belge kasasında inceleme gerekir."
+    },
+    {
+      "ad": "Belge incelemesi (müdür) — teslim kabulünden ayrı durum",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Personel raporu görev kanıtı seçemiyor",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Raporu görev kanıtı olarak seçme (sürüm 1)",
+      "tamam": true,
+      "ayrinti": "{\"id\":\"d21bec28-56ef-4d6f-85e0-e4274bdc2dd6\",\"duplicate\":false,\"version\":1}"
+    },
+    {
+      "ad": "Rapor yalnız belge adımını karşılıyor; ölçüm adımı eksik olarak adıyla yazıyor",
+      "tamam": true,
+      "ayrinti": "[\"Ölçüm: sıcaklık (°C)\"]"
+    },
+    {
+      "ad": "Ölçüm yokken görev kapanmıyor (EVIDENCE_INCOMPLETE)",
+      "tamam": true,
+      "ayrinti": "POST /companies/624ae799-df5f-44a0-929c-b5ea27d6ad14/tasks/4e2e0063-28a5-449d-b7d6-f2cba09c9d90/complete -> 422 {\"error\":{\"code\":\"EVIDENCE_I"
+    },
+    {
+      "ad": "Revizyon açık görevde eski seçimi geçersiz kıldı (v1 stale, belge adımı yine eksik)",
+      "tamam": true,
+      "ayrinti": "[\"Ölçüm: sıcaklık (°C)\",\"Belge: 0/1 yüklendi ya da incelenmiş servis raporu seçildi\"]"
+    },
+    {
+      "ad": "Yeni sürüm incelendikten sonra seçildi (sürüm 2)",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Gerekli ölçüm girildi",
+      "tamam": true,
+      "ayrinti": "termometre: Dijital termometre"
+    },
+    {
+      "ad": "Görev kapandı; kapanışın dayandığı sürüm 2 geçmişte",
+      "tamam": true,
+      "ayrinti": "durum done"
+    },
+    {
+      "ad": "Kapanıştan sonraki revizyon kapanmış görevin dayandığı sürümü değiştirmiyor",
+      "tamam": true,
+      "ayrinti": "durum done"
+    },
+    {
+      "ad": "Başka kişi (müdür) yeni oturumda aynı durumu görüyor (devralma)",
+      "tamam": true,
+      "ayrinti": null
+    },
+    {
+      "ad": "Platform yöneticisi girişi ve yönetim ekranı verisi",
+      "tamam": true,
+      "ayrinti": "kurallar listelendi"
+    },
+    {
+      "ad": "Denetim dosyası: kapanan görev, dayandığı rapor sürümü (2, incelendi, özetli) ve kapanış izi",
+      "tamam": true,
+      "ayrinti": "[{\"documentId\":\"151f5ea5-67b5-4ea1-9a03-5b5bdb217829\",\"title\":\"Servis raporu · Pilot soğutucu servisi pkgkto\",\"version\":2,\"sha256\":\"f74801dbdf5d68e866e04daa9e3d0cf9c3752ccb4cb41290b2c1c5f5d8ce7593\",\"review\":\"İncelendi\"}]"
+    },
+    {
+      "ad": "Denetim dosyasında kural sürümü kaynakları ve örnek etiketi var",
+      "tamam": true,
+      "ayrinti": "12 kaynak"
+    },
+    {
+      "ad": "Denetim dosyası PDF",
+      "tamam": true,
+      "ayrinti": "28832 bayt"
+    },
+    {
+      "ad": "Tek yönetici yüksek riskli işini kendi doğrulayamıyor",
+      "tamam": true,
+      "ayrinti": "POST /companies/2e158de1-5b7c-4f8c-b96c-8556486cc863/nonconformities/06bc200f-de4b-4e2c-a366-c7cbcd827001/actions/74043a"
+    },
+    {
+      "ad": "Dış doğrulayıcı yalnız doğrulama kuyruğunu görüyor",
+      "tamam": true,
+      "ayrinti": "1 kayıt"
+    },
+    {
+      "ad": "Dış doğrulayıcı eylemi bağımsız olarak doğruladı",
+      "tamam": true,
+      "ayrinti": "doğrulandı"
+    },
+    {
+      "ad": "Doğrulama kaydı: bağımsız mod, doğrulayıcı kimliği görünür",
+      "tamam": true,
+      "ayrinti": "independent/dogrulayici.pkgktob"
+    }
+  ],
+  "gorevBaglami": {
+    "anahtarlar": [
+      "id",
+      "status",
+      "outcome",
+      "dueAt",
+      "periodKey",
+      "reviewFlag",
+      "title",
+      "instructions",
+      "severity",
+      "equipment",
+      "rule",
+      "legalBasis",
+      "lastCompletedAt",
+      "nextDueAt",
+      "services",
+      "hazardType",
+      "serviceReports",
+      "reportEvidence",
+      "obligationId",
+      "requirements",
+      "limits",
+      "emergencyInstruction",
+      "progress",
+      "measurements",
+      "evidence",
+      "nonconformity",
+      "completedBy",
+      "completedAt",
+      "statusReason",
+      "assignee",
+      "seriesResponsible",
+      "canAssign",
+      "relatedTraining",
+      "relatedDocuments"
+    ],
+    "kural": true,
+    "termin": true,
+    "kanit": true,
+    "eksik": true
+  },
+  "denetimAnahtar": [
+    "title",
+    "company",
+    "sites",
+    "period",
+    "generatedAt",
+    "generatedAtText",
+    "requestedBy",
+    "example",
+    "exampleNote",
+    "disclaimer",
+    "sections"
+  ],
+  "run": "pkgkto",
+  "base": "http://localhost:8091",
+  "tarih": "2026-11-16T17:39:43.425Z",
+  "isletmeA": "624ae799-df5f-44a0-929c-b5ea27d6ad14",
+  "isletmeB": "2e158de1-5b7c-4f8c-b96c-8556486cc863"
+}

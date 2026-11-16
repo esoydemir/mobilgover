@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, mkdtemp, readdir, readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { promisify } from 'node:util';
@@ -414,9 +414,11 @@ export async function restoreBackup(o: RestoreOptions): Promise<Report> {
   // 3. Files into place with one rename.
   if ((journal as Journal | null)?.phase === 'db_committed') {
     try { await rmdir(o.targetEvidenceDir); } catch { /* absent, or not empty (checked below) */ }
-    if ((await listFiles(o.targetEvidenceDir)).length) return { ok: false, checks: [{ name: 'hedef kanıt klasörü boş', ok: false, detail: 'veritabanı geri yüklendi ama kanıt klasörüne başka dosya konmuş; elle incele' }] };
+    // Files of this backup already copied by an interrupted earlier attempt (mount-point fallback below) are fine; anything else is not.
+    const ours = new Set(m.evidence.map(e => e.key));
+    if ((await listFiles(o.targetEvidenceDir)).some(f => !ours.has(f))) return { ok: false, checks: [{ name: 'hedef kanıt klasörü boş', ok: false, detail: 'veritabanı geri yüklendi ama kanıt klasörüne başka dosya konmuş; elle incele' }] };
     await mkdir(dirname(o.targetEvidenceDir), { recursive: true });
-    await rename(staging, o.targetEvidenceDir);
+    await moveDir(staging, o.targetEvidenceDir);
     await setPhase('files_in_place');
     crash('files_in_place');
   }
@@ -425,6 +427,18 @@ export async function restoreBackup(o: RestoreOptions): Promise<Report> {
   const after = await checkRestored({ ownerUrl: o.targetOwnerUrl, evidenceDir: o.targetEvidenceDir, manifest: m, strict: true });
   if (after.ok) await rm(journalPath, { force: true });
   return { ok: after.ok, checks: [...v.checks, ...after.checks] };
+}
+
+/**
+ * Puts the staged files in place. A single rename is atomic, but it fails when the evidence directory is a mount point
+ * (a Docker volume: EBUSY) or on another device (EXDEV); then the contents are copied and the staging copy removed.
+ * An interrupted copy is safe to repeat: the staging copy is only removed after the copy finished.
+ */
+async function moveDir(src: string, dst: string) {
+  try { await rename(src, dst); return; } catch (e) { if (!['EBUSY', 'EXDEV', 'EPERM', 'ENOTEMPTY'].includes((e as NodeJS.ErrnoException).code ?? '')) throw e; }
+  await mkdir(dst, { recursive: true });
+  await cp(src, dst, { recursive: true, force: true });
+  await rm(src, { recursive: true, force: true });
 }
 
 /** Which backups to keep: every backup of the last `hourly` hours, then the newest one per day for `daily` days. */

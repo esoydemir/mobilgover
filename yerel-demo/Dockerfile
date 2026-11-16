@@ -23,12 +23,21 @@ ENTRYPOINT ["/etc/goverhub/baslat.sh"]
 
 # ── API ──
 FROM node:22-bookworm-slim AS app
+# Yedekleme/geri yükleme araçları (npm run backup / restore) PostgreSQL 16 istemcisi ister (pg_dump, pg_restore, psql);
+# sunucuyla aynı ana sürüm olmalı. Bookworm'un kendi deposunda 15 var, bu yüzden PGDG deposundan 16 alınır.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \
+ && apt-get purge -y --auto-remove curl gnupg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/server
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --no-audit --no-fund --loglevel=error
 COPY server/ ./
 COPY yerel-demo/app/baslat.sh /usr/local/bin/goverhub-baslat
-RUN sed -i 's/\r$//' /usr/local/bin/goverhub-baslat && chmod +x /usr/local/bin/goverhub-baslat \
- && mkdir -p /var/lib/goverhub/kanit /var/lib/goverhub/ayar && chown -R node:node /var/lib/goverhub
+COPY yerel-demo/app/yedek.sh /usr/local/bin/goverhub-yedek
+RUN sed -i 's/\r$//' /usr/local/bin/goverhub-baslat /usr/local/bin/goverhub-yedek && chmod +x /usr/local/bin/goverhub-baslat /usr/local/bin/goverhub-yedek \
+ && mkdir -p /var/lib/goverhub/kanit /var/lib/goverhub/ayar /var/lib/goverhub/yedek && chown -R node:node /var/lib/goverhub
 USER node
 ENTRYPOINT ["/usr/local/bin/goverhub-baslat"]
