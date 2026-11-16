@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-15T03:11:52.860Z",
+  "at": "2026-11-16T17:53:41.996Z",
   "base": "http://localhost:8091",
   "sourced": {
     "outcome": "answered",
@@ -8,35 +8,56 @@
       "status": "used",
       "name": "qwen2.5-coder:7b"
     },
-    "answer": "Yüzeyler her vardiya sonunda dezenfekte edilir. Dezenfektan kaydı vardiya sorumlusu tarafından tutulur [1].",
+    "answer": "Yüzeyler her vardiya sonunda dezenfekte edilir ve dezenfektan kaydı vardiya sorumlusu tarafından tutulur [1].",
     "sources": [
       {
         "n": 1,
-        "title": "Temizlik planı 5715",
+        "title": "Temizlik planı 7108",
         "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
         "cited": true,
-        "route": "/documents/0afec7fd-7826-4e82-b0ad-04753726f9a2"
+        "route": "/documents/61929d4e-0052-4c6c-af77-289ad01e7148"
       },
       {
         "n": 2,
         "title": "Temizlik planı 5715",
-        "locator": "Belge · sürüm 1 · kayıt bilgileri",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
         "cited": false,
         "route": "/documents/0afec7fd-7826-4e82-b0ad-04753726f9a2"
       },
       {
         "n": 3,
-        "title": "Soğutucu servis raporu kaydı",
-        "locator": "Açık görev",
+        "title": "Ortam kontrolü 424187",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
         "cited": false,
-        "route": "/task/6f3ed99e-4787-451c-be96-1a000f90a521"
+        "route": "/documents/126c9bcf-a03e-4665-9412-7234365f66b3"
+      },
+      {
+        "n": 4,
+        "title": "Ortam kontrolü 534905",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": false,
+        "route": "/documents/8e9ef513-af6d-4def-800c-df8d80c567fd"
+      },
+      {
+        "n": 5,
+        "title": "Ortam kontrolü 555721",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": false,
+        "route": "/documents/40612858-6bc9-493e-9a7f-6b100bd069f8"
+      },
+      {
+        "n": 6,
+        "title": "Temizlik planı 45748",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": false,
+        "route": "/documents/356d3127-07b3-41f0-943e-22a5ea588f5d"
       }
     ],
     "notes": [
       "Yanıtı bir dil modeli yazdı; her cümlenin dayandığı kaynağı aç ve kontrol et.",
       "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez."
     ],
-    "ms": 2866
+    "ms": 5559
   },
   "insufficient": {
     "outcome": "insufficient",
@@ -50,7 +71,7 @@
     "notes": [
       "Yetersiz kaynak: model de kaynakları yetersiz buldu."
     ],
-    "ms": 784
+    "ms": 1635
   },
   "noSource": {
     "outcome": "insufficient",
@@ -64,7 +85,7 @@
     "notes": [
       "Yetersiz kaynak: yanıt üretilmedi."
     ],
-    "ms": 30
+    "ms": 43
   },
   "conflict": {
     "outcome": "conflict",
@@ -73,49 +94,49 @@
       "status": "used",
       "name": "qwen2.5-coder:7b"
     },
-    "answer": "Kaynaklar birbiriyle çelişiyor: [1] -18 °C, [2] -12 °C. Hangisinin geçerli olduğu kaynaklardan anlaşılmıyor.",
+    "answer": "Kaynaklar birbiriyle çelişiyor: [1, 2, 3] -18 °C, [4, 5, 6] -12 °C. Hangisinin geçerli olduğu kaynaklardan anlaşılmıyor.",
     "sources": [
       {
         "n": 1,
-        "title": "Gıda deposu talimatı A 5715",
+        "title": "Gıda deposu talimatı A 7108",
         "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
         "cited": true,
-        "route": "/documents/635e6a91-7520-4d0b-95bc-674d365b639c"
+        "route": "/documents/a999d56d-f076-4fb6-8b7e-e712ff2d9387"
       },
       {
         "n": 2,
+        "title": "Gıda deposu talimatı A 5715",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": true,
+        "route": "/documents/635e6a91-7520-4d0b-95bc-674d365b639c"
+      },
+      {
+        "n": 3,
+        "title": "Gıda deposu talimatı A 45748",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": true,
+        "route": "/documents/a266cf98-0784-45ae-85f7-52e311e5f649"
+      },
+      {
+        "n": 4,
+        "title": "Gıda deposu talimatı B 7108",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": true,
+        "route": "/documents/0cbbe034-f5cc-48f0-8950-846a08438368"
+      },
+      {
+        "n": 5,
         "title": "Gıda deposu talimatı B 5715",
         "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
         "cited": true,
         "route": "/documents/8ab12d6a-5931-42e8-bdd3-27e1161760b7"
       },
       {
-        "n": 3,
-        "title": "Gıda deposu talimatı A 5715",
-        "locator": "Belge · sürüm 1 · kayıt bilgileri",
-        "cited": false,
-        "route": "/documents/635e6a91-7520-4d0b-95bc-674d365b639c"
-      },
-      {
-        "n": 4,
-        "title": "Gıda deposu talimatı B 5715",
-        "locator": "Belge · sürüm 1 · kayıt bilgileri",
-        "cited": false,
-        "route": "/documents/8ab12d6a-5931-42e8-bdd3-27e1161760b7"
-      },
-      {
-        "n": 5,
-        "title": "Servisten sonra sıcaklığı ölç ve servis raporuyla birlikte kaydet",
-        "locator": "Kural EX-REPORT-MEAS · sürüm 1",
-        "cited": false,
-        "route": "/obligations"
-      },
-      {
         "n": 6,
-        "title": "Soğuk muhafaza ünitelerinin sıcaklığını kayıt altında tut",
-        "locator": "Kural EX-COLD-CHAIN · sürüm 1",
-        "cited": false,
-        "route": "/obligations"
+        "title": "Gıda deposu talimatı B 45748",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": true,
+        "route": "/documents/6a371348-6e95-4585-873c-d9210894ddce"
       }
     ],
     "notes": [
@@ -123,7 +144,7 @@
       "Yanıtı bir dil modeli yazdı; her cümlenin dayandığı kaynağı aç ve kontrol et.",
       "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez."
     ],
-    "ms": 3183
+    "ms": 7419
   },
   "fine": {
     "outcome": "fine_declined",
@@ -137,6 +158,6 @@
     "notes": [
       "Ceza tutarı kapsam dışı (pilot kararı)."
     ],
-    "ms": 14
+    "ms": 15
   }
 }

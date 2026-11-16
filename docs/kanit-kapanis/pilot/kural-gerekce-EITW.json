@@ -1,0 +1,50 @@
+{
+  "at": "2026-11-16T17:54:38.001Z",
+  "base": "http://localhost:8091",
+  "kural": "EX-PILOT-GEREKCE-EITW",
+  "surum": "59bd2407-b070-4f2b-9afb-60c9f6c8af41",
+  "kayitlar": [
+    {
+      "tur": "rule.published",
+      "gerekce": "Örnek ortamda yayın denemesi.",
+      "kisi": "Platform Yöneticisi (demo)",
+      "zaman": "2026-11-16T17:54:37.872Z"
+    },
+    {
+      "tur": "rule.approved",
+      "gerekce": "İnceleme tamam, alan uzmanı onayı var.",
+      "kisi": "Ürün sahibi / kural onaylayıcı (demo)",
+      "zaman": "2026-11-16T17:54:37.813Z"
+    },
+    {
+      "tur": "rule.area_reviewed",
+      "gerekce": "Kaynak metinle karşılaştırıldı.",
+      "kisi": "Alan uzmanı (demo)",
+      "zaman": "2026-11-16T17:54:37.685Z"
+    },
+    {
+      "tur": "rule.submitted",
+      "gerekce": null,
+      "kisi": "Kural Yazarı (demo)",
+      "zaman": "2026-11-16T17:54:37.669Z"
+    },
+    {
+      "tur": "rule.drafted",
+      "gerekce": null,
+      "kisi": "Kural Yazarı (demo)",
+      "zaman": "2026-11-16T17:54:37.642Z"
+    }
+  ],
+  "sonuclar": [
+    "TAMAM  Taslak açıldı — EX-PILOT-GEREKCE-EITW",
+    "TAMAM  Taslak incelemeye gönderildi",
+    "TAMAM  Boş/boşluk/eksik gerekçeyle onay reddedildi, kural durumu değişmedi",
+    "TAMAM  Yazar kendi kuralını gerekçeyle bile onaylayamıyor (rol ayrımı)",
+    "TAMAM  Gerekçeli onay başarılı",
+    "TAMAM  Gerekçesiz yayın reddedildi, kural onaylı kaldı",
+    "TAMAM  Gerekçeli yayın başarılı",
+    "TAMAM  Denetim kaydı: onay ve yayın ayrı kayıtlar, gerekçe + kural kodu/sürüm + kişi + zaman — Ürün sahibi / kural onaylayıcı (demo) / Platform Yöneticisi (demo)",
+    "TAMAM  Gerekçe zorunlu olmadan önceki kayıtlar okunabiliyor (\"gerekçe yok\") — 2dc85992-07a4-4a39-995c-7cfe844cde9d",
+    "TAMAM  Kural yayını sonrası mevcut görevler açılıyor, kural sürümü bağlı kalıyor — 71 görev"
+  ]
+}
