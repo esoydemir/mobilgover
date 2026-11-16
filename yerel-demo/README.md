@@ -234,7 +234,7 @@ Deneme bitince: `docker @DC down -v` yalnızca `goverhub-geri` ortamını siler.
 | PDF üretimi (`pdfkit` + DejaVu yazı tipi) | PDF denetim dosyası | İmaja gömülü | PDF indirilemez; ekran özetleri çalışır |
 | PostgreSQL 16 istemcisi (`pg_dump`, `pg_restore`, `psql`) | Yedek ve geri yükleme | `app` imajına gömülü | Yedek komutu hata verir; kayıtlar etkilenmez |
 
-Hangi parçanın eksik olduğunu sunucu söyler: `http://localhost:8080/api/system/modules` (OCR, PDF, model; her biri için eksik olan, kullanıcının neyi kaybettiği ve nasıl düzeltileceği). Model sağlıklı mı sorusu, modelin **yanıt kalitesinden** ayrıdır: bu uç yalnız modele ulaşılıp ulaşılamadığını söyler.
+Hangi parçanın eksik olduğunu sunucu söyler (giriş yapmış kullanıcıyla): `GET /api/system/modules` (OCR, PDF, model; her biri için eksik olan, kullanıcının neyi kaybettiği ve nasıl düzeltileceği). Model sağlıklı mı sorusu, modelin **yanıt kalitesinden** ayrıdır: bu uç yalnız modele ulaşılıp ulaşılamadığını söyler.
 
 **Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs`, `e2e/yerel-demo-yeni.cjs`, `e2e/yerel-demo-tek-yonetici.cjs`, `e2e/yerel-demo-egitim.cjs`, `e2e/yerel-demo-ag.cjs`, `e2e/yerel-demo-6-sogutucu.cjs` ve `e2e/yerel-demo-6-diger.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
 

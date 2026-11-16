@@ -91,4 +91,4 @@ Uyarı: Testler her çalışmada test veritabanlarının `public` şemasını si
 
 ### Windows + Docker yerel demo için yedek ve geri yükleme
 
-Demo kurulumunda bu komutlar kapsayıcı içinde `yerel-demo/*.cmd` dosyalarıyla çalışır; güncelleme öncesi yedek, geri yükleme tatbikatı, temiz kurulum / veri koruyan güncelleme farkı ve bağımlılıklar (yerel dil modeli, Türkçe OCR, PDF üretimi, PostgreSQL 16 istemcisi) `yerel-demo/README.md` §6'dadır. Eksik bileşenleri `GET /api/system/modules` söyler.
+Demo kurulumunda bu komutlar kapsayıcı içinde `yerel-demo/*.cmd` dosyalarıyla çalışır; güncelleme öncesi yedek, geri yükleme tatbikatı, temiz kurulum / veri koruyan güncelleme farkı ve bağımlılıklar (yerel dil modeli, Türkçe OCR, PDF üretimi, PostgreSQL 16 istemcisi) `yerel-demo/README.md` §6'dadır. Eksik bileşenleri (giriş yapmış kullanıcıya) `GET /api/system/modules` söyler.
