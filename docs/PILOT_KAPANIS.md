@@ -34,3 +34,28 @@
 - **Tasarım referansı:** `GoverHub Mobile Standalone.dc(2).html` **bu makinede yok.** Depodaki `project/GoverHub Mobile Standalone.dc.html` (151054 bayt) ve İndirilenler'deki üç prototip zip'inin (27.10, 08.11, 09.11) içindeki `…Standalone.dc.html` (149495 bayt) var. Hiçbirinde `(2)` adlı dosya yok; hangi sürümün "son tasarım" olduğunu bu dosyalardan doğrulayamadım. **Son tasarım karşılaştırması açık**; yalnızca işlevsel doğrulama yapıldı.
 - Chromium Pixel 7 / WebKit iPhone 14 / iPhone SE (320 px): 13 ekran, taşma/çökme yok, 44 px dokunma hedefi (0 küçük), çip örtüşmesi yok, alt çubuk içeriği kapatmıyor; ağ kesintisinde bekleyen kayıt görünür, ağ gelince kuyruk boşalıyor ve görev bir kez tamamlanıyor (`mobil-dogrulama.cjs` 27/27, PR #4 turu).
 - **Fiziksel iPhone:** erişimim yok → **"doğrulama bekliyor"** (kamera QR, kameradan yükleme, satır içi PDF, gerçek bağlantı kesintisi, çentik/ana çubuk güvenli alanı). Bu madde başka işi durdurmadı.
+
+## Aşama 5 — kurulum, veri koruma, geri alma (Docker, 8091 / 8095 / 8096)
+Ortamlar: **8091** (`goverhub-pilotfix`, çalışan demo, korunan veri), **8095** (`goverhub-temiz`, boş temiz kurulum, ayrı klasör `C:\dev\goverhub-temiz-kurulum`, ayrı birimler), **8096** (`goverhub-geri`, geri yükleme tatbikatı, ayrı birimler). Araçlar: `tools/pk-kurulum.cjs`, `tools/sayac.sh`, `tools/geri-dogrula.cjs` (kopyaları `docs/kanit-kapanis/pilot/araclar/`).
+
+| Deneme | Sonuç | Kanıt |
+|---|---|---|
+| **Temiz kurulum** (boş birimler, ayrı klasör) | Sağlık tamam; **24 migrasyon sırayla uygulandı**; `sahip@` demo girişi ve ana ekran açıldı; işletmesiz yeni kullanıcı kurulum ekranını gördü; ilk işletme veritabanında oluştu | `kanit-kapanis/pilot/kurulum/goverhub-temiz-kurulum.json` + iki ekran görüntüsü |
+| **Veri koruyan güncelleme** (8091, birleşen + kapanış sürümüyle yeniden kuruldu, birimler aynı) | İşletme 29, şube 41, görev 1976 (kapanan 20), belge 76, belge sürümü 70, randevu 22, uygunsuzluk 8, kanıt kaydı 99 (saklanan 85), denetim olayı 1143, kullanıcı 153, kural sürümü 7, migrasyon 24 — **güncellemeden önce ve sonra aynı**; 68 kanıt dosyası, dosya listesi özeti `5bd811f1c10a9d06` aynı | `sayac-oncesi.txt` / `sayac-sonrasi.txt` |
+| **Yedek** (8091) | Şifreli yedek alındı, tamamen çözülüp **doğrulandı** (döküm, 68 kanıt nesnesi, migrasyon listesi, tablo sayıları, **30 denetim zinciri / 1143 olay**), anahtar kontrolü tamam, anahtar yedeklerin bulunduğu birimde değil | `goverhub-yedek al / dogrula / anahtar` çıktıları |
+| **Geri yükleme tatbikatı** (boş ortam 8096) | **BAŞARILI.** Araç "SONUÇ: TAMAM" verdi (şifre çözme, migrasyon listesi, satır sayıları, denetim zincirleri, 68 kanıt dosyasının varlığı ve özeti, kayda bağlı olmayan dosya yok). Geri yüklenen ortamda sayılar kaynakla **birebir aynı** (29/41/1976/20/76/70/22/8/99/85/1143/153/7/24), dosya listesi özeti aynı (68 dosya). API'den **46 kanıt dosyası** hem kaynaktan hem geri yüklenenden indirildi: **46/46 özet kayıtla ve kaynakla aynı**; eksik dosya 0; örnek görevler (4) ve belgeler (5) geri yüklenen ortamda açıldı | `kanit-kapanis/pilot/geri-yukleme-dogrulama.json` |
+
+**Bulunan ve giderilen hata (geri yükleme):** ilk tatbikatta kanıt klasörü Docker birimi (bağlama noktası) olduğu için araç klasörü yeniden adlandırırken `EBUSY` ile düştü; **tatbikat başarısız sayıldı**. `backup.ts` artık bağlama noktası/cihazlar arası durumda içeriği kopyalıyor (`moveDir`), "bizim dosyalarımız" ön denetimi var; backup-restore testleri PostgreSQL 16 istemcisiyle konteynerde **29/29 geçti**. Tatbikat düzeltilmiş imajla boş ortamdan baştan tekrarlandı (yukarıdaki satır).
+
+**Bulunan ve giderilen eksik (yerel demo):** uygulama imajında `pg_dump` yoktu, yedek komutları çalışmazdı → imaja PostgreSQL 16 istemcisi eklendi; `yedek-al/listele/dogrula/anahtari-goster` ve `butunluk` `.cmd` dosyaları ve `ayri-ortam.yaml` (ayrı ortam şablonu) eklendi.
+
+**Eksik bileşen mesajı:** `GET /api/system/modules` OCR, PDF ve model için "ne eksik, kullanıcı neyi kaybeder, nasıl düzelir" döndürür (model için yalnız erişilebilirlik; yanıt kalitesi ayrı kayıt). `/ocr/status` artık sabit "hazır" yerine gerçek duruma bakar. Test: `server/test/modules.test.ts` 4/4.
+
+**Dokümantasyon:** `yerel-demo/README.md` §6 (temiz kurulum ↔ veri koruyan güncelleme ↔ geri yükleme tablosu, başlat/durdur/güncelle/sağlık/geri yükle adımları, ayrı ortam, bağımlılık tablosu), `KURULUM.md` işareti.
+
+**Sınırlar (dürüstçe):** geri yükleme tatbikatı **aynı makinede** ve aynı Docker ana bilgisayarında yapıldı; yedeklerin **ayrı konuma aktarılması** ve ayrı makinede izlenmesi (gözcü) barındırma kararını bekliyor (`docs/YEDEKLEME.md`). Kapsayıcı içinde yarıda kesilen geri yükleme, işlem günlüğü kapsayıcıda durduğu için ortamın silinip baştan kurulmasını gerektirir (README'de yazılı).
+
+## Aşama 6 — açık maddeler
+Ayrıntılı tablo (durum, kabul ölçütü, test ortamı, kanıt yolu, commit, dış bağımlılık): `docs/KALAN_KAPSAM_ILERLEME.md` "Pilot kapanışı — açık maddeler". Özet: fiziksel iPhone, son tasarım (`dc(2)`) karşılaştırması, ödeme sağlayıcısı (ertelendi), gerçek mevzuat doğrulaması, gerçek işletme verisi ve ücretli sürüm kararları, kaynak arama gömmeleri, 7B model sınırı, ayrı konuma yedek aktarımı.
+
+**Örnek (gerçek olmayan) içerik beyanı:** demo işletmeler, kullanıcılar, belgeler, fotoğraflar, ölçümler ve `EX-` ile başlayan kurallar **sentetik örnektir**; ekranlarda "DEMO · ÖRNEK VERİ" ve kuralda "örnek" etiketi görünür. Hiçbir kural doğrulanmış mevzuat olarak sunulmaz; ceza tutarı üretilmez.

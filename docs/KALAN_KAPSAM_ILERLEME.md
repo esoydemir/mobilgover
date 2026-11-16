@@ -165,3 +165,29 @@ Tasarım referansı `GoverHub Mobile Standalone.dc(2).html` bu oturumdan erişil
 - **Önceki akışlar yeniden çalıştırıldı (Tap değişikliğinden sonra):** kamerayla QR 7/7 (`qr-kamera.cjs`), dosyadan metin okuma (`am2check.cjs`, tümü TAMAM), mobil doğrulama + çevrimdışından dönüş 27/27 (`mobil-dogrulama.cjs`: 2 bekleyen işlem → ağ dönünce kuyruk 0, görev sunucuda tamamlandı; her üç cihazda).
 - **Kanıt:** `docs/kanit-kapanis/am4b/` (JSON sonuçlar, ekran görüntüleri, indirilen denetim PDF'leri, betik kopyaları).
 - **AÇIK (gizlenmedi):** fiziksel iPhone Safari'de kamera QR, kameradan yükleme, satır içi PDF görüntüleme, güvenli alan ölçümü ve çevrimdışı eşitleme — **"Fiziksel cihazda doğrulama bekliyor"**; bu madde başka işi durdurmadı. Tasarım referansı `…Standalone.dc(2).html` hâlâ erişilemiyor, görsel karşılaştırma yapılamadı.
+
+## Pilot kapanışı — açık maddeler (16.11.2026)
+Ayrıntılı kayıt: `docs/PILOT_KAPANIS.md`. Kanıtlar: `docs/kanit-kapanis/pilot/`. Test ortamı aksi belirtilmedikçe 8091 (Docker, sentetik veri). "Commit" sütunu kapanışın yapıldığı değişikliği gösterir; açık maddede kapanışı bekleyen iş yazılıdır.
+
+| # | Madde | Durum | Kabul ölçütü | Test ortamı / kanıt | Commit | Dış bağımlılık |
+|---|---|---|---|---|---|---|
+| 1 | Ana işletme senaryosu (işletme → kural → görev → servis → teklif → randevu → rapor → inceleme → kanıt → bağımsız doğrulama → kapanış → denetim dosyası) | **Kapandı** | Her rol ile 29 API adımı + 51 ekran denetimi geçer; revizyon eski seçimi geçersiz kılar; kapanan görev sürümünü korur | 8091; `senaryo-*.json`, `pk-ui.json` | `04ad39d` (denetim dosyasına kapanış izi), `75388b4` | — |
+| 2 | Kaynaklı asistan, gerçek model | **Kapandı (sentetik veriyle)** | Kaynaklı yanıt, yetersiz kaynak, çelişen kaynak, ceza tutarı reddi; model kapalıyken kaynak listesi | `ortam-*.json`, `am3check` | `75388b4` | Yerel Ollama |
+| 3 | 7B modelin yanlış "çelişki" bildirebilmesi | **Açık (bilinen sınır)** | Daha büyük model ya da gömme tabanlı kaynak seçimiyle aynı içerikli belgelerde yanlış çelişki çıkmaz | `PILOT_KAPANIS.md` Aşama 3 notu | — | Daha güçlü yerel model |
+| 4 | Kural gerekçesi akışı | **Kapandı** | Gerekçesiz onay/yayın 422; ayrı denetim kayıtları; eski sürüm görevleri açık | `kural-gerekce-*.json`; `platform-admin.test.ts` | PR #4 (`b967168`) | — |
+| 5 | Kamerayla QR, belgeden okuma | **Kapandı (öykünme / sentetik)** | QR 7/7; PDF, tarama, fotoğraf, okunamayan örnek | `qr-kamera`, `am2check` | PR #4 | — |
+| 6 | **Fiziksel iPhone** (kamera QR, kameradan yükleme, satır içi PDF, gerçek bağlantı kesintisi, çentik güvenli alanı) | **Doğrulama bekliyor** | Aynı akışlar gerçek iPhone Safari'de geçer | Erişim yok | — | Fiziksel cihaz |
+| 7 | **Son tasarım karşılaştırması** (`GoverHub Mobile Standalone.dc(2).html`) | **Açık** | Dosya bu makinede yok; sağlandığında ekran ekran karşılaştırılır | Depodaki `project/…Standalone.dc.html` ve İndirilenler'deki üç zip'in içindeki sürümler görüldü, `(2)` yok | — | Dosyanın sağlanması |
+| 8 | Chromium + WebKit normal ve 320 px, 44 px hedefler, çevrimdışı kuyruk | **Kapandı (öykünme)** | 13 ekran taşmasız; 0 küçük hedef; kuyruk bir kez boşalır | `mobil-dogrulama.cjs` 27/27, `pk-ui.json` 51/51 | PR #4 | — |
+| 9 | Temiz kurulum (ayrı klasör, ayrı birimler) | **Kapandı** | 24 migrasyon, demo giriş, ilk işletme | 8095; `kurulum/goverhub-temiz-kurulum.json` | `b7d9c38` | Docker Desktop |
+| 10 | Veri koruyan güncelleme | **Kapandı** | Kayıt sayıları ve 68 dosya özeti aynı | 8091; `sayac-oncesi/sonrasi.txt` | kapanış PR'ı | — |
+| 11 | Geri yükleme tatbikatı | **Kapandı** | Boş ortamda "SONUÇ: TAMAM"; sayılar aynı; 46/46 dosya özeti aynı | 8096; `geri-yukleme-dogrulama.json` | `adaf984` | — |
+| 12 | Yedeğin **ayrı konuma/makineye** aktarımı ve gözcü | **Açık** | Yedek ayrı konuma yazılır, orada doğrulanır; gözcü yaşı izler | `docs/YEDEKLEME.md` | — | Barındırma kararı |
+| 13 | Eksik modül bildirimi (`/api/system/modules`) | **Kapandı** | OCR/PDF/model için eksik olan ve kullanıcı etkisi yazılır | `modules.test.ts` 4/4 | kapanış PR'ı | — |
+| 14 | **Ödeme sağlayıcısı (AM-5)** | **Ertelendi (karar)** | Sağlayıcı seçimi ayrı karar; yok sayılmadı | — | — | Sağlayıcı kararı |
+| 15 | **Gerçek mevzuat doğrulaması** | **Açık (ayrı karar)** | Kurallar uzman hukuk incelemesinden geçip örnek etiketi kalkar | Kurallar "örnek" etiketli | — | Hukuk/alan uzmanı |
+| 16 | **Gerçek işletme verisi ile yayın** | **Açık (ayrı karar)** | Aydınlatma, saklama matrisi, barındırma ve yedek konumu kararları | — | — | İşletme + hukuk |
+| 17 | **Ücretli sürüm** | **Açık (ayrı karar)** | Ödeme (14) ve fiyatlandırma kararı | — | — | Ticari karar |
+| 18 | Kaynak arama (sözcük eşleşmesi, gömme yok) | **Açık** | Gömme tabanlı arama ve değerlendirme kümesi | — | — | Gömme modeli |
+
+**Örnek içerik beyanı:** demo işletmeler, kullanıcılar, belgeler, ölçümler ve `EX-` kuralları sentetiktir; hiçbiri doğrulanmış mevzuat ya da gerçek veri değildir. Ceza tutarı üretilmez.

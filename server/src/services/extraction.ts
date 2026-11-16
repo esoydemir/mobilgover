@@ -9,6 +9,7 @@ import { AppError } from '../domain/errors';
 import { DOC_TYPES, canReadDoc } from './documents';
 import { readContent } from './evidence';
 import { FileReadError, LOW_WORD_CONFIDENCE, ocrEngine, readFileText, type FileReading } from './filetext';
+import { ocrModule } from './modules';
 
 /*
  * Reading fields from a document's text (Smart Vault).
@@ -20,7 +21,7 @@ import { FileReadError, LOW_WORD_CONFIDENCE, ocrEngine, readFileText, type FileR
 
 export const ocrStatus = () => ({
   engine: ocrEngine.name as string | null,
-  available: true,
+  available: ocrModule().available,
   note: 'Yüklenen PDF ya da fotoğraftan metin bu sunucuda okunur (dışarı gönderilmez). Metin katmanlı PDF doğrudan okunur; tarama ve fotoğraf OCR ile okunur ve hata yapabilir. Sistem yalnızca öneri çıkarır, kayda sen onaylarsın.',
 });
 

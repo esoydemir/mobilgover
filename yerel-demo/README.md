@@ -170,9 +170,19 @@ Telefon bilgisayardaki `localhost` adresine ulaşamaz. Fotoğraf eklemek için d
 
 Telefonda denenecekler: `docs/TEST_ORTAMI.md` §4. Oradaki adres yerine tünel bağlantısını kullan.
 
-## 6. Yeni sürüme güncelleme (kayıtlar silinmez)
+## 6. Temiz kurulum mu, güncelleme mi?
 
-1. `durdur.cmd` dosyasına çift tıkla.
+| Durum | Ne yapılır | Kayıtlara ne olur |
+|---|---|---|
+| **Temiz kurulum** (bu bilgisayarda hiç GoverHub yok, ya da ayrı bir deneme ortamı istiyorsun) | Projeyi **yeni bir klasöre** çıkar, `baslat.cmd`. Ayrı ortam için §6.3 | Boş başlar: veritabanı değişiklikleri (migration) sırayla uygulanır, demo girişleri ve ilk işletme yüklenir |
+| **Veri koruyan güncelleme** (çalışan demo var, yeni sürüm gelecek) | Önce `yedek-al.cmd`, sonra `durdur.cmd`, yeni klasöre çıkar, `baslat.cmd` (§6.1) | İşletme, şube, görev, belge sürümleri, randevu geçmişi ve denetim kayıtları aynen kalır |
+| **Geri yükleme** | §6.2 | Yedekteki hâle döner; **yalnızca boş bir ortama** yüklenir |
+
+**Güncellemeden önce her seferinde `yedek-al.cmd` çalıştır** ve `yedek-anahtari-goster.cmd` ile aldığın anahtarı yedeklerin bulunduğu yerden **ayrı** bir yerde sakla. Anahtarsız yedek açılamaz.
+
+### 6.1 Yeni sürüme güncelleme (kayıtlar silinmez)
+
+1. `yedek-al.cmd` çalıştır, sonra `yedek-dogrula.cmd` ile yedeğin açıldığını gör. Sonra `durdur.cmd` dosyasına çift tıkla.
 2. GitHub'dan yeni ZIP'i indir (§2) ve **yeni bir klasöre** çıkar (ör. `C:\GoverHub-yeni`). Eski klasörü silmen gerekmez.
 3. Yeni klasördeki `yerel-demo\baslat.cmd` dosyasına çift tıkla.
 
@@ -186,6 +196,45 @@ Güncellemeden sonra kayıtların yerinde olduğunu `durum.cmd` ve uygulamadaki 
 6. aşama notu: güncellemede 012–016 numaralı veritabanı değişiklikleri eklenir. Eski kayıtlar olduğu gibi açılır; bu, 5B sürümüyle yazılmış veriyle ayrı birimlerde denendi (`e2e/yukseltme-6.cjs`: uygunsuzluk, fotoğraf, belge dosyası, ağ gönderisi, kayıt sayıları ve denetim geçmişi aynı kaldı).
 
 3. teslim notu: güncellemeden önce yeni uygunsuzluk akışında "tamamlandı" denmiş aksiyonlar artık **"yapıldı" beyanı · doğrulama bekliyor** olarak görünür; bir yönetici doğrulayana kadar sonuç sayılmaz. Kayıt silinmez.
+
+### 6.2 Yedekten geri yükleme (önce ayrı bir deneme ortamında)
+
+Yedek komutları: `yedek-al.cmd` (şifreli: kayıtlar + dosyalar), `yedek-listele.cmd`, `yedek-dogrula.cmd` (en yeni yedeği baştan sona çözüp sınar), `yedek-anahtari-goster.cmd`, `butunluk.cmd` (denetim zinciri ve dosya özetleri).
+
+Geri yükleme **yalnızca boş bir ortama** yapılır; dolu bir veritabanının ya da kanıt klasörünün üstüne yazmayı araç reddeder. Bu yüzden geri yüklemeyi çalışan demoya değil, ayrı bir ortama yap. Aşağıdaki adımlar `yerel-demo` klasöründe PowerShell'de; çalışan demonun proje adı `goverhub-demo`, deneme ortamınki `goverhub-geri` olsun (8096 portu, 172.30.72.0/24 ağı):
+
+```powershell
+$env:AYRI_PORT = "8096"; $env:AYRI_ALTAG = "172.30.72"
+$DC = @("compose","-p","goverhub-geri","-f","compose.yaml","-f","ayri-ortam.yaml")
+docker @DC build app proxy                     # imajlar (ilk seferde birkaç dakika)
+docker @DC up -d --no-deps db                  # boş veritabanı (uygulama henüz açılmaz)
+# yedekleri ve anahtarları çalışan demodan kopyala (anahtar yedeklerle AYNI birimde olmamalı; kopyalama yalnız deneme içindir)
+docker run --rm -v goverhub-demo_yedek:/k:ro -v goverhub-geri_yedek:/h alpine sh -c "cp -a /k/. /h/ && chown -R 1000:1000 /h"
+docker run --rm -v goverhub-demo_ayar:/k:ro -v goverhub-geri_ayar:/h alpine sh -c "cp /k/yedek.key /h/ && cp /k/mfa.key /h/ && chown 1000:1000 /h/* && chmod 600 /h/*.key"
+docker @DC run --rm --no-deps --entrypoint goverhub-yedek app geri-yukle   # son yedeği yükler ve sınar
+docker @DC up -d --no-deps app proxy                                       # http://localhost:8096
+```
+
+Başarı ölçütü: komut **"SONUÇ: TAMAM"** yazar (şifre çözme, migration listesi, tablo satır sayıları, denetim zincirleri, **kayıtlı her kanıt dosyasının varlığı ve özeti**). **Dosyalar eksikse ya da özetleri tutmuyorsa tatbikat başarılı sayılmaz**; araç bu durumda hata verir. Sonra 8096'da bir görevi, bir belge sürümünü ve bir kanıt fotoğrafını açıp çalışan demoyla karşılaştır.
+
+Yarıda kesilen geri yükleme: aracın işlem günlüğü kapsayıcının içinde durur; kesilirse ortamı silip (`docker @DC down -v`) baştan boş kur ve yeniden yükle. `-p goverhub-geri` yerine çalışan demonun proje adını yazarsan onu silersin; komutu çalıştırmadan önce proje adını kontrol et.
+
+Deneme bitince: `docker @DC down -v` yalnızca `goverhub-geri` ortamını siler.
+
+### 6.3 Ayrı, boş ortam (temiz kurulum denemesi)
+
+Çalışan demoya dokunmadan sıfırdan kurulum denemek için yukarıdaki `ayri-ortam.yaml` ile aynı yöntem: `docker @DC up -d --build` (yukarıdaki §6.2'nin ilk iki komutundaki `$env:` ve `$DC` tanımlarıyla). Farklı proje adı ayrı birimler demektir; çalışan demonun kayıtlarına dokunulmaz. Port ve ağ aralığı her ortamda farklı olmalı.
+
+### 6.4 Bağımlılıklar ve eksik olursa ne olur?
+
+| Bileşen | Ne için | Nereden gelir | Eksikse kullanıcı ne görür |
+|---|---|---|---|
+| Yerel dil modeli (ör. Ollama + `qwen2.5-coder:7b`) | Kaynaklı asistanın cümle kurması | **Ayrıca kurulur**; `LLM_BASE_URL`, `LLM_MODEL` (`compose.yaml` ortam değişkenleri) | Asistan çökmez; yalnız kaynakları listeler ve "Dil modeline ulaşılamadı" der |
+| Türkçe OCR (Tesseract) | Taranmış belge ve fotoğraftan alan önerisi | İmaja gömülü (`tesseract.js` + Türkçe veri) | Okunamayan dosyada "yeniden dene / elle gir"; metin katmanlı PDF yine okunur |
+| PDF üretimi (`pdfkit` + DejaVu yazı tipi) | PDF denetim dosyası | İmaja gömülü | PDF indirilemez; ekran özetleri çalışır |
+| PostgreSQL 16 istemcisi (`pg_dump`, `pg_restore`, `psql`) | Yedek ve geri yükleme | `app` imajına gömülü | Yedek komutu hata verir; kayıtlar etkilenmez |
+
+Hangi parçanın eksik olduğunu sunucu söyler: `http://localhost:8080/api/system/modules` (OCR, PDF, model; her biri için eksik olan, kullanıcının neyi kaybettiği ve nasıl düzeltileceği). Model sağlıklı mı sorusu, modelin **yanıt kalitesinden** ayrıdır: bu uç yalnız modele ulaşılıp ulaşılamadığını söyler.
 
 **Otomatik tarayıcı testleri (isteğe bağlı, geliştirici için):** `e2e/yerel-demo-akis.cjs`, `e2e/yerel-demo-yeni.cjs`, `e2e/yerel-demo-tek-yonetici.cjs`, `e2e/yerel-demo-egitim.cjs`, `e2e/yerel-demo-ag.cjs`, `e2e/yerel-demo-6-sogutucu.cjs` ve `e2e/yerel-demo-6-diger.cjs` her çalıştırmada kendi demo işletmesini ve `<rol>.<çalıştırma>@demo.goverhub.test` adreslerini oluşturur; mevcut demo işletmesine yazmaz. Bu test işletmeleri de demo olarak işaretlidir; sıfırlama onları da siler.
 

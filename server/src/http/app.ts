@@ -16,6 +16,7 @@ import * as depth from '../services/market-depth';
 import * as qr from '../services/qr';
 import * as extraction from '../services/extraction';
 import type { LlmConfig } from '../services/llm';
+import { moduleStatus } from '../services/modules';
 import { ask as askAssistant } from '../services/assistant';
 import * as padmin from '../services/platform-admin';
 import { institutionView } from '../services/institution';
@@ -952,6 +953,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
 
   // ── Reading fields from document text: proposals a person reviews and confirms ──
   app.get('/ocr/status', async () => extraction.ocrStatus());
+  app.get('/system/modules', async () => moduleStatus(config.llm ?? null));
   app.get('/companies/:companyId/documents/:id/extractions', async req => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
