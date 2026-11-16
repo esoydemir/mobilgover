@@ -15,6 +15,7 @@ import { bulkAssignApply, bulkAssignPreview } from '../services/bulk-assign';
 import * as depth from '../services/market-depth';
 import * as qr from '../services/qr';
 import * as extraction from '../services/extraction';
+import type { LlmConfig } from '../services/llm';
 import { ask as askAssistant } from '../services/assistant';
 import * as padmin from '../services/platform-admin';
 import { institutionView } from '../services/institution';
@@ -54,6 +55,8 @@ const companyParams = z.object({ companyId: uuid });
 export type AppConfig = Pick<Config, 'demoMode' | 'allowExampleRules' | 'maxUploadBytes' | 'mfaEncryptionKey' | 'mfaRequiredForPlatform'> & { corsOrigins?: string[]; mailProductionReady?: boolean;
   /** Addresses of the reverse proxy whose X-Forwarded-For is trusted (e.g. 127.0.0.1). Without it, every client behind the proxy shares one rate limit. */
   trustProxy?: string[];
+  /** Optional language model for the assistant (llm.ts); without it the assistant answers from the sources alone. */
+  llm?: LlmConfig | null;
   /** Separate test environment only (DEMO_MODE=true): sign-in and invitations are limited to this
    *  address domain (e.g. demo.goverhub.test), so no real person's address is entered there. */
   demoLoginDomain?: string };
@@ -748,9 +751,9 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return institutionView(q);
   });
   app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
-  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason ?? null)); return { ok: true }; });
+  app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason)); return { ok: true }; });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
-  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason ?? null })); });
+  app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason })); });
 
   // ── Platform administration: overview, audit trail, platform roles ──
   app.get('/admin/overview', async req => { platformGate(req); return db.system(tx => padmin.overview(tx, req.principal)); });
@@ -960,6 +963,13 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ text: z.string().max(20000), source: z.enum(['device_text', 'typed_text']).default('typed_text') }).parse(req.body);
     return mutate(req, reply, companyId, tx => extraction.createExtraction(tx, req.principal, companyId, id, versionId, b), 201);
   });
+  // Reads the version's stored file (PDF text layer, scan or photo). The reading runs outside the transaction; the result is a pending proposal.
+  app.post('/companies/:companyId/documents/:id/versions/:versionId/extract-file', async (req, reply) => {
+    const companyId = company(req);
+    const { id, versionId } = z.object({ id: uuid, versionId: uuid }).parse(req.params);
+    const out = await extraction.extractFromFile(db, store, req.principal, companyId, id, versionId);
+    return reply.code(out.reused ? 200 : 201).send(out);
+  });
   app.post('/companies/:companyId/extractions/:id/decision', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
@@ -973,7 +983,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/assistant/ask', async req => {
     const companyId = company(req);
     const b = z.object({ question: z.string().max(600), siteId: uuid.nullable().optional() }).parse(req.body);
-    return db.tenant(companyId, tx => askAssistant(tx, req.principal, companyId, b));
+    return askAssistant(db, config.llm ?? null, req.principal, companyId, b);
   });
   app.post('/companies/:companyId/service-requests/preview', async req => {
     const companyId = company(req);

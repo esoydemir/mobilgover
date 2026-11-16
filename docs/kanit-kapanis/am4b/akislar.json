@@ -1,0 +1,28 @@
+{
+  "chromium-Pixel7": {},
+  "webkit-iPhone14": {},
+  "tarih": "2026-11-15T10:28:48.070Z",
+  "not": "Öykünme: gerçek telefon değildir. Dosya seçici Playwright filechooser ile karşılandı.",
+  "sonuclar": [
+    "TAMAM  chromium-Pixel7: PDF ekrandan yüklendi, sunucuda saklandı — sürüm 1, application/pdf, stored",
+    "TAMAM  chromium-Pixel7: PDF \"Aç\" dosyayı sağlam teslim etti (başsızda indirme olarak; satır içi görüntüleme fiziksel Safari'de) — 12188 bayt",
+    "TAMAM  chromium-Pixel7: PDF indirildi, bayt bayt aynı — Akış PDF chromium-Pixel7 a2r8 - surum 1.pdf · 12188 bayt",
+    "TAMAM  chromium-Pixel7: fotoğraf ekrandan yüklendi, sunucuda saklandı — sürüm 1, image/jpeg, stored",
+    "TAMAM  chromium-Pixel7: fotoğraf \"Aç\" yeni sekmede açıldı — blob:http://localhost:8091/ccc",
+    "TAMAM  chromium-Pixel7: fotoğraf indirildi, bayt bayt aynı — Akış fotoğraf chromium-Pixel7 a2r8 - surum 1.jpg · 350764 bayt",
+    "TAMAM  chromium-Pixel7: vakaya kanıt fotoğrafı ekrandan eklendi — 2a2dc275-9f4f-4d6b-b322-3cb09f25c2f2",
+    "TAMAM  chromium-Pixel7: kanıt fotoğrafı ekranda açıldı ve çözüldü — {\"w\":1240,\"h\":1000}",
+    "TAMAM  chromium-Pixel7: denetim dosyası PDF olarak indirildi — denetim-dosyasi-2026-11-15.pdf · 31160 bayt",
+    "TAMAM  chromium-Pixel7: sayfa hatası (JS) yok",
+    "TAMAM  webkit-iPhone14: PDF ekrandan yüklendi, sunucuda saklandı — sürüm 1, application/pdf, stored",
+    "TAMAM  webkit-iPhone14: PDF \"Aç\" dosyayı sağlam teslim etti (başsızda indirme olarak; satır içi görüntüleme fiziksel Safari'de) — 12188 bayt",
+    "TAMAM  webkit-iPhone14: PDF indirildi, bayt bayt aynı — Akış PDF webkit-iPhone14 a2r8 - surum 1.pdf · 12188 bayt",
+    "TAMAM  webkit-iPhone14: fotoğraf ekrandan yüklendi, sunucuda saklandı — sürüm 1, image/jpeg, stored",
+    "TAMAM  webkit-iPhone14: fotoğraf \"Aç\" yeni sekmede açıldı — blob:http://localhost:8091/3b6",
+    "TAMAM  webkit-iPhone14: fotoğraf indirildi, bayt bayt aynı — Akış fotoğraf webkit-iPhone14 a2r8 - surum 1.jpg · 350764 bayt",
+    "TAMAM  webkit-iPhone14: vakaya kanıt fotoğrafı ekrandan eklendi — 29ed28cb-31df-423e-a14f-b3aecd595041",
+    "TAMAM  webkit-iPhone14: kanıt fotoğrafı ekranda açıldı ve çözüldü — {\"w\":1240,\"h\":1000}",
+    "TAMAM  webkit-iPhone14: denetim dosyası PDF olarak indirildi — denetim-dosyasi-2026-11-15.pdf · 31870 bayt",
+    "TAMAM  webkit-iPhone14: sayfa hatası (JS) yok"
+  ]
+}

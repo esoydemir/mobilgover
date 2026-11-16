@@ -1,13 +1,17 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { C, tint, type } from '../theme';
 import { GhostButton } from './ui';
 
 export function Loading({ label = 'Yükleniyor…' }: { label?: string }) {
+  // A wait that goes on says why: usually the connection. The screen keeps retrying by itself when the connection returns.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setSlow(true), 8000); return () => clearTimeout(t); }, []);
   return (
     <View style={{ paddingVertical: 40, alignItems: 'center', gap: 10 }}>
       <ActivityIndicator color={C.lime} />
       <Text style={type(12.5, 500, { color: C.t3 })}>{label}</Text>
+      {slow ? <Text testID="loading-slow" style={[type(12, 400, { color: C.warn, lh: 1.45 }), { textAlign: 'center', paddingHorizontal: 24 }]}>Yükleme uzun sürüyor. Bağlantı yok ya da zayıf olabilir; bağlantı gelince kendiliğinden yeniden denenecek.</Text> : null}
     </View>
   );
 }

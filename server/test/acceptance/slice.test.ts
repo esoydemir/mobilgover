@@ -278,15 +278,15 @@ describe('history stays intact', () => {
     await author.post(`/admin/rule-versions/${v2.body.id}/submit`);
     expect((await author.post(`/admin/rule-versions/${v2.body.id}/approve`)).status).toBe(403); // author cannot approve own rule
     // Food-safety content needs the area specialist before the product owner can approve.
-    const early = await reviewer.post(`/admin/rule-versions/${v2.body.id}/approve`);
+    const early = await reviewer.post(`/admin/rule-versions/${v2.body.id}/approve`, { reason: 'Test: erken onay denemesi' });
     expect(early.body.error.code).toBe('AREA_REVIEW_MISSING');
     expect((await reviewer.post(`/admin/rule-versions/${v2.body.id}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Kendi alanım değil' })).status).toBe(403);
     const specialist = client(env, platform.specialist.token);
     expect((await specialist.post(`/admin/rule-versions/${v2.body.id}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Limit notu incelendi.' })).status).toBe(200);
-    expect((await reviewer.post(`/admin/rule-versions/${v2.body.id}/approve`)).status).toBe(200);
+    expect((await reviewer.post(`/admin/rule-versions/${v2.body.id}/approve`, { reason: 'Test: onay gerekçesi' })).status).toBe(200);
     const impact = (await reviewer.get(`/admin/rule-versions/${v2.body.id}/impact`)).body;
     expect(impact.ruleCode).toBe('EX-COLD-CHAIN');
-    expect((await admin.post(`/admin/rule-versions/${v2.body.id}/publish`)).status).toBe(200);
+    expect((await admin.post(`/admin/rule-versions/${v2.body.id}/publish`, { reason: 'Test: yayın gerekçesi' })).status).toBe(200);
 
     const o = (await owner().get(`${C()}/obligations`)).body.find((x: any) => x.rule === 'EX-COLD-CHAIN');
     expect(o).toMatchObject({ version: 2, decision: 'applies' });

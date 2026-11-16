@@ -46,6 +46,10 @@ services:
       MAIL_PRODUCTION_READY: "false"
       MFA_REQUIRED_FOR_PLATFORM: "false"
       TZ: Europe/Istanbul
+      # Asistanın isteğe bağlı dil modeli (OpenAI uyumlu uç nokta). Boşsa asistan yalnız kaynaklardan yanıt verir.
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-60000}
     volumes:
       - kanit:/var/lib/goverhub/kanit
       - ayar:/var/lib/goverhub/ayar

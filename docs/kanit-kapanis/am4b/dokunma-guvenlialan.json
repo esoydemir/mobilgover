@@ -1,0 +1,104 @@
+{
+  "Pixel 7": {
+    "motor": "chromium",
+    "denetlenenKontrol": 172,
+    "kucuk44": {},
+    "tasmaEkrani": [],
+    "altCubuk": {
+      "bottomGap": 26,
+      "left": 16,
+      "right": 16,
+      "tabs": [
+        [
+          52,
+          52
+        ],
+        [
+          52,
+          52
+        ],
+        [
+          60,
+          60
+        ],
+        [
+          52,
+          52
+        ],
+        [
+          52,
+          52
+        ]
+      ]
+    }
+  },
+  "iPhone 14": {
+    "motor": "webkit",
+    "denetlenenKontrol": 161,
+    "kucuk44": {},
+    "tasmaEkrani": [],
+    "altCubuk": {
+      "bottomGap": 26,
+      "left": 16,
+      "right": 16,
+      "tabs": [
+        [
+          52,
+          52
+        ],
+        [
+          52,
+          52
+        ],
+        [
+          60,
+          60
+        ],
+        [
+          52,
+          52
+        ],
+        [
+          52,
+          52
+        ]
+      ]
+    }
+  },
+  "iPhone SE": {
+    "motor": "webkit",
+    "denetlenenKontrol": 150,
+    "kucuk44": {},
+    "tasmaEkrani": [],
+    "altCubuk": {
+      "bottomGap": 26,
+      "left": 16,
+      "right": 16,
+      "tabs": [
+        [
+          52,
+          52
+        ],
+        [
+          52,
+          52
+        ],
+        [
+          60,
+          60
+        ],
+        [
+          52,
+          52
+        ],
+        [
+          52,
+          52
+        ]
+      ]
+    }
+  },
+  "viewportFitCover": true,
+  "tarih": "2026-11-15T10:24:23.395Z",
+  "not": "Öykünme: çentik/ana çubuk değeri yalnız fiziksel cihazda ölçülür."
+}

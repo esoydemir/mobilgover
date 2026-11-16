@@ -1,0 +1,142 @@
+{
+  "at": "2026-11-15T03:11:52.860Z",
+  "base": "http://localhost:8091",
+  "sourced": {
+    "outcome": "answered",
+    "mode": "model",
+    "model": {
+      "status": "used",
+      "name": "qwen2.5-coder:7b"
+    },
+    "answer": "Yüzeyler her vardiya sonunda dezenfekte edilir. Dezenfektan kaydı vardiya sorumlusu tarafından tutulur [1].",
+    "sources": [
+      {
+        "n": 1,
+        "title": "Temizlik planı 5715",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": true,
+        "route": "/documents/0afec7fd-7826-4e82-b0ad-04753726f9a2"
+      },
+      {
+        "n": 2,
+        "title": "Temizlik planı 5715",
+        "locator": "Belge · sürüm 1 · kayıt bilgileri",
+        "cited": false,
+        "route": "/documents/0afec7fd-7826-4e82-b0ad-04753726f9a2"
+      },
+      {
+        "n": 3,
+        "title": "Soğutucu servis raporu kaydı",
+        "locator": "Açık görev",
+        "cited": false,
+        "route": "/task/6f3ed99e-4787-451c-be96-1a000f90a521"
+      }
+    ],
+    "notes": [
+      "Yanıtı bir dil modeli yazdı; her cümlenin dayandığı kaynağı aç ve kontrol et.",
+      "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez."
+    ],
+    "ms": 2866
+  },
+  "insufficient": {
+    "outcome": "insufficient",
+    "mode": "model",
+    "model": {
+      "status": "used",
+      "name": "qwen2.5-coder:7b"
+    },
+    "answer": "\nBu soruyu eldeki kaynaklar yeterince karşılamıyor; bu yüzden kesin bir şey söylemiyorum.",
+    "sources": [],
+    "notes": [
+      "Yetersiz kaynak: model de kaynakları yetersiz buldu."
+    ],
+    "ms": 784
+  },
+  "noSource": {
+    "outcome": "insufficient",
+    "mode": "sources_only",
+    "model": {
+      "status": "skipped",
+      "name": null
+    },
+    "answer": "Bu soruyu işletmenin belgelerinde, açık görevlerinde ya da yayımlanmış yükümlülüklerinde yeterince karşılayan bir kaynak bulamadım, bu yüzden bir şey söylemiyorum. Soruyu belge adı, ekipman ya da yükümlülük adıyla yeniden sorabilir ya da ilgili belgeyi belge kasasına ekleyebilirsin.",
+    "sources": [],
+    "notes": [
+      "Yetersiz kaynak: yanıt üretilmedi."
+    ],
+    "ms": 30
+  },
+  "conflict": {
+    "outcome": "conflict",
+    "mode": "model",
+    "model": {
+      "status": "used",
+      "name": "qwen2.5-coder:7b"
+    },
+    "answer": "Kaynaklar birbiriyle çelişiyor: [1] -18 °C, [2] -12 °C. Hangisinin geçerli olduğu kaynaklardan anlaşılmıyor.",
+    "sources": [
+      {
+        "n": 1,
+        "title": "Gıda deposu talimatı A 5715",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": true,
+        "route": "/documents/635e6a91-7520-4d0b-95bc-674d365b639c"
+      },
+      {
+        "n": 2,
+        "title": "Gıda deposu talimatı B 5715",
+        "locator": "Belge · sürüm 1 · bölüm 1 (elle girilen/yapıştırılan metin)",
+        "cited": true,
+        "route": "/documents/8ab12d6a-5931-42e8-bdd3-27e1161760b7"
+      },
+      {
+        "n": 3,
+        "title": "Gıda deposu talimatı A 5715",
+        "locator": "Belge · sürüm 1 · kayıt bilgileri",
+        "cited": false,
+        "route": "/documents/635e6a91-7520-4d0b-95bc-674d365b639c"
+      },
+      {
+        "n": 4,
+        "title": "Gıda deposu talimatı B 5715",
+        "locator": "Belge · sürüm 1 · kayıt bilgileri",
+        "cited": false,
+        "route": "/documents/8ab12d6a-5931-42e8-bdd3-27e1161760b7"
+      },
+      {
+        "n": 5,
+        "title": "Servisten sonra sıcaklığı ölç ve servis raporuyla birlikte kaydet",
+        "locator": "Kural EX-REPORT-MEAS · sürüm 1",
+        "cited": false,
+        "route": "/obligations"
+      },
+      {
+        "n": 6,
+        "title": "Soğuk muhafaza ünitelerinin sıcaklığını kayıt altında tut",
+        "locator": "Kural EX-COLD-CHAIN · sürüm 1",
+        "cited": false,
+        "route": "/obligations"
+      }
+    ],
+    "notes": [
+      "Kaynaklar birbiriyle çelişiyor; hangisinin geçerli olduğunu asistan seçmedi. Kaynakları aç, gerekirse uzmanına danış.",
+      "Yanıtı bir dil modeli yazdı; her cümlenin dayandığı kaynağı aç ve kontrol et.",
+      "Doğrulanmış bir mevzuat maddesi bu yanıtın dayanağı değil; hukuki görüş yerine geçmez."
+    ],
+    "ms": 3183
+  },
+  "fine": {
+    "outcome": "fine_declined",
+    "mode": "sources_only",
+    "model": {
+      "status": "skipped",
+      "name": null
+    },
+    "answer": "Ceza tutarı hesaplamıyorum: pilotta doğrulanmış bir ceza tablosu yok ve tutar tahmin edilmez. Bunun yerine bu konuda sende açık olan risk kalemlerini ve ilgili yükümlülüğün kaynağını gösterebilirim; \"yükümlülük\" ya da \"risk\" kelimesiyle sor.",
+    "sources": [],
+    "notes": [
+      "Ceza tutarı kapsam dışı (pilot kararı)."
+    ],
+    "ms": 14
+  }
+}

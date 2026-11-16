@@ -33,6 +33,11 @@ export default function AdminRoute() {
     setError(null);
     try { await fn(); showToast(msg); await rules.reload(); await queue.reload(); } catch (e) { setError(errorText(e)); }
   };
+  /** Approval and publishing need a written reason; the message names the action that lacks it. */
+  const decide = async (what: string, fn: () => Promise<unknown>, msg: string) => {
+    if (note.trim().length === 0) { setError(`${what} için gerekçe yazmalısın.`); return; }
+    await act(fn, msg);
+  };
   const mfaMissing = !me?.mfaSatisfied;
 
   return (
@@ -45,7 +50,7 @@ export default function AdminRoute() {
       ) : null}
       {error ? <ErrorBox message={error} /> : null}
       {roles.length > 0 ? <PlatformOverview /> : null}
-      <Field label="Not / gerekçe (inceleme ve kararlar için)" value={note} onChangeText={setNote} placeholder="ör. Kaynak metinle karşılaştırıldı" />
+      <Field testID="admin-reason" label="Gerekçe (onay ve yayın için zorunlu)" value={note} onChangeText={setNote} placeholder="ör. Kaynak metinle karşılaştırıldı" />
 
       {rules.data || rules.error ? (
         <>
@@ -70,11 +75,11 @@ export default function AdminRoute() {
                       onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/area-review`, { area: a, decision: 'approved', notes: note.trim() }), 'Alan incelemesi kaydedildi')} />
                   ))}
                   <PrimaryButton label="Kuralı onayla" height={42} size={12.5} glow={false} disabled={r.pendingAreaReviews.length > 0}
-                    onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/approve`, { reason: note.trim() || null }), 'Kural onaylandı')} />
+                    onPress={() => decide('Kuralı onaylamak', () => call('POST', `/admin/rule-versions/${r.id}/approve`, { reason: note.trim() }), 'Kural onaylandı')} />
                 </View>
               ) : null}
               {r.status === 'approved' ? (
-                <PrimaryButton label="Yayınla" height={42} size={12.5} glow={false} onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/publish`, { reason: note.trim() || null }), 'Yayınlandı; işletmeler yeniden değerlendirildi')} />
+                <PrimaryButton label="Yayınla" height={42} size={12.5} glow={false} onPress={() => decide('Kuralı yayımlamak', () => call('POST', `/admin/rule-versions/${r.id}/publish`, { reason: note.trim() }), 'Yayınlandı; işletmeler yeniden değerlendirildi')} />
               ) : null}
             </Card>
           ))}

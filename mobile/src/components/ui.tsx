@@ -5,12 +5,15 @@ import { C, SEV, eyebrow, limeGlow, tint, type, type Sev } from '../theme';
 export const nativeDriver = Platform.OS !== 'web';
 
 /** Pressable with the prototype's subtle press feedback. */
+/** iPhone HIG minimum touch target. react-native-web ignores `hitSlop`, so the size is real, not a slop. */
+export const MIN_TAP = 44;
+
 export function Tap({ style, children, disabled, ...rest }: PressableProps & { style?: StyleProp<ViewStyle>; children?: ReactNode }) {
   return (
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
-      style={({ pressed }) => [style, pressed && !disabled && { opacity: 0.82 }]}
+      style={({ pressed }) => [{ minHeight: MIN_TAP, minWidth: MIN_TAP }, style, pressed && !disabled && { opacity: 0.82 }]}
       {...rest}
     >
       {children}

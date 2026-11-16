@@ -98,9 +98,10 @@ describe('document field extraction: proposals, review, confirm', () => {
     expect(two.note).toMatch(/Birden çok/);
   });
 
-  it('there is no OCR engine in the pilot and the API says so', async () => {
+  it('the API names the local OCR engine', async () => {
     const st = (await owner().get('/ocr/status')).body;
-    expect(st).toMatchObject({ available: false, engine: null });
+    expect(st).toMatchObject({ available: true });
+    expect(st.engine).toMatch(/Tesseract/);
   });
 
   it('a reading is a pending proposal; the document is untouched until it is confirmed', async () => {

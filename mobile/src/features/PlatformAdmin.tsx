@@ -10,7 +10,7 @@ import { fmtDateTime } from './dates';
 
 type Overview = { companies: { real: number; demo: number }; users: number; ruleVersions: Record<string, number>; marketplaceQueue: { verifications: number; authorizations: number };
   openNetworkReports: number; roleHolders: { role: string; label: string; count: number }[]; yourRoles: string[]; exampleRulesNote: string };
-type AuditItem = { id: number; companyName: string | null; scope: string; occurredAt: string; actorName: string; eventType: string; entityType: string; reason: string | null };
+type AuditItem = { id: number; companyName: string | null; scope: string; occurredAt: string; actorName: string; eventType: string; entityType: string; reason: string | null; payload?: { code?: string; version?: number } };
 type PUser = { id: string; displayName: string; email: string | null; roles: string[] };
 
 const RULE_TR: Record<string, string> = { draft: 'taslak', in_review: 'incelemede', approved: 'onaylı', published: 'yayında', retired: 'emekli' };
@@ -58,7 +58,7 @@ export function AuditTrail() {
       {q.data?.items.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Kayıt yok.</Text> : null}
       {(q.data?.items ?? []).map(e => (
         <View key={e.id} testID={`audit-${e.id}`} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 14, padding: 11, gap: 2 }}>
-          <Text style={type(12.5, 600)}>{EVENT_TR[e.eventType] ?? e.eventType}</Text>
+          <Text style={type(12.5, 600)}>{EVENT_TR[e.eventType] ?? e.eventType}{e.payload?.code ? ` · ${e.payload.code}${e.payload.version ? ` v${e.payload.version}` : ''}` : ''}</Text>
           <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>{e.actorName} · {fmtDateTime(e.occurredAt)}{e.companyName ? ` · ${e.companyName}` : ' · platform'}</Text>
           <Text style={type(11.5, 400, { color: e.reason ? C.t1 : C.t3, lh: 1.45 })}>{e.reason ? `Gerekçe: ${e.reason}` : 'Gerekçe kaydedilmemiş'}</Text>
         </View>

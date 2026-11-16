@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { EXAMPLE_RULES, seedDemoCompany, seedPlatform } from '../../src/seed/demo';
+import { appendAudit } from '../../src/services/audit';
 import { createSession } from '../../src/services/principal';
 import { client, freshEnv, type Env } from '../support/env';
 
@@ -85,21 +86,51 @@ describe('platform role changes carry who, when and why', () => {
   });
 });
 
-describe('rule decisions record their reason', () => {
-  it('approve and publish reasons reach the audit trail; a call without a body still works and shows no reason', async () => {
+describe('rule approval and publishing need a written reason (AM-6)', () => {
+  it('draft → review → reasoned approval → reasoned publish; each refusal leaves the rule untouched; each step shows separately in the trail', async () => {
     const author = client(env, platform.author.token), reviewer = client(env, platform.reviewer.token), specialist = client(env, platform.specialist.token);
     const base = EXAMPLE_RULES.find(r => r.code === 'EX-COLD-CHAIN')!;
     const prov = (await env.ownerDb.query(`SELECT id FROM provisions LIMIT 1`)).rows[0].id;
     const v = (await author.post('/admin/rule-versions', { ...base, provisionIds: [prov], changeReason: 'Gerekçe testi' })).body.id;
+    const status = async () => (await admin().get(`/admin/rule-versions/${v}`)).body.status;
+    expect(await status()).toBe('draft');
     await author.post(`/admin/rule-versions/${v}/submit`);
     await specialist.post(`/admin/rule-versions/${v}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Kaynak metinle karşılaştırıldı.' });
-    expect((await reviewer.post(`/admin/rule-versions/${v}/approve`, { reason: 'İnceleme tamam, alan uzmanı onayı var.' })).status).toBe(200);
+    expect(await status()).toBe('in_review');
+
+    // approval: missing, empty and whitespace-only reasons are refused with a message that names the action; nothing changes
+    for (const body of [undefined, {}, { reason: '' }, { reason: '    ' }, { reason: null }]) {
+      const r = await reviewer.post(`/admin/rule-versions/${v}/approve`, body as any);
+      expect(r.status).toBe(422);
+      expect(r.body.error.message).toBe('Kuralı onaylamak için gerekçe yazmalısın.');
+      expect(await status()).toBe('in_review');
+    }
+    // roles are unchanged: the author cannot approve even with a reason
+    expect((await author.post(`/admin/rule-versions/${v}/approve`, { reason: 'Kendi kuralımı onaylıyorum.' })).status).toBe(403);
+    expect((await reviewer.post(`/admin/rule-versions/${v}/approve`, { reason: '  İnceleme tamam, alan uzmanı onayı var.  ' })).status).toBe(200);
+    expect(await status()).toBe('approved');
+
+    for (const body of [undefined, { reason: '   ' }]) {
+      const r = await admin().post(`/admin/rule-versions/${v}/publish`, body as any);
+      expect(r.status).toBe(422);
+      expect(r.body.error.message).toBe('Kuralı yayımlamak için gerekçe yazmalısın.');
+      expect(await status()).toBe('approved');
+    }
     expect((await admin().post(`/admin/rule-versions/${v}/publish`, { reason: 'Örnek ortamda yayın denemesi.' })).status).toBe(200);
-    const rows = (await admin().get('/admin/audit?scope=platform&eventType=rule.')).body.items as any[];
-    const by = (t: string) => rows.find(e => e.eventType === t && e.entityId === v);
-    expect(by('rule.area_reviewed').reason).toBe('Kaynak metinle karşılaştırıldı.');
-    expect(by('rule.approved').reason).toBe('İnceleme tamam, alan uzmanı onayı var.');
-    expect(by('rule.published').reason).toBe('Örnek ortamda yayın denemesi.');
-    expect(rows.some(e => e.reason === null)).toBe(true); // seeded decisions had none: shown as not recorded, never invented
+    expect(await status()).toBe('published');
+
+    // legacy events written before the reason became mandatory stay readable and say so
+    await env.db.system(tx => appendAudit(tx, { companyId: null, actorId: platform.reviewer.id, eventType: 'rule.approved', entityType: 'rule_version', entityId: v, payload: { code: 'EX-COLD-CHAIN' } }));
+
+    const rows = (await admin().get('/admin/audit?scope=platform&eventType=rule.&limit=60')).body.items as any[];
+    const mine = rows.filter(e => e.entityId === v);
+    const by = (t: string, reason: string | null) => mine.find(e => e.eventType === t && e.reason === reason);
+    const approved = by('rule.approved', 'İnceleme tamam, alan uzmanı onayı var.'), published = by('rule.published', 'Örnek ortamda yayın denemesi.');
+    expect(approved).toBeTruthy(); expect(published).toBeTruthy();
+    expect(approved.payload).toMatchObject({ code: 'EX-COLD-CHAIN', version: expect.any(Number) });
+    expect(approved.actorName).toContain('onaylayıcı'); expect(published.actorName).toContain('Platform');
+    expect(approved.occurredAt).toBeTruthy(); expect(published.occurredAt).toBeTruthy();
+    expect(new Set(mine.map(e => e.id)).size).toBe(mine.length); // each step is its own record
+    expect(by('rule.approved', null)).toBeTruthy(); // legacy record: reason absent, still listed
   });
 });

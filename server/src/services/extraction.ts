@@ -3,20 +3,25 @@ import type { Tx } from '../db/pool';
 import { conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
+import type { Db } from '../db/pool';
+import type { EvidenceStore } from '../storage/local';
+import { AppError } from '../domain/errors';
 import { DOC_TYPES, canReadDoc } from './documents';
+import { readContent } from './evidence';
+import { FileReadError, LOW_WORD_CONFIDENCE, ocrEngine, readFileText, type FileReading } from './filetext';
 
 /*
  * Reading fields from a document's text (Smart Vault).
- *  - There is no OCR engine in the pilot: the text comes from the phone's own text recognition or is typed/pasted. `ocrStatus` says so.
+ *  - Text comes from the stored file (text-layer PDF directly, scan/photo through the local OCR engine in filetext.ts), from the phone's own recognition, or is typed/pasted.
  *  - The server only proposes: each field carries the snippet it came from and a confidence. A person looks at it, edits it and confirms.
  *  - Confirming fills the document's fields (type, issuer, number) and the dates of that version. It never marks the document reviewed or valid:
  *    review stays a separate human step.
  */
 
 export const ocrStatus = () => ({
-  engine: null as string | null,
-  available: false,
-  note: 'Pilot sürümünde otomatik OCR motoru yok. Metin telefonun kendi metin tanımasından alınır ya da elle yapıştırılır; sistem yalnızca öneri çıkarır, kayda sen onaylarsın.',
+  engine: ocrEngine.name as string | null,
+  available: true,
+  note: 'Yüklenen PDF ya da fotoğraftan metin bu sunucuda okunur (dışarı gönderilmez). Metin katmanlı PDF doğrudan okunur; tarama ve fotoğraf OCR ile okunur ve hata yapabilir. Sistem yalnızca öneri çıkarır, kayda sen onaylarsın.',
 });
 
 export type Suggestion = { field: 'docType' | 'issuer' | 'documentNo' | 'validFrom' | 'validUntil'; value: string; snippet: string; confidence: 'medium' | 'low'; note?: string };
@@ -99,8 +104,8 @@ export async function createExtraction(tx: Tx, p: Principal, companyId: string, 
   // Older, still-pending suggestions for the same version are replaced by the newest reading.
   await tx.query(`UPDATE document_extractions SET status = 'dismissed', decided_by = $2, decided_at = now() WHERE version_id = $1 AND status = 'pending'`, [versionId, p.userId]);
   const r = (await tx.query<{ id: string }>(
-    `INSERT INTO document_extractions (company_id, document_id, version_id, source, text_sha256, suggestions, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [companyId, documentId, versionId, b.source, sha, JSON.stringify(suggestions), p.userId])).rows[0]!;
+    `INSERT INTO document_extractions (company_id, document_id, version_id, source, text_sha256, suggestions, created_by, source_text) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [companyId, documentId, versionId, b.source, sha, JSON.stringify(suggestions), p.userId, text])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.extraction_proposed', entityType: 'document', entityId: documentId, payload: { extractionId: r.id, versionId, fields: suggestions.map(s => s.field), source: b.source } });
   return { id: r.id, status: 'pending', suggestions, ocr: ocrStatus(), note: 'Bunlar öneridir; onaylamadıkça belgeye yazılmaz ve belge geçerli sayılmaz.' };
 }
@@ -108,9 +113,9 @@ export async function createExtraction(tx: Tx, p: Principal, companyId: string, 
 export async function listExtractions(tx: Tx, p: Principal, companyId: string, documentId: string) {
   const d = (await tx.query(`SELECT id, site_id FROM documents WHERE id = $1 AND company_id = $2`, [documentId, companyId])).rows[0];
   if (!d || !await canReadDoc(tx, p, companyId, d)) throw notFound('Belge');
-  const rows = (await tx.query(`SELECT e.id, e.version_id, v.version, e.source, e.suggestions, e.status, e.confirmed_fields, e.created_at, e.decided_at, u.display_name AS created_by_name
+  const rows = (await tx.query(`SELECT e.id, e.version_id, v.version, e.source, e.method, e.source_text, e.read_confidence, e.uncertain_words, e.file_sha256, e.suggestions, e.status, e.confirmed_fields, e.created_at, e.decided_at, u.display_name AS created_by_name
      FROM document_extractions e JOIN document_versions v ON v.id = e.version_id JOIN users u ON u.id = e.created_by WHERE e.document_id = $1 ORDER BY e.created_at DESC`, [documentId])).rows;
-  return { ocr: ocrStatus(), items: rows.map(r => ({ id: r.id, versionId: r.version_id, version: r.version, source: r.source, suggestions: r.suggestions, status: r.status, confirmedFields: r.confirmed_fields, createdAt: r.created_at, decidedAt: r.decided_at, createdBy: r.created_by_name })) };
+  return { ocr: ocrStatus(), items: rows.map(r => ({ id: r.id, versionId: r.version_id, version: r.version, source: r.source, method: r.method, sourceText: r.source_text, readConfidence: r.read_confidence, uncertainWords: r.uncertain_words, fileSha256: r.file_sha256, suggestions: r.suggestions, status: r.status, confirmedFields: r.confirmed_fields, createdAt: r.created_at, decidedAt: r.decided_at, createdBy: r.created_by_name })) };
 }
 
 export type ConfirmFields = { docType?: string | null; issuer?: string | null; documentNo?: string | null; validFrom?: string | null; validUntil?: string | null };
@@ -145,4 +150,60 @@ export async function decideExtraction(tx: Tx, p: Principal, companyId: string, 
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.extraction_confirmed', entityType: 'document', entityId: e.document_id,
     payload: { extractionId, versionId: e.version_id, applied, changedFromProposal: proposed.filter(x => x.proposed !== x.confirmed) } });
   return { status: 'confirmed', applied, note: 'Alanlar kaydedildi. Belge hâlâ incelenmedi sayılır; geçerlilik için ayrıca incelenmesi gerekir.' };
+}
+
+/** Marks a suggestion uncertain when the engine was unsure of a word inside the line it came from. */
+export function flagUncertain(suggestions: Suggestion[], reading: Pick<FileReading, 'method' | 'confidence' | 'lowWords'>): Suggestion[] {
+  if (reading.method === 'pdf_text') return suggestions;
+  return suggestions.map(s => {
+    const hit = reading.lowWords.find(w => w.text.length > 1 && s.snippet.includes(w.text));
+    if (hit) return { ...s, confidence: 'low' as const, note: [s.note, `Okuma güveni düşük (“${hit.text}”, %${Math.round(hit.confidence)}): dosyayla karşılaştır.`].filter(Boolean).join(' ') };
+    if (reading.confidence !== null && reading.confidence < LOW_WORD_CONFIDENCE) return { ...s, confidence: 'low' as const, note: [s.note, 'Dosyanın geneli zor okundu: dosyayla karşılaştır.'].filter(Boolean).join(' ') };
+    return s;
+  });
+}
+
+const FILE_ERR: Record<FileReadError['kind'], [number, string]> = { unsupported: [415, 'FILE_UNSUPPORTED'], unreadable: [422, 'FILE_UNREADABLE'], too_large: [413, 'FILE_TOO_LARGE'], timeout: [504, 'FILE_READ_TIMEOUT'] };
+
+/** What a person may do next when a file cannot be read. */
+const NEXT = { retry: 'Yeniden dene ya da alanları elle gir.', manual: 'Alanları elle gir.' };
+
+/**
+ * Reads the stored file of a version and records the suggestions (never writes to the document). The expensive reading runs outside any
+ * database transaction; the write that follows re-checks access. Reading the same file again returns the pending reading instead of creating another one.
+ */
+export async function extractFromFile(db: Db, store: EvidenceStore, p: Principal, companyId: string, documentId: string, versionId: string) {
+  const ev = await db.tenant(companyId, async tx => {
+    await docAndVersion(tx, p, companyId, documentId, versionId, 'write');
+    const r = (await tx.query(`SELECT id FROM evidence WHERE document_version_id = $1 AND company_id = $2 AND status = 'stored' ORDER BY created_at DESC LIMIT 1`, [versionId, companyId])).rows[0];
+    if (!r) throw conflict('NO_FILE', `Bu sürümde okunacak dosya yok. ${NEXT.manual}`);
+    return r.id as string;
+  });
+  const file = await readContent(db, store, p, companyId, ev);
+  let reading: FileReading;
+  try { reading = await readFileText(file.mime, file.bytes); } catch (e) {
+    if (e instanceof FileReadError) {
+      const [st, code] = FILE_ERR[e.kind]; const retry = e.kind === 'unreadable' || e.kind === 'timeout';
+      throw new AppError(st, code, `${e.message} ${retry ? NEXT.retry : NEXT.manual}`, { retry, manual: true });
+    }
+    throw e;
+  }
+  const text = reading.text.length > 20000 ? reading.text.slice(0, 20000) : reading.text;
+  const suggestions = flagUncertain(suggestFields(text), reading);
+  return db.tenant(companyId, async tx => {
+    const { v } = await docAndVersion(tx, p, companyId, documentId, versionId, 'write');
+    const view = (id: string, sugg: Suggestion[], reused: boolean) => ({ id, status: 'pending', reused, method: reading.method, sourceText: text, readConfidence: reading.confidence, suggestions: sugg, versionReviewStatus: v.review_status, ocr: ocrStatus(), note: 'Bunlar öneridir; onaylamadıkça belgeye yazılmaz ve belge geçerli sayılmaz.' });
+    const same = (await tx.query(`SELECT id, suggestions FROM document_extractions WHERE version_id = $1 AND file_sha256 = $2 AND method = $3 AND status = 'pending' ORDER BY created_at DESC LIMIT 1`,
+      [versionId, file.sha256, reading.method])).rows[0];
+    if (same) return view(same.id, same.suggestions, true);
+    await tx.query(`UPDATE document_extractions SET status = 'dismissed', decided_by = $2, decided_at = now() WHERE version_id = $1 AND status = 'pending'`, [versionId, p.userId]);
+    const sha = createHash('sha256').update(text).digest('hex');
+    const r = (await tx.query<{ id: string }>(
+      `INSERT INTO document_extractions (company_id, document_id, version_id, source, text_sha256, suggestions, created_by, evidence_id, file_sha256, method, source_text, read_confidence, uncertain_words)
+       VALUES ($1,$2,$3,'file',$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+      [companyId, documentId, versionId, sha, JSON.stringify(suggestions), p.userId, ev, file.sha256, reading.method, text, reading.confidence, JSON.stringify(reading.lowWords.slice(0, 40))])).rows[0]!;
+    await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.extraction_proposed', entityType: 'document', entityId: documentId,
+      payload: { extractionId: r.id, versionId, fields: suggestions.map(s => s.field), source: 'file', method: reading.method, fileSha256: file.sha256 } });
+    return view(r.id, suggestions, false);
+  });
 }

@@ -1,0 +1,520 @@
+{
+  "cihazlar": {
+    "chromium-Pixel7": {
+      "motor": "chromium",
+      "profil": "Pixel 7",
+      "ekran": {
+        "width": 412,
+        "height": 839
+      },
+      "kucukDokunmaHedefi": {
+        "/": [
+          {
+            "w": 173,
+            "h": 34,
+            "t": "Kahve Durağı (DEMO) · Ka"
+          },
+          {
+            "w": 82,
+            "h": 32,
+            "t": "Eşitleme durumu: Eşitlen"
+          },
+          {
+            "w": 36,
+            "h": 36,
+            "t": "6 okunmamış bildirim"
+          }
+        ],
+        "/tasks": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 78,
+            "h": 34,
+            "t": "Bugün 2"
+          },
+          {
+            "w": 121,
+            "h": 34,
+            "t": "Yapılacaklar 33"
+          }
+        ],
+        "/documents": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 58,
+            "h": 34,
+            "t": "Tümü"
+          },
+          {
+            "w": 120,
+            "h": 34,
+            "t": "Yakında bitecek"
+          }
+        ],
+        "/equipment": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 338,
+            "h": 33,
+            "t": "Buzdolabı · Mutfak arka "
+          },
+          {
+            "w": 149,
+            "h": 34,
+            "t": "Soğutucu / buzdolabı"
+          }
+        ],
+        "/notifications": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 175,
+            "h": 36,
+            "t": "Tümünü okundu say (6)"
+          }
+        ],
+        "/obligations": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/assistant": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/scan": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/market": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 84,
+            "h": 34,
+            "t": "Uzmanlar"
+          },
+          {
+            "w": 161,
+            "h": 34,
+            "t": "Servisler ve Teklifler 4"
+          }
+        ],
+        "/more": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/sync": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/profile": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/board": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 58,
+            "h": 34,
+            "t": "Tümü"
+          },
+          {
+            "w": 93,
+            "h": 34,
+            "t": "Son 30 gün"
+          }
+        ]
+      },
+      "guvenliAlan": {
+        "vf": false,
+        "env": true
+      },
+      "dokunmaUyarisi": 26
+    },
+    "webkit-iPhone14": {
+      "motor": "webkit",
+      "profil": "iPhone 14",
+      "ekran": {
+        "width": 390,
+        "height": 664
+      },
+      "kucukDokunmaHedefi": {
+        "/": [
+          {
+            "w": 82,
+            "h": 32,
+            "t": "Eşitleme durumu: Eşitlen"
+          },
+          {
+            "w": 36,
+            "h": 36,
+            "t": "6 okunmamış bildirim"
+          },
+          {
+            "w": 186,
+            "h": 20,
+            "t": "GECİKENLERİ AÇ → "
+          }
+        ],
+        "/tasks": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 78,
+            "h": 34,
+            "t": "Bugün 2 "
+          },
+          {
+            "w": 121,
+            "h": 34,
+            "t": "Yapılacaklar 33 "
+          }
+        ],
+        "/documents": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 58,
+            "h": 34,
+            "t": "Tümü "
+          },
+          {
+            "w": 120,
+            "h": 34,
+            "t": "Yakında bitecek "
+          }
+        ],
+        "/equipment": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 316,
+            "h": 33,
+            "t": "Buzdolabı · Mutfak arka "
+          },
+          {
+            "w": 149,
+            "h": 34,
+            "t": "Soğutucu / buzdolabı "
+          }
+        ],
+        "/notifications": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 175,
+            "h": 36,
+            "t": "Tümünü okundu say (6) "
+          }
+        ],
+        "/obligations": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/assistant": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/scan": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/market": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 84,
+            "h": 34,
+            "t": "Uzmanlar "
+          },
+          {
+            "w": 161,
+            "h": 34,
+            "t": "Servisler ve Teklifler 4"
+          }
+        ],
+        "/more": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/sync": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/profile": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/board": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 58,
+            "h": 34,
+            "t": "Tümü "
+          },
+          {
+            "w": 93,
+            "h": 34,
+            "t": "Son 30 gün "
+          }
+        ]
+      },
+      "guvenliAlan": {
+        "vf": false,
+        "env": true
+      },
+      "dokunmaUyarisi": 26
+    },
+    "webkit-iPhoneSE": {
+      "motor": "webkit",
+      "profil": "iPhone SE",
+      "ekran": {
+        "width": 320,
+        "height": 568
+      },
+      "kucukDokunmaHedefi": {
+        "/": [
+          {
+            "w": 29,
+            "h": 32,
+            "t": "Eşitleme durumu: Eşitlen"
+          },
+          {
+            "w": 36,
+            "h": 36,
+            "t": "6 okunmamış bildirim"
+          },
+          {
+            "w": 116,
+            "h": 34,
+            "t": "GECİKENLERİ AÇ → "
+          }
+        ],
+        "/tasks": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 78,
+            "h": 34,
+            "t": "Bugün 2 "
+          },
+          {
+            "w": 121,
+            "h": 34,
+            "t": "Yapılacaklar 33 "
+          }
+        ],
+        "/documents": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 58,
+            "h": 34,
+            "t": "Tümü "
+          },
+          {
+            "w": 120,
+            "h": 34,
+            "t": "Yakında bitecek "
+          }
+        ],
+        "/equipment": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 246,
+            "h": 33,
+            "t": "Buzdolabı · Mutfak arka "
+          },
+          {
+            "w": 149,
+            "h": 34,
+            "t": "Soğutucu / buzdolabı "
+          }
+        ],
+        "/notifications": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 175,
+            "h": 36,
+            "t": "Tümünü okundu say (6) "
+          }
+        ],
+        "/obligations": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/assistant": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/scan": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/market": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 84,
+            "h": 34,
+            "t": "Uzmanlar "
+          },
+          {
+            "w": 161,
+            "h": 34,
+            "t": "Servisler ve Teklifler 4"
+          }
+        ],
+        "/more": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/sync": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/profile": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          }
+        ],
+        "/board": [
+          {
+            "w": 36,
+            "h": 36,
+            "t": "Geri"
+          },
+          {
+            "w": 58,
+            "h": 34,
+            "t": "Tümü "
+          },
+          {
+            "w": 93,
+            "h": 34,
+            "t": "Son 30 gün "
+          }
+        ]
+      },
+      "guvenliAlan": {
+        "vf": false,
+        "env": true
+      },
+      "dokunmaUyarisi": 26
+    }
+  },
+  "tarih": "2026-11-15T03:33:01.249Z",
+  "base": "http://localhost:8091",
+  "not": "Öykünme: gerçek telefon değildir."
+}
