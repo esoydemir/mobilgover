@@ -7,6 +7,7 @@
     durum.cmd         Ne çalıştığını gösterir
     tunel-ac.cmd      Telefon testi için geçici HTTPS tüneli açar (davet bağlantısıyla)
     tunel-kapat.cmd   Tüneli kapatır
+    yedek-al.cmd / yedek-listele.cmd / yedek-dogrula.cmd / yedek-anahtari-goster.cmd / butunluk.cmd   Şifreli yedek (kayıtlar + dosyalar)
     SIFIRLA-tum-demo-verisi.cmd   Bütün demo kayıtlarını SİLER (onay ister)
   Yalnızca demo verisi içindir; üretim için değildir.
 #>
@@ -172,6 +173,13 @@ function Tunel-Kapat {
   Yaz 'Tünel kapatıldı. Bilgisayardaki demo çalışmaya devam ediyor.' Green
 }
 
+function Yedek([string]$Alt, [string[]]$Ek = @()) {
+  Docker-Hazir
+  if (-not (Uygulama-Calisiyor)) { Dur 'Uygulama çalışmıyor; önce baslat.cmd.' }
+  & docker @Compose exec -T app goverhub-yedek $Alt @Ek
+  if ($LASTEXITCODE -ne 0) { Dur "Yedek komutu başarısız oldu (kod $LASTEXITCODE)." }
+}
+
 function Durum {
   Docker-Hazir
   Baslik 'Durum'
@@ -189,6 +197,11 @@ switch ($Komut) {
   'sifirla'     { Sifirla }
   'tunel-ac'    { Tunel-Ac }
   'tunel-kapat' { Tunel-Kapat }
+  'yedek-al'            { Baslik 'Şifreli yedek alınıyor (kayıtlar ve dosyalar)'; Yedek 'al'; Yaz 'Yedek tamam. Anahtarı henüz saklamadıysanız: yedek-anahtari-goster.cmd' Green }
+  'yedek-listele'       { Baslik 'Yedekler'; Yedek 'listele' }
+  'yedek-dogrula'       { Baslik 'En yeni yedek tamamen çözülüp doğrulanıyor'; Yedek 'dogrula' }
+  'yedek-anahtari-goster' { Baslik 'Yedek şifreleme anahtarı (güvenli bir yerde saklayın; yedeklerin yanında DEĞİL)'; Yedek 'anahtar-goster' }
+  'butunluk'            { Baslik 'Kayıt zinciri ve dosya bütünlüğü'; Yedek 'butunluk' }
   'durum'       { Durum }
   default       { Dur "Bilinmeyen komut: $Komut" }
 }

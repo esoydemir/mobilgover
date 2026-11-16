@@ -1,0 +1,28 @@
+# Ayrı, boş bir GoverHub ortamı (temiz kurulum denemesi ya da geri yükleme tatbikatı) — çalışan demoya DOKUNMAZ.
+# Ayrı proje adı => ayrı Docker birimleri, ağlar ve imaj etiketleri. Kullanım (yerel-demo klasöründe):
+#   $env:AYRI_PORT="8095"; $env:AYRI_ALTAG="172.30.71"
+#   docker compose -p goverhub-temiz -f compose.yaml -f ayri-ortam.yaml up -d --build --no-deps db app proxy
+# Silmek: docker compose -p goverhub-temiz -f compose.yaml -f ayri-ortam.yaml down -v
+# AYRI_PORT her ortamda farklı olmalı (çalışan demo 8080 kullanır); AYRI_ALTAG, diğer ortamların 172.30.x ağlarıyla çakışmamalı
+# (demo 172.30.51, pilot denemesi 172.30.62).
+services:
+  db:
+    image: goverhub-ayri-db:yerel
+  app:
+    image: goverhub-ayri-app:yerel
+    environment:
+      TRUST_PROXY: ${AYRI_ALTAG:?AYRI_ALTAG gerekli}.10
+  proxy:
+    image: goverhub-ayri-proxy:yerel
+    ports: !override
+      - "127.0.0.1:${AYRI_PORT:?AYRI_PORT gerekli}:8080"
+    networks:
+      web: { ipv4_address: "${AYRI_ALTAG}.10" }
+  kapi:
+    image: goverhub-ayri-proxy:yerel
+
+networks:
+  web:
+    ipam:
+      config: !override
+        - subnet: ${AYRI_ALTAG}.0/24
