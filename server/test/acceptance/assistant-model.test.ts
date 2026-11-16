@@ -222,6 +222,11 @@ describe('checkVerdict (pure)', () => {
   it('accepts numbers that are in the sources and string citations', () => {
     expect(checkVerdict({ status: 'answered', answer: 'Soğuk oda 4 °C olmalıdır [1].', citations: ['[1]'] }, src)).toMatchObject({ ok: true });
   });
+  it('treats grouped citation markers [1, 2] as citations, not as alien numbers', () => {
+    const r = checkVerdict({ status: 'conflict', answer: 'Kaynaklar çelişiyor [1, 2]; soğuk oda 4 °C [1,2].', citations: [] }, src);
+    expect(r).toMatchObject({ ok: true, verdict: { citations: [1, 2] } });
+    expect(checkVerdict({ status: 'answered', answer: 'Soğuk oda [1, 3].', citations: [] }, src)).toMatchObject({ ok: false });
+  });
   it('rejects amounts, alien numbers, unknown citations and a conflict with one source', () => {
     for (const answer of ['Ceza 500 TL [1].', 'Ceza ₺500 [1].', 'Soğuk oda 9 °C [1].', 'Soğuk oda [3].']) expect(checkVerdict({ status: 'answered', answer, citations: [1] }, src)).toMatchObject({ ok: false });
     expect(checkVerdict({ status: 'conflict', answer: 'Çelişiyor [1].', citations: [1] }, src)).toMatchObject({ ok: false });

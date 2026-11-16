@@ -58,6 +58,8 @@ export type ModelCall =
 
 const AMOUNT = /(\d[\d.,]*\s*(tl|₺|lira|try)\b)|(₺\s*\d)/i;
 const NUM = /\d+(?:[.,:/-]\d+)*/g;
+/** A citation marker: [1] or a group such as [1, 2] / [1,2]. */
+const CITE = /\[\s*\d{1,2}(?:\s*[,;]\s*\d{1,2})*\s*\]/g;
 const digits = (s: string) => s.replace(/\D/g, '');
 
 /** Output checks that do not trust the model: valid shape, real citations, no amounts, no number that the sources do not contain. */
@@ -69,7 +71,7 @@ export function checkVerdict(raw: unknown, sources: PromptSource[]): { ok: true;
   if (typeof r.answer !== 'string' || r.answer.length > 4000 || (status !== 'insufficient' && r.answer.trim().length < 3)) return { ok: false, reason: 'invalid_output', detail: 'answer geçersiz.' };
   const answer = r.answer.trim();
   const valid = new Set(sources.map(s => s.n));
-  const fromText = [...answer.matchAll(/\[(\d{1,2})\]/g)].map(m => Number(m[1]));
+  const fromText = [...answer.matchAll(CITE)].flatMap(m => [...m[0].matchAll(/\d{1,2}/g)].map(x => Number(x[0])));
   const citations = [...new Set([...(Array.isArray(r.citations) ? r.citations.map(c => Number(String(c).replace(/[^\d]/g, ''))) : []), ...fromText])].filter(Number.isFinite);
   if (citations.some(n => !valid.has(n))) return { ok: false, reason: 'rejected', detail: 'Var olmayan bir kaynak numarasına atıf.' };
   if (status !== 'insufficient') {
@@ -77,7 +79,7 @@ export function checkVerdict(raw: unknown, sources: PromptSource[]): { ok: true;
     if (status === 'conflict' && citations.length < 2) return { ok: false, reason: 'rejected', detail: 'Çelişki bildirildi ama iki kaynak gösterilmedi.' };
     if (AMOUNT.test(answer)) return { ok: false, reason: 'rejected', detail: 'Yanıt para tutarı içeriyor.' };
     const pool = new Set((sources.map(s => `${s.title} ${s.locator} ${s.text}`).join(' ').match(NUM) ?? []).map(digits));
-    const stripped = answer.replace(/\[\d{1,2}\]/g, ' ');
+    const stripped = answer.replace(CITE, ' ');
     const alien = (stripped.match(NUM) ?? []).find(t => !pool.has(digits(t)));
     if (alien) return { ok: false, reason: 'rejected', detail: `Kaynaklarda olmayan sayı: ${alien}` };
   }
