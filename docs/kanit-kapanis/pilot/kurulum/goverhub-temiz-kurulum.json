@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-16T18:02:04.651Z",
+  "base": "http://localhost:8095",
+  "sonuclar": [
+    "TAMAM  Sağlık — http://localhost:8095",
+    "TAMAM  Migrasyonlar uygulanmış — 24 migrasyon",
+    "TAMAM  Demo hesabıyla giriş (sahip@), ana ekran açıldı — G | Merhaba, Ahmet (işletme sahibi) | DEMO · ÖRNEK VERİ | Kahve Durağı (DEMO) | Kadıköy Mo",
+    "TAMAM  İşletmesiz yeni kullanıcı kurulum ekranını görüyor",
+    "TAMAM  İlk işletme veritabanında oluştu — 1"
+  ]
+}
