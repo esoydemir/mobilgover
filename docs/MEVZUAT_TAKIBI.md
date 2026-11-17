@@ -36,3 +36,21 @@ Kaynak ulaşılamazsa hata kaynak bazında kaydedilir (yönetim ekranında gör�
 - Mevzuat Bilgi Sistemi'nin arama ucu betikle sürülemedi; izleme listesi **elle** verilir (öntanımlı: 5996 sayılı Kanun). Yönetmelik numaraları uzman tarafından listeye eklenmelidir.
 - Yürürlük tarihi ayrıştırıcısı yalnız açık kalıpları "bilinen" sayar; gerisini yöneticiye bırakır (bilerek temkinli).
 - Gerçek mevzuatın kural olarak yayımlanması uzman onayına bağlıdır; bu iş kural içeriği üretmez.
+
+## Canlı geçiş rehberi (kontrollü devreye alma)
+
+İzleme listesi ve kaynak doğrulaması: `docs/MEVZUAT_IZLEME_ENVANTERI.md`. Öntanımlı liste bu envanterdeki 6 belgedir; `LEGISLATION_MEVZUAT_WATCH` ile değiştirilir (`tür:no:tertip:ad[:m=22;24]`, isteğe bağlı `m=` yalnız o maddelerde kayıt üretir).
+
+**Açmak (pilot, 8091 gibi bir ortamda)**
+1. Ortamı bu sürümle yeniden kur (migrasyon 026 sütun ekler; veri silinmez).
+2. `LEGISLATION_SCAN_ENABLED=1`, isteğe bağlı `LEGISLATION_SCAN_HOUR` (Europe/Istanbul, öntanımlı 6). Taban adreslerini BOŞ bırak (resmî adresler).
+3. Yönetim → Mevzuat takibi → **Şimdi tara**: ilk okuma yalnız taban oluşturur ("ilk okuma, N madde"), kayıt üretmez. Kaynak kartında *Son deneme / Son başarılı okuma / Okunan belge / Kuyrukta* görünür.
+4. Bundan sonra her gün tarama kendiliğinden çalışır; Resmî Gazete'de gıda başlıklı yayınlar ve izlenen belgelerin madde değişiklikleri **inceleme kuyruğuna** düşer. Hiçbiri onaylanmadan işletmeye ulaşmaz.
+
+**Ayarı değiştirmek / durdurmak**
+- Saat, liste, geri bakış günü: ilgili değişkeni değiştirip `app` kapsayıcısını yeniden başlat.
+- **Durdurmak:** `LEGISLATION_SCAN_ENABLED=0` ve `app`'i yeniden başlat. Elle tarama düğmesi açık kalır.
+- **Kuyruk kayıtları korunur:** durdurma/yeniden başlatma, `legislation_changes` (kuyruk), `legislation_documents` (taban) ve denetim kayıtlarını silmez. Yeniden açıldığında tarama son sağlıklı tabanla karşılaştırır; aynı yayın ikinci kez kuyruğa yazılmaz. Veriyi silmenin tek yolu ortamın hacimlerini silmektir (yapma).
+- Bir kaynak okunamıyorsa kartta hata türü görünür (zaman aşımı, erişim engeli, boş yanıt, beklenmeyen biçim, bozuk/eksik metin, resmî olmayan bağlantı reddedildi). Bu durum asla "değişiklik yok" anlamına gelmez; son sağlıklı okuma tabandır.
+
+**Gerçek kaynaktan gelen kayıt:** `ÖRNEK` değildir; ancak türetilecek kural uzman onayına bağlıdır. Ürüne özgü yayınlar (ör. Peynir Tebliği) kafe için geçerli olmayabilir: uzman "uygulanabilir değil" diye reddeder.
