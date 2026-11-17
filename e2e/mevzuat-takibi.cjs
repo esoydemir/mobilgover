@@ -242,11 +242,23 @@ const api = async (token, method, path, body) => {
   await admin.id('leg-scan').click(); await admin.p.getByText('Hata (', { exact: false }).first().waitFor({ timeout: 120000 }); await wait(500);
   await admin.shot('kaynak-kesintisi-hata');
   const ob = await admin.body();
-  check('Kaynak kesintisi: kaynak bazında hata görünür, "son başarılı veri korunuyor" der', ob.includes('Hata (') && ob.includes('Son başarılı veri korunuyor'));
+  check('Kaynak kesintisi: kaynak bazında hata görünür, "taban korunuyor, değişiklik yok demek değildir" der', ob.includes('Hata (') && ob.includes('taban olarak korunuyor'));
   check('Kesintide son başarılı tarama zamanı ve kuyruk korunur', (await admin.id('leg-last-ok').innerText()) === lastOkBefore && num('select count(*) from legislation_changes') === countBeforeOutage);
   await ctl('/ctl/down', { down: false });
   await admin.id('leg-scan').click(); await wait(4000);
   check('Kaynak dönünce bir sonraki taramada toparlanır (hata temizlenir)', !(await admin.body()).includes('Hata ('));
+
+  // ── 10b) Kaynak ulaşılabilir ama kullanılamaz yanıt (PDF): ayrı hata türü, taban korunur ──
+  const docHashBefore = sql("select content_sha256 from legislation_documents where doc_key='mv:1.5.9001'");
+  await ctl('/ctl/fail', { mode: 'pdf' });
+  await admin.id('leg-scan').click(); await admin.p.getByText('Beklenmeyen biçim', { exact: false }).first().waitFor({ timeout: 120000 }); await wait(500);
+  await admin.shot('kaynak-sagligi-beklenmeyen-bicim');
+  check('PDF/HTML-dışı yanıt: hata türü "Beklenmeyen biçim" olarak görünür; son sağlıklı metin tabanı değişmedi; kuyruk değişmedi', (await admin.body()).includes('Beklenmeyen biçim')
+    && sql("select content_sha256 from legislation_documents where doc_key='mv:1.5.9001'") === docHashBefore && num('select count(*) from legislation_changes') === countBeforeOutage
+    && sql("select last_error_kind from legislation_sources where code='mevzuat'") === 'unexpected_format');
+  await ctl('/ctl/fail', { mode: null });
+  await admin.id('leg-scan').click(); await wait(4000);
+  check('Biçim sorunu geçince kaynak sağlığı temizlenir (son deneme/okunan belge sayısı görünür)', !(await admin.body()).includes('Hata (') && (await admin.id('leg-source-counts-mevzuat').innerText()).includes('Okunan belge: 1'));
 
   // ── 11) Mevzuat Bilgi Sistemi: madde değişikliği ──
   await admin.id('leg-scan').click(); await wait(3500);

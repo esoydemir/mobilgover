@@ -10,6 +10,7 @@ const http = require('http');
 const days = new Map(); // day -> items
 const consolidated = new Map(); // "tur.tertip.no" -> {title, articles}
 let down = false;
+let fail = null; // null | 'pdf' | 'robot' | 'blocked' | 'empty'
 const port = Number(process.argv[2] || 8199);
 
 const page = (res, body, status = 200) => { res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' }); res.end(body); };
@@ -20,12 +21,17 @@ http.createServer((req, res) => {
       const b = raw ? JSON.parse(raw) : {};
       if (url.pathname === '/ctl/publish') days.set(b.day, [...(days.get(b.day) ?? []), b.item]);
       else if (url.pathname === '/ctl/down') down = !!b.down;
+      else if (url.pathname === '/ctl/fail') fail = b.mode || null;
       else if (url.pathname === '/ctl/consolidated') consolidated.set(b.key, { title: b.title, articles: b.articles });
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: true, down }));
     });
     return;
   }
   if (down) { res.destroy(); return; }
+  if (fail === 'pdf') { res.writeHead(200, { 'content-type': 'application/pdf' }); res.end('%PDF-1.7 ' + 'x'.repeat(400)); return; }
+  if (fail === 'robot') return page(res, '<html><body><h1>Access Denied</h1><p>Request blocked. ' + 'x '.repeat(80) + '</p></body></html>');
+  if (fail === 'blocked') return page(res, 'yasak', 403);
+  if (fail === 'empty') { res.writeHead(200, { 'content-type': 'text/html' }); res.end(); return; }
   const idx = /^\/rg\/fihrist$/.exec(url.pathname);
   if (idx) {
     const items = days.get(url.searchParams.get('tarih')) ?? [];

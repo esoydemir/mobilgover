@@ -91,6 +91,7 @@ describe('source health: failure kinds, last good baseline kept, never "no chang
     expect(m.last_error).toMatch(/^\[|: \[/);
     expect(m.failures_in_row).toBeGreaterThanOrEqual(1);
     expect(m.last_success_at).toBe(ok1);
+    expect(m.last_items_seen).toBe(8); // a failed read does not overwrite the last good counts
     expect(await docHash()).toBe(hash);
     expect(await cnt(`SELECT count(*)::int AS n FROM legislation_changes`)).toBe(0);
     expect({ tasks: await cnt(`SELECT count(*)::int AS n FROM tasks`), notifs: await cnt(`SELECT count(*)::int AS n FROM notifications`), rules: await cnt(`SELECT count(*)::int AS n FROM rule_versions`) }).toEqual(base);

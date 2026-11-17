@@ -100,7 +100,7 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
       const ok = errors.length === 0;
       const errorKind = errors.length ? (errors.map(e => errorKindOf(e.slice(Math.max(e.indexOf('['), 0)))).find(Boolean) ?? 'unknown') : null;
       await tx.query(
-        `UPDATE legislation_sources SET last_attempt_at = now(), last_items_seen = $2,
+        `UPDATE legislation_sources SET last_attempt_at = now(), last_items_seen = CASE WHEN $3 THEN $2 ELSE last_items_seen END,
            last_success_at = CASE WHEN $3 THEN now() ELSE last_success_at END,
            last_error_kind = CASE WHEN $3 THEN NULL ELSE $5 END, last_docs_read = CASE WHEN $3 THEN $6 ELSE last_docs_read END,
            last_error = CASE WHEN $3 THEN NULL ELSE $4 END, last_error_at = CASE WHEN $3 THEN last_error_at ELSE now() END,
