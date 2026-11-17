@@ -62,7 +62,7 @@ function Gate({ children }: { children: ReactNode }) {
   const platform = (me?.platformRoles.length ?? 0) > 0;
   // People without a business: specialists, network users and platform staff (rules, review, institution demo).
   const providerOnly = !!me && companies.length === 0 && (path.startsWith('/pro') || path.startsWith('/network') || path.startsWith('/moderation')
-    || (platform && (path.startsWith('/admin') || path.startsWith('/rule') || path.startsWith('/institution') || path === '/more')));
+    || (platform && (path.startsWith('/admin') || path.startsWith('/rule') || path.startsWith('/legislation') || path.startsWith('/institution') || path === '/more')));
   // No business and not yet known whether they are a specialist (the profile could not be read, e.g. offline): wait, do not guess.
   const waitingProfile = !!token && !!me && companies.length === 0 && provider === null && !providerOnly && path !== '/setup' && path !== '/account';
   useEffect(() => {

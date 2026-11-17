@@ -49,6 +49,15 @@ services:
       # Asistanın isteğe bağlı dil modeli (OpenAI uyumlu uç nokta). Boşsa asistan yalnız kaynaklardan yanıt verir.
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_MODEL: ${LLM_MODEL:-}
+      # Günlük mevzuat taraması (Resmî Gazete + Mevzuat Bilgi Sistemi). Pilotta KAPALI: yalnız yönetim ekranından elle taranır.
+      # Açmak için LEGISLATION_SCAN_ENABLED=1. Taban adresleri boşsa resmî adresler kullanılır; resmî olmayan bir adres
+      # (deneme kaynağı) verilirse o kaynaktan gelen her kayıt ÖRNEK sayılır.
+      LEGISLATION_SCAN_ENABLED: ${LEGISLATION_SCAN_ENABLED:-0}
+      LEGISLATION_SCAN_HOUR: ${LEGISLATION_SCAN_HOUR:-6}
+      LEGISLATION_RG_BASE: ${LEGISLATION_RG_BASE:-}
+      LEGISLATION_MEVZUAT_BASE: ${LEGISLATION_MEVZUAT_BASE:-}
+      LEGISLATION_MEVZUAT_WATCH: ${LEGISLATION_MEVZUAT_WATCH:-}
+      LEGISLATION_LOOKBACK_DAYS: ${LEGISLATION_LOOKBACK_DAYS:-3}
       LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-60000}
       # Yedekleme (yedek-al.cmd): şifreli yedekler ayrı birimde; anahtar dosyası ayar biriminde, yedek konumunda DEĞİL.
       BACKUP_TARGET_DIR: /var/lib/goverhub/yedek

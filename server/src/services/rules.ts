@@ -51,6 +51,30 @@ const has = (p: Principal, r: Principal['platformRoles'][number]) => p.platformR
 /** Creates a new draft version. Conditions are validated against the fact catalogue before they are stored. */
 export async function createDraft(tx: Tx, p: Principal, raw: DraftInput) {
   if (!has(p, 'rule_author')) throw forbidden('Kural taslağı yalnızca kural yazarı oluşturabilir.');
+  return insertDraft(tx, p.userId, raw);
+}
+
+/** Validates a draft input without writing anything (the same checks createDraft makes). Returns the parsed input. */
+export async function validateDraftInput(tx: Tx, raw: DraftInput) {
+  const input = draftSchema.parse(raw);
+  const cond = validateCondition(input.condition);
+  if (!cond.ok) throw invalid('Kural koşulu geçersiz.', cond.errors);
+  for (const t of input.templates) {
+    if (t.evidence.some(e => e.kind === 'measurement') && !t.limits.length) throw invalid(`"${t.code}" ölçüm istiyor ama limit tanımlamıyor; limit tahmin edilmez.`);
+  }
+  if (input.provisionIds.length) {
+    const src = await tx.query(`SELECT p.id, ls.is_example FROM provisions p JOIN source_versions sv ON sv.id = p.source_version_id JOIN legal_sources ls ON ls.id = sv.source_id WHERE p.id = ANY($1)`, [input.provisionIds]);
+    if (src.rowCount !== input.provisionIds.length) throw invalid('Bilinmeyen hüküm referansı.');
+    if (!input.isExample && src.rows.some(r => r.is_example)) throw invalid('Gerçek kural, örnek bir kaynağa dayanamaz.');
+  } else if (input.kind === 'legal_requirement' && !input.isExample) {
+    throw invalid('Mevzuat yükümlülüğü en az bir kaynak hükme bağlanmalı.');
+  }
+  return { input, condition: cond.condition };
+}
+
+/** Writes the draft for an already authorised author (the role check is the caller's). */
+export async function insertDraft(tx: Tx, authorId: string, raw: DraftInput) {
+  const p = { userId: authorId };
   const input = draftSchema.parse(raw);
   const cond = validateCondition(input.condition);
   if (!cond.ok) throw invalid('Kural koşulu geçersiz.', cond.errors);
@@ -163,15 +187,24 @@ export async function approve(tx: Tx, p: Principal, id: string, reason: string |
 export async function publish(tx: Tx, p: Principal, id: string, opts: { allowExampleRules: boolean; reason: string | null | undefined }) {
   if (!has(p, 'platform_admin') && !has(p, 'rule_reviewer')) throw forbidden();
   const why = needReason(opts.reason, 'Kuralı yayımlamak');
+  await publishVersion(tx, p.userId, id, { allowExampleRules: opts.allowExampleRules, reason: why });
+  const companies = (await tx.query<{ id: string }>(`SELECT id FROM companies`)).rows;
+  for (const c of companies) await recomputeCompany(tx, c.id, p.userId);
+  return { recomputedCompanies: companies.length };
+}
+
+/**
+ * Moves an approved version to "published" and retires the previous one. No re-evaluation here: the manual path above
+ * evaluates every company, the legislation path only the sites in scope.
+ */
+export async function publishVersion(tx: Tx, actorId: string, id: string, opts: { allowExampleRules: boolean; reason: string; extra?: Record<string, unknown> }) {
   const rv = await version(tx, id);
   if (rv.status !== 'approved') throw conflict('INVALID_STATE', 'Yalnızca onaylanmış sürüm yayınlanabilir.');
   if (rv.is_example && !opts.allowExampleRules) throw forbidden('Örnek kurallar yalnızca demo ortamında yayınlanabilir.');
   await tx.query(`UPDATE rule_versions SET status = 'retired', retired_at = now() WHERE rule_id = $1 AND status = 'published'`, [rv.rule_id]);
-  await tx.query(`UPDATE rule_versions SET status = 'published', published_by = $2, published_at = now() WHERE id = $1`, [id, p.userId]);
-  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.published', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, reason: why } });
-  const companies = (await tx.query<{ id: string }>(`SELECT id FROM companies`)).rows;
-  for (const c of companies) await recomputeCompany(tx, c.id, p.userId);
-  return { recomputedCompanies: companies.length };
+  await tx.query(`UPDATE rule_versions SET status = 'published', published_by = $2, published_at = now() WHERE id = $1`, [id, actorId]);
+  await appendAudit(tx, { companyId: null, actorId, eventType: 'rule.published', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, reason: opts.reason, ...(opts.extra ?? {}) } });
+  return rv;
 }
 
 /**

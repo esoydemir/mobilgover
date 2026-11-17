@@ -20,7 +20,7 @@ export function testUrls() {
   return { app, owner };
 }
 
-export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: boolean; mfaRequiredForPlatform?: boolean; demoLoginDomain?: string; llm?: import('../../src/services/llm').LlmConfig | null } = {}) {
+export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: boolean; mfaRequiredForPlatform?: boolean; demoLoginDomain?: string; legislation?: import('../../src/services/legislation').LegislationConfig; llm?: import('../../src/services/llm').LlmConfig | null } = {}) {
   const urls = testUrls();
   const owner = new pg.Client({ connectionString: urls.owner });
   await owner.connect();
@@ -38,7 +38,7 @@ export async function freshEnv(opts: { demoMode?: boolean; allowExampleRules?: b
     demoLoginDomain: opts.demoLoginDomain,
     llm: opts.llm ?? null,
   };
-  const app = buildApp({ db, store, mailer: new DevOutboxMailer(db), config });
+  const app = buildApp({ db, store, mailer: new DevOutboxMailer(db), config, legislation: opts.legislation });
   /** Direct connection as the owner, for assertions the API deliberately cannot make. */
   const ownerDb = new pg.Client({ connectionString: urls.owner });
   await ownerDb.connect();

@@ -37,6 +37,7 @@ export default function MoreRoute() {
     { icon: '🚩', label: 'Ağ moderasyonu', sub: 'Şikâyetler, gerekçeli kararlar', href: '/moderation', show: !!me?.platformRoles.includes('network_moderator') },
     { icon: '🪪', label: 'Uzman alanı', sub: 'Mesleki profil, doğrulama, teklifler', href: '/pro' },
     { icon: '🛡️', label: 'Yönetim', sub: 'Kural onayı ve pazar yeri incelemesi', href: '/admin', show: (me?.platformRoles.length ?? 0) > 0 },
+    { icon: '📜', label: 'Mevzuat takibi', sub: 'Günlük tarama, inceleme kuyruğu, onaylı uygulama', href: '/legislation', show: (me?.platformRoles.length ?? 0) > 0 },
     { icon: '🏛️', label: 'Kurum görünümü (sentetik demo)', sub: 'Bölge ve işletme türüne göre tekrar ve neden dağılımı; gerçek veri değil', href: '/institution', show: (me?.platformRoles.length ?? 0) > 0 || env?.mode === 'demo' },
     { icon: '⚙️', label: 'Hesap ve güvenlik', sub: 'Ek doğrulama, ortam bilgisi, çıkış', href: '/account' },
   ];
