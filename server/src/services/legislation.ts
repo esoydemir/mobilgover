@@ -142,15 +142,13 @@ async function storeChange(tx: Tx, c: DetectedChange, isExample: boolean): Promi
 
 // ───────────── Admin screen data ─────────────
 
-/** Next planned daily run (Europe/Istanbul is a fixed UTC+3). Null when the scheduler is off. If today's scan already succeeded, tomorrow's slot. */
-function nextScheduledRun(cfg: LegislationConfig | undefined, lastOkAt: string | Date | null, now = new Date()): string | null {
+/** Next planned daily run (Europe/Istanbul is a fixed UTC+3). Null when the scheduler is off. Only a successful SCHEDULED run counts for the day (a manual scan does not skip it). */
+export function nextScheduledRun(cfg: LegislationConfig | undefined, scheduledOkToday: boolean, now = new Date()): string | null {
   if (!cfg?.enabled) return null;
   const OFFSET = 3 * 3_600_000;
   const local = new Date(now.getTime() + OFFSET);
   let slot = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), cfg.scanHour) - OFFSET;
-  const lastOkLocalDay = lastOkAt ? new Date(new Date(lastOkAt).getTime() + OFFSET).toISOString().slice(0, 10) : null;
-  const todayLocal = local.toISOString().slice(0, 10);
-  if (lastOkLocalDay === todayLocal) slot += 24 * 3_600_000;           // today already done → tomorrow's slot
+  if (scheduledOkToday) slot += 24 * 3_600_000;                        // today's scheduled run is done → tomorrow's slot
   else if (now.getTime() > slot) return now.toISOString();            // slot passed, not done: due at the next tick
   return new Date(slot).toISOString();
 }
@@ -166,11 +164,12 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
   const lastOk = (await tx.query(`SELECT finished_at, trigger FROM legislation_scan_runs WHERE status = 'ok' ORDER BY finished_at DESC LIMIT 1`)).rows[0] ?? null;
   const lastRun = (await tx.query(`SELECT id, trigger, status, started_at, finished_at, results FROM legislation_scan_runs ORDER BY started_at DESC LIMIT 1`)).rows[0] ?? null;
   const unclear = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM legislation_changes WHERE status IN ('pending','drafted') AND date_status = 'unclear'`)).rows[0]!.n;
+  const schedOkToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [istanbulDay()])).rowCount ?? 0) > 0;
   return {
     sources, lastSuccessfulScan: lastOk, lastRun,
     pendingReview: (counts.pending ?? 0) + (counts.drafted ?? 0), counts: { pending: counts.pending ?? 0, drafted: counts.drafted ?? 0, scheduled: counts.scheduled ?? 0, applied: counts.applied ?? 0, rejected: counts.rejected ?? 0 },
     unclearDates: unclear,
-    schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, lastOk?.finished_at ?? null) },
+    schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday) },
     baselineNote: 'İlk okuma yalnız TABAN kaydeder: o gün mevcut metinler "değişiklik" sayılmaz, kuyruğa kayıt düşmez. Kuyruğa yalnız sonraki okumalardaki farklar ve yeni yayınlar girer.',
     canScan: has(p, 'platform_admin') || has(p, 'rule_reviewer'),
     exampleNote: 'Örnek/sentetik kaynaktan gelen kayıtlar ÖRNEKTİR; gerçek veya uzman onaylı mevzuat olarak yayımlanamaz.',
