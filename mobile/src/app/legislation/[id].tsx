@@ -16,7 +16,8 @@ type Impact = { onDate: string; affectedSites: number; notifiedSites: number; ou
   sites: { siteId: string; site: string; company: string; from: string | null; to: string; effect: string; reason: string; openTasks: number; openTaskEffect: string; notify: boolean; missingFacts: string[] }[] };
 type Detail = {
   id: string; status: string; changeType: string; typeLabel: string; docRef: string; docTitle: string; articleRef: string | null; sourceUrl: string; sourceCode: string; publishedOn: string | null; effectiveFrom: string | null;
-  dateStatus: 'known' | 'unclear'; dateNote: string | null; oldText: string | null; newText: string | null; suggestion: { relevance?: string; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] } } | null;
+  dateStatus: 'known' | 'unclear'; dateNote: string | null; oldText: string | null; newText: string | null; suggestion: { relevance?: string; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] };
+    effectiveDetail?: { general: { articleIds: string[]; clause: string | null }; transitional: { articleId: string; dates: string[]; sentence: string }[]; scope: { articleId: string; text: string } | null } } | null;
   isExample: boolean; exampleNote: string | null; proposal: any | null; rule: { id: string; code: string; version: number; status: string } | null; missingAreaReviews: string[];
   approveReason: string | null; rejectReason: string | null; applyOn: string | null; appliedAt: string | null; applyResult: any | null;
   impact: Impact | null; impactNote: string | null; history: { seq: number; occurred_at: string; event_type: string; payload: any; actor: string | null }[];
@@ -95,6 +96,19 @@ export default function LegislationDetailRoute() {
             <Field testID="leg-date-note" label="Gerekçe (Resmî Gazete metnine göre)" value={dateNote} onChangeText={setDateNote} />
             <GhostButton testID="leg-date-save" label="Tarihi kaydet" height={38} size={12} disabled={!/^\d{4}-\d{2}-\d{2}$/.test(dateIn) || dateNote.trim().length === 0}
               onPress={() => act(() => call('POST', `/admin/legislation/changes/${id}/resolve-date`, { date: dateIn, note: dateNote.trim() }), 'Yürürlük tarihi kaydedildi')} />
+          </View>
+        ) : null}
+        {sg?.effectiveDetail ? (
+          <View testID="leg-effective-detail" style={{ gap: 6, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 10 }}>
+            <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>YÜRÜRLÜK AYRINTISI (AYRI ALANLAR)</Text>
+            <Text style={type(12.5, 600)}>Genel yürürlük hükmü{sg.effectiveDetail.general.articleIds.length ? ` (md. ${sg.effectiveDetail.general.articleIds.join(', ')})` : ''}</Text>
+            <Text testID="leg-eff-general" style={type(12, 400, { color: C.t2, lh: 1.5 })}>{sg.effectiveDetail.general.clause ?? 'Metinde genel yürürlük hükmü bulunamadı.'}</Text>
+            <Text style={type(12.5, 600)}>Geçiş / ileri tarihli hükümler</Text>
+            {sg.effectiveDetail.transitional.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>İleri tarihli geçiş hükmü bulunamadı.</Text> :
+              sg.effectiveDetail.transitional.map((t, i) => <Text key={i} testID="leg-eff-transition" style={type(12, 400, { color: C.t2, lh: 1.5 })}>• md. {t.articleId} · {t.dates.map(dayTr).join(', ')} — {t.sentence}</Text>)}
+            <Text style={type(12.5, 600)}>Kapsam / faaliyet koşulu</Text>
+            <Text testID="leg-eff-scope" style={type(12, 400, { color: C.t2, lh: 1.5 })}>{sg.effectiveDetail.scope ? `md. ${sg.effectiveDetail.scope.articleId}: ${sg.effectiveDetail.scope.text}` : 'Ayrı bir kapsam maddesi bulunamadı.'}</Text>
+            <Text style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>Tek bir geçiş tarihi tüm işletmelere uygulanmaz; hangi ürün/faaliyet için hangi tarihin geçerli olduğuna uzman/yönetici gerekçeli karar verir.</Text>
           </View>
         ) : null}
       </Card>

@@ -4,6 +4,7 @@ import { recordFact } from '../../src/services/profile';
 import { recomputeSite } from '../../src/services/obligations';
 import { applyDue, legislationTick, runScan } from '../../src/services/legislation';
 import { istanbulDay } from '../../src/services/legislation-sources';
+import { createSession } from '../../src/services/principal';
 import { client, freshEnv, type Env } from '../support/env';
 import { SyntheticSource } from '../support/legislation-fixtures';
 
@@ -234,6 +235,16 @@ describe('approval gate', () => {
     expect(v.rule).toMatchObject({ code: 'EX-LEG-LPG', version: 1 });
     expect(v.rule.label).toContain('ÖRNEK');
     expect(v.source.url).toContain('sentetik.test');
+    // A separate session scoped ONLY to the out-of-scope site (siteB) gets no notification and cannot open the change for its site.
+    const bUser = await env.db.system(async tx => {
+      const uid = (await tx.query<{ id: string }>(`INSERT INTO users (display_name) VALUES ('Beşiktaş şube yöneticisi') RETURNING id`)).rows[0]!.id;
+      await tx.query(`INSERT INTO memberships (user_id, company_id, site_id, role) VALUES ($1,$2,$3,'site_manager')`, [uid, demo.companyId, siteB]);
+      return { id: uid, token: await createSession(tx, uid, 1) };
+    });
+    const bList = (await client(env, bUser.token).get(`/companies/${demo.companyId}/notifications`)).body;
+    expect((bList.items ?? bList).filter((x: any) => x.kind === 'legislation_change' && x.entity_id === id)).toHaveLength(0);
+    const bView = await client(env, bUser.token).get(`/companies/${demo.companyId}/legislation-changes/${id}`);
+    expect(bView.status === 404 || !(bView.body.sites ?? []).some((s: any) => /Beşiktaş/.test(s.site) && s.decision === 'applies')).toBe(true);
     // Another business never sees it.
     const other = await seedDemoCompany(env.db, { name: 'Başka İşletme' });
     expect((await client(env, other.users.owner.token).get(`/companies/${other.companyId}/legislation-changes/${id}`)).status).toBe(404);
