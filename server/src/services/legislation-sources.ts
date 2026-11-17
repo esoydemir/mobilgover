@@ -226,7 +226,11 @@ export function effectiveDetail(doc: Pick<GazetteDocument, 'articles' | 'effecti
       if (dates.length && transitional.length < 8) transitional.push({ articleId: a.id, dates, sentence: normText(s).slice(0, 400) });
     }
   }
-  const sc = doc.articles.slice(0, 4).find(a => /kapsa(r|m)/i.test(a.text));
+  // The scope article. Gazette headings ("Kapsam") are appended to the END of the previous article's text, so a heading
+  // "Kapsam" at an article's tail means the NEXT article is the scope; otherwise the first early article saying "... kapsar".
+  const early = doc.articles.slice(0, 5);
+  const headIdx = early.findIndex(a => /\bKapsam\s*$/.test(a.text.trim()));
+  const sc = headIdx >= 0 && early[headIdx + 1] ? early[headIdx + 1] : early.find(a => /\bkapsa(r|mında)\b/i.test(a.text.replace(/\bKapsam\s*$/, '')));
   return {
     general: { articleIds: eff.map(a => a.id), clause: doc.effectiveClauses.length ? normText(doc.effectiveClauses.join(' • ')).slice(0, 400) : null },
     transitional, scope: sc ? { articleId: sc.id, text: sc.text.slice(0, 400) } : null,

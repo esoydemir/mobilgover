@@ -19,7 +19,8 @@ describe('Peynir Tebliği (2026/24): effective-date parts are separate fields', 
     expect(d.transitional.every(t => t.dates.every(x => x > '2026-11-10'))).toBe(true);
     expect(d.transitional.map(t => t.dates).flat()).toContain('2027-04-30');
     expect(d.transitional.some(t => /dilimlenebilir eritme peynir/i.test(t.sentence))).toBe(true);
-    expect(d.scope?.text).toMatch(/kapsa/i);
+    expect(d.scope?.articleId).toBe('2'); // heading "Kapsam" trails article 1; the scope article is 2
+    expect(d.scope?.text).toMatch(/peynirleri kapsar/i);
     expect(c.suggestion.effectiveDetail).not.toHaveProperty('appliesTo'); // no applicability verdict
   });
   it('an instrument with no later dates has an empty transition list', () => {

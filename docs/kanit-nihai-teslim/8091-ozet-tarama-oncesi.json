@@ -1,0 +1,61 @@
+{
+ "status": 200,
+ "body": {
+  "sources": [
+   {
+    "code": "mevzuat",
+    "name": "Mevzuat Bilgi Sistemi",
+    "base_url": "https://www.mevzuat.gov.tr",
+    "is_example": false,
+    "enabled": true,
+    "last_attempt_at": null,
+    "last_success_at": null,
+    "last_error": null,
+    "last_error_at": null,
+    "last_error_kind": null,
+    "failures_in_row": 0,
+    "last_items_seen": null,
+    "last_docs_read": null,
+    "queue_total": 0,
+    "queue_open": 0
+   },
+   {
+    "code": "resmi_gazete",
+    "name": "Resmî Gazete",
+    "base_url": "https://www.resmigazete.gov.tr",
+    "is_example": false,
+    "enabled": true,
+    "last_attempt_at": null,
+    "last_success_at": null,
+    "last_error": null,
+    "last_error_at": null,
+    "last_error_kind": null,
+    "failures_in_row": 0,
+    "last_items_seen": null,
+    "last_docs_read": null,
+    "queue_total": 0,
+    "queue_open": 0
+   }
+  ],
+  "lastSuccessfulScan": null,
+  "lastRun": null,
+  "pendingReview": 0,
+  "counts": {
+   "pending": 0,
+   "drafted": 0,
+   "scheduled": 0,
+   "applied": 0,
+   "rejected": 0
+  },
+  "unclearDates": 0,
+  "schedule": {
+   "enabled": true,
+   "timezone": "Europe/Istanbul",
+   "dailyAtHour": 6,
+   "nextRunAt": "2026-11-18T03:00:00.000Z"
+  },
+  "baselineNote": "İlk okuma yalnız TABAN kaydeder: o gün mevcut metinler \"değişiklik\" sayılmaz, kuyruğa kayıt düşmez. Kuyruğa yalnız sonraki okumalardaki farklar ve yeni yayınlar girer.",
+  "canScan": true,
+  "exampleNote": "Örnek/sentetik kaynaktan gelen kayıtlar ÖRNEKTİR; gerçek veya uzman onaylı mevzuat olarak yayımlanamaz."
+ }
+}

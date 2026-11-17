@@ -1,0 +1,29 @@
+{
+ "status": 200,
+ "body": {
+  "runId": "e666678e-c7ef-44a0-abe2-8d1a7986e498",
+  "status": "ok",
+  "results": [
+   {
+    "source": "resmi_gazete",
+    "ok": true,
+    "seen": 149,
+    "docsRead": 1,
+    "created": 0,
+    "errors": [],
+    "errorKind": null,
+    "notes": []
+   },
+   {
+    "source": "mevzuat",
+    "ok": true,
+    "seen": 149,
+    "docsRead": 6,
+    "created": 0,
+    "errors": [],
+    "errorKind": null,
+    "notes": []
+   }
+  ]
+ }
+}
