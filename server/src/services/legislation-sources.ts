@@ -12,26 +12,72 @@ export type Fetcher = (url: string) => Promise<FetchResult>;
 export const OFFICIAL_HOSTS = { resmi_gazete: 'resmigazete.gov.tr', mevzuat: 'mevzuat.gov.tr' } as const;
 export type SourceCode = keyof typeof OFFICIAL_HOSTS;
 
+/**
+ * Why a source could not be used. The kind is shown on the source-health screen so that "unreadable" is never mistaken for
+ * "no change": timeout, blocked (403/429/robot page), http_error, network, empty body, unexpected_format (PDF/JSON/non-HTML),
+ * corrupt (parsed far less than the last good read), refused_link (a link outside the configured official host).
+ */
+export type SourceErrorKind = 'timeout' | 'blocked' | 'not_found' | 'http_error' | 'network' | 'empty' | 'unexpected_format' | 'corrupt' | 'refused_link';
+export const ERROR_KIND_TR: Record<SourceErrorKind, string> = {
+  timeout: 'zaman aşımı', blocked: 'erişim engeli', not_found: 'sayfa yok', http_error: 'sunucu hatası', network: 'bağlantı hatası',
+  empty: 'boş yanıt', unexpected_format: 'beklenmeyen biçim', corrupt: 'bozuk/eksik metin', refused_link: 'resmî olmayan bağlantı reddedildi',
+};
+export class SourceError extends Error {
+  constructor(public kind: SourceErrorKind, message: string) { super(`[${ERROR_KIND_TR[kind]}] ${message}`); }
+}
+/** The kind of a recorded error message ("[zaman aşımı] ..."), or null for an older/unclassified one. */
+export function errorKindOf(message: string): SourceErrorKind | null {
+  const m = /(?:^|: )\[([^\]]+)\]/.exec(message);
+  return (Object.entries(ERROR_KIND_TR).find(([, v]) => v === m?.[1])?.[0] as SourceErrorKind | undefined) ?? null;
+}
+
+const bare = (h: string) => h.toLowerCase().replace(/^www\./, '');
+export const sameHost = (a: string, b: string) => { try { return bare(new URL(a).hostname) === bare(new URL(b).hostname); } catch { return false; } };
+
 export const defaultFetcher: Fetcher = async url => {
   const r = await fetch(url, { headers: { 'user-agent': 'GoverHubLegislationWatch/1.0 (+yerel pilot; gunluk tarama)', accept: 'text/html,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(25_000) });
+  // A redirect may only stay on the host that was asked for; the watch never follows a source to another site.
+  if (r.url && !sameHost(r.url, url)) throw new SourceError('refused_link', `${url} başka bir adrese yönlendirdi (${new URL(r.url).hostname}); izlenmedi`);
   return { status: r.status, body: new Uint8Array(await r.arrayBuffer()), contentType: r.headers.get('content-type') };
 };
 
-/** A fetch that retries transient failures (network error, 5xx, 429) with growing waits; returns the final answer or throws. */
+/** A fetch that retries transient failures (network error, 5xx, 429) with growing waits; returns the final answer or throws a classified SourceError. */
 export async function fetchWithRetry(fetcher: Fetcher, url: string, o: { attempts?: number; sleep?: (ms: number) => Promise<void> } = {}): Promise<FetchResult> {
   const attempts = o.attempts ?? 3;
   const sleep = o.sleep ?? (ms => new Promise<void>(r => setTimeout(r, ms)));
   let last = 'bilinmeyen hata';
+  let kind: SourceErrorKind = 'network';
   for (let i = 1; i <= attempts; i++) {
     try {
       const r = await fetcher(url);
       if (r.status >= 200 && r.status < 300) return r;
       last = `HTTP ${r.status}`;
+      kind = r.status === 403 || r.status === 401 || r.status === 429 || r.status === 451 ? 'blocked' : r.status === 404 || r.status === 410 ? 'not_found' : 'http_error';
       if (r.status < 500 && r.status !== 429) break; // not transient: 404/403 will not fix itself within seconds
-    } catch (e) { last = (e as Error).message || String(e); }
+    } catch (e) {
+      if (e instanceof SourceError) throw e; // a refused link is final
+      last = (e as Error).message || String(e);
+      kind = (e as Error).name === 'TimeoutError' || (e as Error).name === 'AbortError' || /timeout|timed out|zaman/i.test(last) ? 'timeout' : 'network';
+    }
     if (i < attempts) await sleep(1000 * 2 ** (i - 1));
   }
-  throw new Error(`${url} okunamadı (${last})`);
+  throw new SourceError(kind, `${url} okunamadı (${last})`);
+}
+
+const BLOCK_PAGE = /access denied|erişim(iniz)?\s+engellendi|are you a robot|captcha|cloudflare|request blocked|the requested url was rejected/i;
+/**
+ * A 200 answer is not yet a usable page: it can be empty, a PDF/JSON, or a robot/"access denied" page. Each is a different
+ * failure, and none of them may be read as "the text did not change".
+ */
+export function requireHtml(r: FetchResult, url: string): string {
+  if (r.body.length < 40) throw new SourceError('empty', `${url} boş ya da çok kısa yanıt verdi (${r.body.length} bayt)`);
+  const ct = (r.contentType ?? '').toLowerCase();
+  const head = Buffer.from(r.body.slice(0, 8)).toString('latin1');
+  if (/pdf|json|octet-stream|image\//.test(ct) || head.startsWith('%PDF')) throw new SourceError('unexpected_format', `${url} HTML yerine ${ct || 'bilinmeyen'} döndü`);
+  const text = decodeHtml(r);
+  if (!/<\s*(html|body|div|p|table)\b/i.test(text)) throw new SourceError('unexpected_format', `${url} yanıtı HTML sayfa değil`);
+  if (BLOCK_PAGE.test(htmlToText(text).slice(0, 600)) && htmlToText(text).length < 3000) throw new SourceError('blocked', `${url} erişim engeli/robot doğrulama sayfası döndü`);
+  return text;
 }
 
 export function decodeHtml(r: FetchResult): string {
@@ -52,7 +98,12 @@ export function htmlToText(html: string): string {
 }
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-export const normText = (s: string) => s.replace(/\s+/g, ' ').trim();
+/**
+ * Comparison form of a text: Unicode NFC, invisible characters (zero-width, soft hyphen, BOM) removed, every kind of space
+ * (non-breaking included) collapsed to one. Words, digits, punctuation and letter case are NOT touched, so nothing that
+ * carries meaning is lost; only differences a reader cannot see stop producing "changes".
+ */
+export const normText = (s: string) => s.normalize('NFC').replace(/[​-‍⁠﻿­]/g, '').replace(/\s+/g, ' ').trim();
 
 // ── Dates ──
 const MONTHS: Record<string, number> = { ocak: 1, şubat: 2, mart: 3, nisan: 4, mayıs: 5, haziran: 6, temmuz: 7, ağustos: 8, eylül: 9, ekim: 10, kasım: 11, aralık: 12 };
@@ -153,7 +204,8 @@ export function parseGazetteDocument(html: string, fallback: { title: string; pu
   return { sayi, publishedOn: fallback.publishedOn, issuer, title: fallback.title, articles, effectiveClauses, text };
 }
 
-export type ScanOutcome = { seen: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
+/** `docsRead`: documents (gazette items / watched consolidated texts) read and parsed in this scan, separate from `seen` (items or articles). */
+export type ScanOutcome = { seen: number; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
 
 /** The date list of a scan window, newest last, in the Istanbul calendar. */
 export function istanbulDay(d = new Date()) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(d); }
@@ -163,13 +215,16 @@ export function daysBack(today: string, n: number): string[] {
 }
 
 export async function scanGazette(o: { baseUrl: string; today: string; lookbackDays: number; fetcher: Fetcher; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
-  const out: ScanOutcome = { seen: 0, changes: [], errors: [], snapshots: [], notes: [] };
+  const out: ScanOutcome = { seen: 0, docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
   const base = o.baseUrl.replace(/\/+$/, '');
   for (const day of daysBack(o.today, o.lookbackDays)) {
     let items: GazetteItem[];
     try {
-      const r = await fetchWithRetry(o.fetcher, `${base}/fihrist?tarih=${day}`, { sleep: o.sleep });
-      items = parseGazetteIndex(decodeHtml(r));
+      const idxUrl = `${base}/fihrist?tarih=${day}`;
+      const html = requireHtml(await fetchWithRetry(o.fetcher, idxUrl, { sleep: o.sleep }), idxUrl);
+      items = parseGazetteIndex(html);
+      // A day list with no items AND none of the page's list markers is a changed/broken page, not "nothing published".
+      if (!items.length && !/gunluk-akis|fihrist-item|html-content/i.test(html)) throw new SourceError('unexpected_format', `${idxUrl} günlük fihrist biçiminde değil (liste bulunamadı)`);
     } catch (e) { out.errors.push(`${day}: ${(e as Error).message}`); continue; }
     out.seen += items.length;
     for (const it of items) {
@@ -177,9 +232,18 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
       if (!rel.relevant) continue;
       try {
         const url = new URL(it.url, base + '/').toString();
-        const doc = parseGazetteDocument(decodeHtml(await fetchWithRetry(o.fetcher, url, { sleep: o.sleep })), { title: it.title, publishedOn: day });
+        // Links inside the day list are followed only when they stay on the configured source host.
+        if (!sameHost(url, base)) throw new SourceError('refused_link', `${url} yapılandırılmış kaynak adresinin dışında; izlenmedi`);
+        const doc = parseGazetteDocument(requireHtml(await fetchWithRetry(o.fetcher, url, { sleep: o.sleep }), url), { title: it.title, publishedOn: day });
+        out.docsRead += 1;
         const type = changeTypeFromTitle(it.title);
-        const eff = parseEffective(doc.effectiveClauses, day);
+        let eff = parseEffective(doc.effectiveClauses, day);
+        // "Yayımı tarihinde yürürlüğe girer" can sit next to transition dates in other articles (e.g. "30/4/2027 tarihinden sonra ...").
+        // Such a text has more than one date that matters, so an administrator must decide; it is never read as a plain known date.
+        if (eff.status === 'known') {
+          const later = [...new Set(doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).flatMap(a => datesIn(a.text)).filter(d => d > day))].sort();
+          if (later.length) eff = { status: 'unclear', date: null, note: `Yürürlük maddesi ${trDate(eff.date)} gösteriyor, ancak metinde ileri tarihli/geçiş hükümleri var (${later.slice(0, 4).map(trDate).join(', ')}). Hangi tarihin uygulanacağını yönetici metinden belirlemeli.` };
+        }
         const file = url.split('/').pop()!.replace(/\.html?$/i, '');
         const newText = type === 'repeal' ? null : doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).map(a => `MADDE ${a.id} – ${a.text}`).join('\n\n') || doc.text.slice(0, 4000);
         out.changes.push({
@@ -197,16 +261,38 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
 }
 
 // ── Mevzuat Bilgi Sistemi (consolidated text, compared with the last snapshot) ──
-export type WatchDoc = { tur: number; no: number; tertip: number; label: string };
-export const DEFAULT_MEVZUAT_WATCH: WatchDoc[] = [{ tur: 1, no: 5996, tertip: 5, label: 'Veteriner Hizmetleri, Bitki Sağlığı, Gıda ve Yem Kanunu' }];
+/** `articles`: optional filter, only these article ids produce changes (the whole text is still read and kept as the baseline). */
+export type WatchDoc = { tur: number; no: number; tertip: number; label: string; articles?: string[] };
+/** Initial inventory for café/restaurant food safety; every id was read from the official consolidated text (docs/MEVZUAT_IZLEME_ENVANTERI.md). */
+export const DEFAULT_MEVZUAT_WATCH: WatchDoc[] = [
+  { tur: 1, no: 5996, tertip: 5, label: 'Kanun 5996 (Veteriner Hizmetleri, Bitki Sağlığı, Gıda ve Yem)', articles: ['22', '24', '29', '30', '31', '32', '36'] },
+  { tur: 7, no: 15592, tertip: 5, label: 'Gıda Hijyeni Yönetmeliği' },
+  { tur: 7, no: 15594, tertip: 5, label: 'Gıda İşletmelerinin Kayıt ve Onay İşlemlerine Dair Yönetmelik' },
+  { tur: 7, no: 18552, tertip: 5, label: 'Hijyen Eğitimi Yönetmeliği' },
+  { tur: 9, no: 20147, tertip: 5, label: 'Hızlı Dondurulmuş Gıdalar Tebliği (2014/47)' },
+  { tur: 9, no: 20148, tertip: 5, label: 'Hızlı Dondurulmuş Gıdaların Sıcaklık İzleme Tebliği (2014/48)' },
+];
+/**
+ * `tür:no:tertip:ad[:m=22;24;G1]`, comma separated. The optional last segment `m=` limits the watched articles (for a law that is
+ * mostly about other sectors). Not described by the official sites: the list is OUR inventory (docs/MEVZUAT_IZLEME_ENVANTERI.md).
+ */
 export const parseWatchList = (s: string | undefined): WatchDoc[] => !s?.trim() ? DEFAULT_MEVZUAT_WATCH
-  : s.split(',').map(x => x.trim()).filter(Boolean).map(x => { const [tur, no, tertip, ...label] = x.split(':'); return { tur: Number(tur), no: Number(no), tertip: Number(tertip), label: label.join(':') || `Mevzuat ${no}` }; })
-    .filter(w => w.tur > 0 && w.no > 0 && w.tertip > 0);
+  : s.split(',').map(x => x.trim()).filter(Boolean).map(x => {
+    const parts = x.split(':');
+    const [tur, no, tertip] = parts;
+    let articles: string[] | undefined;
+    const last = parts[parts.length - 1] ?? '';
+    if (parts.length > 4 && /^m=/i.test(last)) { articles = last.slice(2).split(';').map(a => a.trim()).filter(Boolean); parts.pop(); }
+    const label = parts.slice(3).join(':');
+    return { tur: Number(tur), no: Number(no), tertip: Number(tertip), label: label || `Mevzuat ${no}`, ...(articles?.length ? { articles } : {}) };
+  }).filter(w => w.tur > 0 && w.no > 0 && w.tertip > 0);
 const watchKey = (w: WatchDoc) => `mv:${w.tur}.${w.tertip}.${w.no}`;
 
 export function parseConsolidated(html: string): { title: string; articles: Record<string, string> } {
   const text = htmlToText(html);
-  const title = text.split('\n').find(l => l.trim().length > 8)?.trim() ?? 'Başlıksız';
+  // The title is the heading block before the first article/section ("TÜRK" and "GIDA KODEKSİ ..." may sit on separate lines).
+  const head = text.split(/\n\s*(?:GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+\d|Kanun\s+Numarası|BİRİNCİ\s+(?:BÖLÜM|KISIM)|\sAmaç(?=\s|$)/)[0] ?? '';
+  const title = normText(head.replace(/^\s*\d+\s+/, '')).slice(0, 200) || 'Başlıksız';
   const articles: Record<string, string> = {};
   const marks = [...text.matchAll(/(?:^|\n)\s*(GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+(\d+(?:\/[A-Za-z0-9]+)?)\s*[-–—]/g)];
   marks.forEach((m, i) => {
@@ -218,20 +304,29 @@ export function parseConsolidated(html: string): { title: string; articles: Reco
 }
 
 export async function scanConsolidated(o: { baseUrl: string; watch: WatchDoc[]; previous: Map<string, Record<string, string>>; fetcher: Fetcher; today: string; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
-  const out: ScanOutcome = { seen: 0, changes: [], errors: [], snapshots: [], notes: [] };
+  const out: ScanOutcome = { seen: 0, docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
   const base = o.baseUrl.replace(/\/+$/, '');
   for (const w of o.watch) {
     const url = `${base}/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=${w.tur}&MevzuatNo=${w.no}&MevzuatTertip=${w.tertip}`;
     try {
-      const parsed = parseConsolidated(decodeHtml(await fetchWithRetry(o.fetcher, url, { sleep: o.sleep })));
-      if (!Object.keys(parsed.articles).length) throw new Error('metinde madde bulunamadı (sayfa biçimi değişmiş olabilir)');
-      out.seen += Object.keys(parsed.articles).length;
+      const parsed = parseConsolidated(requireHtml(await fetchWithRetry(o.fetcher, url, { sleep: o.sleep }), url));
+      const count = Object.keys(parsed.articles).length;
+      if (!count) throw new SourceError('unexpected_format', 'metinde madde bulunamadı (sayfa biçimi değişmiş olabilir)');
       const key = watchKey(w);
-      out.snapshots.push({ docKey: key, title: parsed.title, url, articles: parsed.articles });
       const prev = o.previous.get(key);
-      if (!prev) { out.notes.push(`${w.label}: ilk okuma, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).`); continue; }
+      // A read that finds far fewer articles than the last good one is a truncated/corrupt page, not a repeal of half the law.
+      // The baseline is kept and the source shows an error.
+      if (prev && Object.keys(prev).length >= 6 && count < Object.keys(prev).length * 0.6) {
+        throw new SourceError('corrupt', `${count} madde okundu, önceki sağlıklı okumada ${Object.keys(prev).length} vardı; taban korundu`);
+      }
+      out.seen += count;
+      out.docsRead += 1;
+      out.snapshots.push({ docKey: key, title: parsed.title, url, articles: parsed.articles });
+      if (!prev) { out.notes.push(`${w.label}: ilk okuma, ${count} madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).`); continue; }
       const mulga = (t: string | undefined) => !!t && /^\(?\s*mülga/i.test(t);
+      const watched = (id: string) => !w.articles || w.articles.includes(id);
       for (const [id, now] of Object.entries(parsed.articles)) {
+        if (!watched(id)) continue;
         const before = prev[id];
         if (before !== undefined && normText(before) === normText(now)) continue;
         const repealed = mulga(now) && !mulga(before);
@@ -245,7 +340,7 @@ export async function scanConsolidated(o: { baseUrl: string; watch: WatchDoc[]; 
         });
       }
       for (const id of Object.keys(prev)) {
-        if (parsed.articles[id] === undefined && !mulga(prev[id])) {
+        if (watched(id) && parsed.articles[id] === undefined && !mulga(prev[id])) {
           out.changes.push({
             sourceCode: 'mevzuat', externalKey: `${key}:${id}:${sha('REMOVED').slice(0, 16)}`, changeType: 'repeal',
             docRef: `${w.label} (Mevzuat ${w.no})`, docTitle: parsed.title, articleRef: id, sourceUrl: url, publishedOn: null,

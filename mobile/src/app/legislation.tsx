@@ -12,7 +12,8 @@ import { dayTr, STATUS_TR } from '../features/legislation';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
-type Source = { code: string; name: string; base_url: string; is_example: boolean; last_attempt_at: string | null; last_success_at: string | null; last_error: string | null; last_error_at: string | null; failures_in_row: number };
+type Source = { code: string; name: string; base_url: string; is_example: boolean; last_attempt_at: string | null; last_success_at: string | null; last_error: string | null; last_error_at: string | null; failures_in_row: number;
+  last_error_kind?: string | null; last_docs_read?: number | null; last_items_seen?: number | null; queue_total?: number; queue_open?: number };
 type Overview = {
   sources: Source[]; lastSuccessfulScan: { finished_at: string; trigger: string } | null; lastRun: { status: string; started_at: string; trigger: string } | null;
   pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number }; canScan: boolean; exampleNote: string;
@@ -20,6 +21,7 @@ type Overview = {
 type Row = { id: string; source_code: string; change_type: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null;
   date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null };
 
+const ERROR_KIND_TR: Record<string, string> = { timeout: 'Zaman aşımı', blocked: 'Erişim engeli', not_found: 'Sayfa yok', http_error: 'Sunucu hatası', network: 'Bağlantı hatası', empty: 'Boş yanıt', unexpected_format: 'Beklenmeyen biçim (HTML değil / sayfa yapısı değişmiş)', corrupt: 'Bozuk/eksik metin', refused_link: 'Resmî olmayan bağlantı reddedildi', unknown: 'Sınıflanmamış hata' };
 const SOURCE_TR: Record<string, string> = { resmi_gazete: 'Resmî Gazete', mevzuat: 'Mevzuat Bilgi Sistemi' };
 
 /** Legislation watch: daily scan health, review queue, manual rescan. Platform staff only. */
@@ -78,9 +80,11 @@ export default function LegislationRoute() {
                 {s.is_example ? <ExampleBadge label="SENTETİK KAYNAK" /> : null}
               </View>
               <Text style={type(11.5, 400, { color: C.t3 })}>{s.base_url}</Text>
+              <Text testID={`leg-source-attempt-${s.code}`} style={type(12, 500, { color: C.t2 })}>Son deneme: {s.last_attempt_at ? fmtDateTime(s.last_attempt_at) : 'henüz yok'}</Text>
               <Text style={type(12, 500, { color: C.t2 })}>Son başarılı okuma: {s.last_success_at ? fmtDateTime(s.last_success_at) : 'yok'}</Text>
+              <Text testID={`leg-source-counts-${s.code}`} style={type(12, 500, { color: C.t2 })}>Okunan belge: {s.last_docs_read ?? 0} · Taranan kalem/madde: {s.last_items_seen ?? 0} · Kuyrukta: {s.queue_open ?? 0} açık / {s.queue_total ?? 0} toplam</Text>
               {s.last_error ? (
-                <Text testID={`leg-source-error-${s.code}`} style={type(12, 600, { color: C.crit, lh: 1.45 })}>Hata ({s.failures_in_row} kez üst üste): {s.last_error}{s.last_error_at ? ` · ${fmtDateTime(s.last_error_at)}` : ''}. Son başarılı veri korunuyor.</Text>
+                <Text testID={`leg-source-error-${s.code}`} style={type(12, 600, { color: C.crit, lh: 1.45 })}>{s.last_error_kind ? `${ERROR_KIND_TR[s.last_error_kind] ?? s.last_error_kind} — ` : ''}Hata ({s.failures_in_row} kez üst üste): {s.last_error}{s.last_error_at ? ` · ${fmtDateTime(s.last_error_at)}` : ''}. Son sağlıklı okuma taban olarak korunuyor; bu "değişiklik yok" demek DEĞİLDİR.</Text>
               ) : <Text style={type(12, 500, { color: C.lime })}>Hata yok</Text>}
             </Card>
           ))}

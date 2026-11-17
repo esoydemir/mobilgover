@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { compareTexts, decodeHtml, fetchWithRetry, foodSafetyRelevance, parseConsolidated, parseEffective, parseGazetteDocument, parseGazetteIndex, parseWatchList, type Fetcher } from '../src/services/legislation-sources';
+import { compareTexts, decodeHtml, errorKindOf, fetchWithRetry, foodSafetyRelevance, normText, parseConsolidated, parseEffective, parseGazetteDocument, parseGazetteIndex, parseWatchList, requireHtml, scanConsolidated, scanGazette, sameHost, SourceError, type Fetcher, type FetchResult } from '../src/services/legislation-sources';
 
 const fx = (n: string) => readFileSync(new URL(`./fixtures/legislation/${n}`, import.meta.url), 'latin1');
 
@@ -40,7 +40,11 @@ describe('date and relevance rules', () => {
   });
   it('watch list env format', () => {
     expect(parseWatchList('1:5996:5:Kanun,7:99:5:Yön')).toHaveLength(2);
-    expect(parseWatchList(undefined)).toHaveLength(1);
+    expect(parseWatchList(undefined)).toHaveLength(6);
+    const f = parseWatchList('1:5996:5:Kanun 5996:m=22;24;29')[0]!;
+    expect(f.label).toBe('Kanun 5996');
+    expect(f.articles).toEqual(['22', '24', '29']);
+    expect(parseWatchList('7:1:5:A:B')[0]).toMatchObject({ label: 'A:B' });
   });
   it('decodes windows-1254 pages', () => {
     const body = new Uint8Array([0x47, 0xFD, 0x64, 0xFD]); // "Gıdı" in windows-1254

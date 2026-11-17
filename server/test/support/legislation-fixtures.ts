@@ -10,6 +10,8 @@ export class SyntheticSource {
   days = new Map<string, SynthItem[]>();
   consolidated = new Map<string, { title: string; articles: Record<string, string> }>();
   down = false;
+  /** A reachable but unusable answer, to tell failure kinds apart: timeout, blocked (403), empty body, a PDF, a robot page. */
+  fail: null | 'timeout' | 'blocked' | 'empty' | 'pdf' | 'robot' = null;
   calls: string[] = [];
   readonly rg = 'https://sentetik.test/rg';
   readonly mv = 'https://sentetik.test/mv';
@@ -18,6 +20,11 @@ export class SyntheticSource {
   fetcher: Fetcher = async (url): Promise<FetchResult> => {
     this.calls.push(url);
     if (this.down) throw new Error('bağlantı kesildi (sentetik kesinti)');
+    if (this.fail === 'timeout') { const e = new Error('The operation timed out'); e.name = 'TimeoutError'; throw e; }
+    if (this.fail === 'blocked') return { status: 403, body: new Uint8Array(), contentType: 'text/html' };
+    if (this.fail === 'empty') return { status: 200, body: new Uint8Array(), contentType: 'text/html' };
+    if (this.fail === 'pdf') return { status: 200, body: new TextEncoder().encode('%PDF-1.7 ' + 'x'.repeat(400)), contentType: 'application/pdf' };
+    if (this.fail === 'robot') return { status: 200, body: new TextEncoder().encode('<html><body><h1>Access Denied</h1><p>Request blocked. ' + 'x '.repeat(80) + '</p></body></html>'), contentType: 'text/html' };
     const html = (s: string): FetchResult => ({ status: 200, body: new TextEncoder().encode(s), contentType: 'text/html; charset=utf-8' });
     const idx = /\/rg\/fihrist\?tarih=(\d{4}-\d{2}-\d{2})/.exec(url);
     if (idx) {

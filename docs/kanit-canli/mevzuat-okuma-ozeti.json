@@ -1,0 +1,58 @@
+{
+ "gida-hijyeni": {
+  "url": "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=15592&MevzuatTertip=5",
+  "status": 200,
+  "err": null,
+  "len": 39161,
+  "title": " GIDA HİJYENİ YÖNETMELİĞİ BİRİNCİ BÖLÜM Amaç, Kapsam, Dayanak ve Tanımlar Amaç MADDE 1 – (1) Bu Yönetmeliğin amacı, gıda",
+  "maddeler": 31,
+  "ilkAmend": []
+ },
+ "kayit-onay": {
+  "url": "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=15594&MevzuatTertip=5",
+  "status": 200,
+  "err": null,
+  "len": 20375,
+  "title": " GIDA İŞLETMELERİNİN KAYIT VE ONAY İŞLEMLERİNE DAİR YÖNETMELİK BİRİNCİ BÖLÜM Amaç, Kapsam, Dayanak ve Tanımlar Amaç MADD",
+  "maddeler": 16,
+  "ilkAmend": [
+   "7/1/2014",
+   "8/7/2019",
+   "10/1/2013",
+   "24/11/2016",
+   "26/7/2016",
+   "21/12/2017",
+   "30/12/2014"
+  ]
+ },
+ "hijyen-egitimi": {
+  "url": "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=18552&MevzuatTertip=5",
+  "status": 200,
+  "err": null,
+  "len": 8125,
+  "title": " HİJYEN EĞİTİMİ YÖNETMELİĞİ BİRİNCİ BÖLÜM Amaç, Kapsam, Dayanak ve Tanımlar Amaç MADDE 1 – (1) Bu Yönetmeliğin amacı; gı",
+  "maddeler": 14,
+  "ilkAmend": []
+ },
+ "kanun-5996": {
+  "url": "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=1&MevzuatNo=5996&MevzuatTertip=5",
+  "status": 200,
+  "err": null,
+  "len": 160329,
+  "title": " 10559 VETERİNER HİZMETLERİ, BİTKİ SAĞLIĞI, GIDA VE YEM KANUNU Kanun Numarası : 5996 Kabul Tarihi : 11/6/2010 Yayımlandı",
+  "maddeler": 61,
+  "ilkAmend": [
+   "11/6/2026",
+   "20/3/2013",
+   "28/1/2015",
+   "15/11/2018",
+   "28/10/2020",
+   "2/5/2018",
+   "2/1/2014",
+   "17/4/2017",
+   "11/3/2021",
+   "2/1/2017",
+   "3/11/2022"
+  ]
+ }
+}
