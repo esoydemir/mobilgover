@@ -17,7 +17,7 @@ const TONE: Record<string, string> = {
   ncr_verification_requested: C.lime, ncr_assigned: C.info, action_assigned: C.info, ncr_reported: C.info, obligation_review_done: C.info,
   action_declared: C.lime, action_rejected: C.crit, action_verified: C.info, doc_expired: C.crit, doc_expiring: C.warn, doc_review_needed: C.lime,
   doc_rejected: C.crit, doc_verified: C.info, quote_received: C.info, service_report_delivered: C.lime,
-  task_overdue: C.crit, tasks_overdue: C.warn, verifier_invited: C.lime,
+  legislation_change: C.warn, task_overdue: C.crit, tasks_overdue: C.warn, verifier_invited: C.lime,
   training_assigned: C.info, training_completed: C.lime, training_field_verified: C.info, training_review_requested: C.warn,
 };
 
@@ -37,6 +37,7 @@ export default function NotificationsRoute() {
     else if (n.entity_type === 'site_tasks') router.push('/tasks');
     else if (n.entity_type === 'access_grant') router.push('/verify-queue');
     else if (n.entity_type === 'document') router.push(`/documents/${n.entity_id}`);
+    else if (n.entity_type === 'legislation_change') router.push(`/change/${n.entity_id}`);
     else if (n.entity_type === 'service_request') router.push(`/service/${n.entity_id}`);
   };
   return (

@@ -50,6 +50,7 @@ export default function AdminRoute() {
       ) : null}
       {error ? <ErrorBox message={error} /> : null}
       {roles.length > 0 ? <PlatformOverview /> : null}
+      {roles.length > 0 ? <GhostButton testID="admin-legislation" label="Mevzuat takibi: günlük tarama ve inceleme kuyruğu ›" height={42} size={12.5} onPress={() => router.push('/legislation')} /> : null}
       <Field testID="admin-reason" label="Gerekçe (onay ve yayın için zorunlu)" value={note} onChangeText={setNote} placeholder="ör. Kaynak metinle karşılaştırıldı" />
 
       {rules.data || rules.error ? (

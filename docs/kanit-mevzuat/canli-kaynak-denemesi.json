@@ -1,0 +1,27 @@
+{
+  "at": "2026-11-17T17:25:05.304Z",
+  "today": "2026-11-17",
+  "resmiGazete": {
+    "ok": true,
+    "seen": 62,
+    "changes": [],
+    "errors": [],
+    "notes": []
+  },
+  "mevzuat": {
+    "ok": true,
+    "seen": 59,
+    "snapshots": [
+      {
+        "docKey": "mv:1.5.5996",
+        "title": "VETERİNER HİZMETLERİ, BİTKİ SAĞLIĞI, GIDA VE YEM KANUNU",
+        "url": "https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=1&MevzuatNo=5996&MevzuatTertip=5",
+        "articles": 59
+      }
+    ],
+    "errors": [],
+    "notes": [
+      "Veteriner Hizmetleri, Bitki Sağlığı, Gıda ve Yem Kanunu: ilk okuma, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi)."
+    ]
+  }
+}

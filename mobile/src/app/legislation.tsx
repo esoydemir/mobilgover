@@ -1,0 +1,114 @@
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { Text, View } from 'react-native';
+import { errorText } from '../api/client';
+import { useSession } from '../api/session';
+import { useApi } from '../api/useApi';
+import { Screen } from '../components/Screen';
+import { Empty, ErrorBox, ExampleBadge, Loading, SectionLabel } from '../components/states';
+import { Card, FilterChip, PrimaryButton, Tap } from '../components/ui';
+import { fmtDateTime } from '../features/dates';
+import { dayTr, STATUS_TR } from '../features/legislation';
+import { useUi } from '../state/app';
+import { C, tint, type } from '../theme';
+
+type Source = { code: string; name: string; base_url: string; is_example: boolean; last_attempt_at: string | null; last_success_at: string | null; last_error: string | null; last_error_at: string | null; failures_in_row: number };
+type Overview = {
+  sources: Source[]; lastSuccessfulScan: { finished_at: string; trigger: string } | null; lastRun: { status: string; started_at: string; trigger: string } | null;
+  pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number }; canScan: boolean; exampleNote: string;
+};
+type Row = { id: string; source_code: string; change_type: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null;
+  date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null };
+
+const SOURCE_TR: Record<string, string> = { resmi_gazete: 'Resmî Gazete', mevzuat: 'Mevzuat Bilgi Sistemi' };
+
+/** Legislation watch: daily scan health, review queue, manual rescan. Platform staff only. */
+export default function LegislationRoute() {
+  const { me, call } = useSession();
+  const { showToast } = useUi();
+  const allowed = (me?.platformRoles ?? []).some(r => ['platform_admin', 'rule_author', 'rule_reviewer'].includes(r));
+  const [status, setStatus] = useState<'open' | 'scheduled' | 'applied' | 'rejected'>('open');
+  const ov = useApi<Overview>(allowed ? '/admin/legislation/overview' : null);
+  const pending = useApi<Row[]>(allowed ? '/admin/legislation/changes?status=pending' : null);
+  const drafted = useApi<Row[]>(allowed ? '/admin/legislation/changes?status=drafted' : null);
+  const other = useApi<Row[]>(allowed && status !== 'open' ? `/admin/legislation/changes?status=${status}` : null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reloadAll = async () => { await Promise.all([ov.reload(), pending.reload(), drafted.reload(), other.reload()]); };
+  const scan = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await call<{ status: string; results: { source: string; ok: boolean; created: number; error?: string }[] }>('POST', '/admin/legislation/scan');
+      const made = r.results.reduce((a, x) => a + (x.created ?? 0), 0);
+      showToast('Tarama bitti', `${made} yeni kayıt kuyruğa düştü${r.status === 'ok' ? '' : ' · bazı kaynaklar okunamadı'}`);
+      await reloadAll();
+    } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
+  };
+  if (!allowed) return <Screen title="Mevzuat takibi" titleEn="Legislation watch"><ErrorBox message="Bu ekran yalnız platform yönetimi içindir." /></Screen>;
+  const rows = status === 'open' ? [...(pending.data ?? []), ...(drafted.data ?? [])] : other.data ?? [];
+  const o = ov.data;
+
+  return (
+    <Screen title="Mevzuat takibi" titleEn="Legislation watch" onRefresh={reloadAll} refreshing={ov.loading}>
+      {ov.error ? <ErrorBox message={ov.error} onRetry={reloadAll} /> : null}
+      {!o && !ov.error ? <Loading /> : null}
+      {o ? (
+        <>
+          <Card testID="leg-health" style={{ gap: 8 }}>
+            <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>SON BAŞARILI TARAMA</Text>
+            <Text testID="leg-last-ok" style={type(16, 700)}>{o.lastSuccessfulScan ? fmtDateTime(o.lastSuccessfulScan.finished_at) : 'Henüz başarılı tarama yok'}</Text>
+            <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>
+              {o.schedule.enabled ? `Her gün ${String(o.schedule.dailyAtHour).padStart(2, '0')}:00 (${o.schedule.timezone}) kendiliğinden taranır; başarısız gün yarım saat arayla yeniden denenir.` : 'Günlük otomatik tarama bu ortamda kapalı; yalnız elle taranır.'}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 18, flexWrap: 'wrap' }}>
+              <View><Text testID="leg-pending-count" style={type(26, 700, { color: o.pendingReview ? C.warn : C.t1 })}>{o.pendingReview}</Text><Text style={type(11, 500, { color: C.t3 })}>İnceleme bekleyen</Text></View>
+              <View><Text style={type(26, 700, { color: o.unclearDates ? C.warn : C.t1 })}>{o.unclearDates}</Text><Text style={type(11, 500, { color: C.t3 })}>Tarihi belirsiz</Text></View>
+              <View><Text style={type(26, 700)}>{o.counts.scheduled ?? 0}</Text><Text style={type(11, 500, { color: C.t3 })}>Yürürlük bekliyor</Text></View>
+              <View><Text style={type(26, 700)}>{o.counts.applied ?? 0}</Text><Text style={type(11, 500, { color: C.t3 })}>Uygulandı</Text></View>
+            </View>
+            {o.canScan ? <PrimaryButton testID="leg-scan" label={busy ? 'Taranıyor…' : 'Şimdi tara'} glow={false} height={42} size={12.5} disabled={busy} onPress={scan} /> : null}
+            {error ? <ErrorBox message={error} /> : null}
+          </Card>
+
+          <SectionLabel>KAYNAKLAR</SectionLabel>
+          {o.sources.map(s => (
+            <Card key={s.code} testID={`leg-source-${s.code}`} style={{ gap: 5 }} border={s.last_error ? tint.crit(0.35) : C.bd}>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Text style={type(14, 700)}>{SOURCE_TR[s.code] ?? s.name}</Text>
+                {s.is_example ? <ExampleBadge label="SENTETİK KAYNAK" /> : null}
+              </View>
+              <Text style={type(11.5, 400, { color: C.t3 })}>{s.base_url}</Text>
+              <Text style={type(12, 500, { color: C.t2 })}>Son başarılı okuma: {s.last_success_at ? fmtDateTime(s.last_success_at) : 'yok'}</Text>
+              {s.last_error ? (
+                <Text testID={`leg-source-error-${s.code}`} style={type(12, 600, { color: C.crit, lh: 1.45 })}>Hata ({s.failures_in_row} kez üst üste): {s.last_error}{s.last_error_at ? ` · ${fmtDateTime(s.last_error_at)}` : ''}. Son başarılı veri korunuyor.</Text>
+              ) : <Text style={type(12, 500, { color: C.lime })}>Hata yok</Text>}
+            </Card>
+          ))}
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{o.exampleNote}</Text>
+        </>
+      ) : null}
+
+      <SectionLabel>İNCELEME KUYRUĞU</SectionLabel>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+        {([['open', 'Açık'], ['scheduled', 'Yürürlük bekliyor'], ['applied', 'Uygulandı'], ['rejected', 'Reddedildi']] as const).map(([k, l]) => <FilterChip key={k} testID={`leg-filter-${k}`} label={l} px={12} active={status === k} onPress={() => setStatus(k)} />)}
+      </View>
+      {rows.length === 0 && !pending.loading ? <Empty title="Kayıt yok" body="Tarama yeni bir yayın, madde değişikliği ya da yürürlükten kaldırma bulduğunda burada görünür. Hiçbir işletme, sen onaylayana kadar etkilenmez." /> : null}
+      {rows.map(r => {
+        const [label, color] = STATUS_TR[r.status] ?? [r.status, C.t2];
+        return (
+          <Tap key={r.id} testID={`leg-row-${r.id}`} onPress={() => router.push(`/legislation/${r.id}`)}>
+            <Card style={{ gap: 6 }}>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Text style={type(10.5, 700, { ls: 0.06, color })}>{label}</Text>
+                {r.is_example ? <ExampleBadge label="ÖRNEK" /> : null}
+                {r.date_status === 'unclear' ? <Text style={type(10.5, 700, { color: C.warn })}>TARİH BELİRSİZ</Text> : null}
+              </View>
+              <Text style={type(14, 600, { lh: 1.35 })}>{r.doc_title}{r.article_ref ? ` · md. ${r.article_ref}` : ''}</Text>
+              <Text style={type(12, 400, { color: C.t2 })}>{r.typeLabel} · {SOURCE_TR[r.source_code] ?? r.source_code} · {r.doc_ref} · yayın {dayTr(r.published_on)} · yürürlük {r.effective_from ? dayTr(r.effective_from) : 'belirsiz'}</Text>
+            </Card>
+          </Tap>
+        );
+      })}
+    </Screen>
+  );
+}

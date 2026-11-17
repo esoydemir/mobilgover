@@ -21,10 +21,10 @@ export function Tap({ style, children, disabled, ...rest }: PressableProps & { s
   );
 }
 
-export function Card({ children, style, radius = 26, border = C.bd, bg = C.card }: {
-  children: ReactNode; style?: StyleProp<ViewStyle>; radius?: number; border?: string; bg?: string;
+export function Card({ children, style, radius = 26, border = C.bd, bg = C.card, testID }: {
+  children: ReactNode; style?: StyleProp<ViewStyle>; radius?: number; border?: string; bg?: string; testID?: string;
 }) {
-  return <View style={[{ borderWidth: 1, borderColor: border, borderRadius: radius, backgroundColor: bg, paddingVertical: 17, paddingHorizontal: 18 }, style]}>{children}</View>;
+  return <View testID={testID} style={[{ borderWidth: 1, borderColor: border, borderRadius: radius, backgroundColor: bg, paddingVertical: 17, paddingHorizontal: 18 }, style]}>{children}</View>;
 }
 
 export const Eyebrow = ({ children, color, style }: { children: ReactNode; color?: string; style?: StyleProp<TextStyle> }) => (

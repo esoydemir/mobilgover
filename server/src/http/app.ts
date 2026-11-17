@@ -17,6 +17,7 @@ import * as qr from '../services/qr';
 import * as extraction from '../services/extraction';
 import type { LlmConfig } from '../services/llm';
 import { moduleStatus } from '../services/modules';
+import * as leg from '../services/legislation';
 import { ask as askAssistant } from '../services/assistant';
 import * as padmin from '../services/platform-admin';
 import { institutionView } from '../services/institution';
@@ -67,7 +68,7 @@ export type LogSink = (line: Record<string, unknown>) => void;
 /** Routes that work without a session. */
 const PUBLIC = new Set(['/health', '/env', '/auth/email/start', '/auth/email/verify', '/auth/mfa/verify', '/dev/outbox/latest']);
 
-export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; config: AppConfig; log?: LogSink }) {
+export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; config: AppConfig; log?: LogSink; legislation?: leg.LegislationConfig }) {
   docs.MAX_UPLOAD_BYTES.value = deps.config.maxUploadBytes;
   const { db, store, mailer, config } = deps;
   const log: LogSink = deps.log ?? (() => {});
@@ -755,6 +756,57 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason)); return { ok: true }; });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
   app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason })); });
+
+  // ── Legislation watch: daily scan, review queue, approval, scheduled application (platform) ──
+  const legCfg = () => deps.legislation ?? leg.legislationConfig(process.env, { allowExampleRules: config.allowExampleRules });
+  const reasonBody = z.object({ reason: z.string().max(2000).nullable().optional() });
+  app.get('/admin/legislation/overview', async req => { platformGate(req); return db.system(tx => leg.adminOverview(tx, req.principal, legCfg())); });
+  app.get('/admin/legislation/changes', async req => {
+    platformGate(req);
+    const { status } = z.object({ status: z.enum(['pending', 'drafted', 'scheduled', 'applied', 'rejected']).optional() }).parse(req.query);
+    return db.system(tx => leg.listChanges(tx, req.principal, status));
+  });
+  app.get('/admin/legislation/changes/:id', async req => { platformGate(req); return db.system(tx => leg.getChange(tx, req.principal, rvId(req))); });
+  app.post('/admin/legislation/scan', async req => {
+    platformGate(req);
+    if (!req.principal.platformRoles.includes('platform_admin') && !req.principal.platformRoles.includes('rule_reviewer')) throw forbidden('Elle tarama için yetkin yok.');
+    return leg.runScan(db, legCfg(), { trigger: 'manual', actorId: req.principal.userId });
+  });
+  app.post('/admin/legislation/apply-due', async req => {
+    platformGate(req);
+    if (!req.principal.platformRoles.includes('platform_admin')) throw forbidden('Yalnız platform yöneticisi.');
+    return leg.applyDue(db, legCfg());
+  });
+  app.post('/admin/legislation/changes/:id/resolve-date', async req => {
+    platformGate(req);
+    const b = z.object({ date: z.string(), note: z.string().max(2000) }).parse(req.body);
+    await db.system(tx => leg.resolveDate(tx, req.principal, rvId(req), b)); return { ok: true };
+  });
+  app.get('/admin/legislation/changes/:id/suggest', async req => {
+    platformGate(req);
+    const q = z.object({ targetRuleCode: z.string().max(80).optional() }).parse(req.query);
+    return db.system(tx => leg.suggestProposal(tx, req.principal, rvId(req), q.targetRuleCode ?? null));
+  });
+  app.put('/admin/legislation/changes/:id/proposal', async req => {
+    platformGate(req);
+    const b = draftSchema.extend({ targetRuleCode: z.string().nullable().optional() }).parse(req.body);
+    await db.system(tx => leg.saveProposal(tx, req.principal, rvId(req), b as never)); return { ok: true };
+  });
+  app.post('/admin/legislation/changes/:id/prepare', async req => { platformGate(req); return db.system(tx => leg.prepareDraft(tx, req.principal, rvId(req))); });
+  app.post('/admin/legislation/changes/:id/approve', async req => {
+    platformGate(req);
+    const b = reasonBody.parse(req.body ?? {});
+    return db.system(tx => leg.approveChange(tx, req.principal, rvId(req), b.reason, legCfg()));
+  });
+  app.post('/admin/legislation/changes/:id/reject', async req => {
+    platformGate(req);
+    const b = reasonBody.parse(req.body ?? {});
+    await db.system(tx => leg.reject(tx, req.principal, rvId(req), b.reason)); return { ok: true };
+  });
+  app.get('/companies/:companyId/legislation-changes/:id', async req => {
+    const companyId = company(req);
+    return db.tenant(companyId, tx => leg.businessView(tx, req.principal, companyId, rvId(req)));
+  });
 
   // ── Platform administration: overview, audit trail, platform roles ──
   app.get('/admin/overview', async req => { platformGate(req); return db.system(tx => padmin.overview(tx, req.principal)); });

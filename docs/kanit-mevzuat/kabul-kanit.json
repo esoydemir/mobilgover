@@ -1,0 +1,237 @@
+{
+  "at": "2026-11-17T17:39:28.231Z",
+  "env": "http://localhost:8098",
+  "source": "SENTETİK (sentetik kaynak sunucusu; resmî olmayan adres)",
+  "pass": 49,
+  "fail": 0,
+  "checks": [
+    {
+      "label": "Hazırlık: iki şube var (Kadıköy Moda, Beşiktaş LPG yok)",
+      "ok": true,
+      "extra": {
+        "siteA": "0865e6f2-0482-4b5d-8630-f867a19c1617",
+        "siteB": "6fe5b547-625d-4055-a111-46f4b332b96b"
+      }
+    },
+    {
+      "label": "Yönetim ekranı: son başarılı tarama yok, kaynaklar listeli",
+      "ok": true
+    },
+    {
+      "label": "Tarama: sentetik yayın bulundu ve kuyruğa düştü; üniversite yönetmeliği kapsam dışı",
+      "ok": true
+    },
+    {
+      "label": "Kuyruktaki kayıt ÖRNEK ve sentetik kaynak olarak işaretli",
+      "ok": true
+    },
+    {
+      "label": "Bekleyen sayacı 3 (LPG, belirsiz tarihli, etiket)",
+      "ok": true
+    },
+    {
+      "label": "ONAY ÖNCESİ: hiçbir işletmenin görevi/bildirimi/yükümlülüğü/kural sürümü değişmedi",
+      "ok": true,
+      "extra": {
+        "before": {
+          "tasks": 80,
+          "notifs": 3,
+          "obl": 20,
+          "rules": 6
+        },
+        "after1": {
+          "tasks": 80,
+          "notifs": 3,
+          "obl": 20,
+          "rules": 6
+        }
+      }
+    },
+    {
+      "label": "Son başarılı tarama zamanı görünüyor",
+      "ok": true
+    },
+    {
+      "label": "Yeniden tarama: aynı yayın için ikinci kayıt oluşmadı",
+      "ok": true,
+      "extra": {
+        "c0": 3
+      }
+    },
+    {
+      "label": "Yetkisiz (personel) kuyruğu göremez",
+      "ok": true
+    },
+    {
+      "label": "Yetkisiz (personel) onaylayamaz",
+      "ok": true
+    },
+    {
+      "label": "Kural yazarı kendi önerisini onaylayamaz",
+      "ok": true
+    },
+    {
+      "label": "İnceleme: değişiklik türü, resmî kaynak bağlantısı, belge, yürürlük tarihi tek kayıtta",
+      "ok": true
+    },
+    {
+      "label": "İnceleme: eski/yeni metin yan yana bölümleri",
+      "ok": true
+    },
+    {
+      "label": "Otomatik karşılaştırma \"yalnız öneridir\" diye işaretli",
+      "ok": true
+    },
+    {
+      "label": "Etki önizlemesi onaydan ÖNCE Kadıköy şubesini YENİ YÜKÜMLÜLÜK olarak, kapsam dışı şubeyi sayıyla gösterir",
+      "ok": true
+    },
+    {
+      "label": "Öneri kaydı sonrası hâlâ görev/bildirim yok",
+      "ok": true
+    },
+    {
+      "label": "Kural taslağı hazırlandı ve incelemeye gönderildi",
+      "ok": true
+    },
+    {
+      "label": "Alan uzmanı incelemesi kaydedildi",
+      "ok": true
+    },
+    {
+      "label": "Boş gerekçeyle onay engellendi",
+      "ok": true
+    },
+    {
+      "label": "Onay engelinde hiçbir şey uygulanmadı",
+      "ok": true
+    },
+    {
+      "label": "Yürürlük günü bugün: onayda uygulandı (UYGULANDI)",
+      "ok": true
+    },
+    {
+      "label": "Yalnız eşleşen şubede görev oluştu (Kadıköy), kapsam dışı şubede (Beşiktaş) görev yok",
+      "ok": true,
+      "extra": {
+        "A": 2,
+        "B": 0
+      }
+    },
+    {
+      "label": "Bildirim yalnız eşleşen şube için ve her alıcıya bir kez",
+      "ok": true
+    },
+    {
+      "label": "Kapsam dışı şubenin yükümlülük satırı yok",
+      "ok": true
+    },
+    {
+      "label": "Yeniden tarama + uygulama tetikleme: görev ve bildirim ikilenmedi",
+      "ok": true
+    },
+    {
+      "label": "Denetim izi: kim/ne/ne zaman/hangi gerekçe",
+      "ok": true
+    },
+    {
+      "label": "Geçmiş bölümü onaylayanı ve gerekçeyi gösterir",
+      "ok": true
+    },
+    {
+      "label": "İşletme ekranı: ne değişti / neden şubemde / ne yapmalıyım ve son tarih / kaynak ve kural sürümü",
+      "ok": true
+    },
+    {
+      "label": "İşletme ekranı ÖRNEK uyarısı taşır ve kapsam dışı şubeyi anmaz",
+      "ok": true
+    },
+    {
+      "label": "Boş gerekçeyle ret engellendi",
+      "ok": true
+    },
+    {
+      "label": "Ret: durum REDDEDİLDİ, hiçbir işletme etkilenmedi",
+      "ok": true
+    },
+    {
+      "label": "Reddedilen yayın yeniden taramada tekrar kuyruğa girmedi",
+      "ok": true
+    },
+    {
+      "label": "Belirsiz tarih uyarısı gösterilir ve taslak hazırlama kapalı",
+      "ok": true
+    },
+    {
+      "label": "Belirsiz tarihli kayıt API ile de hazırlanamaz/onaylanamaz",
+      "ok": true
+    },
+    {
+      "label": "Yönetici tarihi gerekçeyle çözdü",
+      "ok": true
+    },
+    {
+      "label": "İleri tarihli onay: durum \"yürürlük günü bekliyor\", metin kendiliğinden uygulanacağını söyler",
+      "ok": true
+    },
+    {
+      "label": "Yürürlük gününden önce hiçbir işletme görevi/bildirimi değişmedi; kural sürümü yalnız onaylı (yayında değil)",
+      "ok": true
+    },
+    {
+      "label": "Gün gelmeden uygulama tetiklenirse de uygulanmaz",
+      "ok": true,
+      "extra": {
+        "applied": [],
+        "failed": []
+      }
+    },
+    {
+      "label": "Kaynak kesintisi: kaynak bazında hata görünür, \"son başarılı veri korunuyor\" der",
+      "ok": true
+    },
+    {
+      "label": "Kesintide son başarılı tarama zamanı ve kuyruk korunur",
+      "ok": true
+    },
+    {
+      "label": "Kaynak dönünce bir sonraki taramada toparlanır (hata temizlenir)",
+      "ok": true
+    },
+    {
+      "label": "Mevzuat Bilgi Sistemi: madde değişikliği, madde kaldırma ve yeni madde bulundu",
+      "ok": true
+    },
+    {
+      "label": "Madde değişikliği: eski/yeni metin ve değişen sayı önerisi görünür; tarih belirsiz",
+      "ok": true
+    },
+    {
+      "label": "Kaldırma önizlemesi: yükümlülük sona erer ve açık görevlere etkisi yazılı",
+      "ok": true
+    },
+    {
+      "label": "Kaldırma: açık görevler kapandı, yeni görev üretilmez",
+      "ok": true,
+      "extra": {
+        "openBefore": 1
+      }
+    },
+    {
+      "label": "Tamamlanmış görev ve kayıtları eski kural sürümüne bağlı kaldı",
+      "ok": true
+    },
+    {
+      "label": "Kaldırıldıktan sonra yeni görev oluşmadı",
+      "ok": true
+    },
+    {
+      "label": "Kaldırmanın açık görevlere etkisi denetim kaydına yazıldı",
+      "ok": true
+    },
+    {
+      "label": "İşletme ekranı kaldırmayı açıklar: yeni görev oluşmaz, geçmiş korunur",
+      "ok": true
+    }
+  ]
+}

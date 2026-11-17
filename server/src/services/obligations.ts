@@ -36,8 +36,8 @@ export type RecomputeResult = { changed: { ruleCode: string; from: string | null
  * nothing (safe to run repeatedly); changed decisions append a new row and
  * leave the old one, and the tasks done under it, untouched.
  */
-export async function recomputeSite(tx: Tx, companyId: string, siteId: string, actorId: string | null, now = new Date(), forceRuleId: string | null = null): Promise<RecomputeResult> {
-  const onDate = today(now);
+export async function recomputeSite(tx: Tx, companyId: string, siteId: string, actorId: string | null, now = new Date(), forceRuleId: string | null = null, onDateOverride: string | null = null): Promise<RecomputeResult> {
+  const onDate = onDateOverride ?? today(now);
   const facts = await currentFacts(tx, companyId, siteId);
   const rules = await tx.query(
     `SELECT rv.*, r.code FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE rv.status = 'published'`);
@@ -50,7 +50,12 @@ export async function recomputeSite(tx: Tx, companyId: string, siteId: string, a
     // (forceRuleId: an authorised person withdrew their manual decision, so the engine decides again.)
     const forced = forceRuleId === rv.rule_id;
     if (!forced && prev && prev.decided_by !== 'engine' && prev.rule_version_id === rv.id) continue;
-    const d = decide({ ruleVersionId: rv.id, condition: rv.condition, effectiveFrom: rv.effective_from, effectiveTo: rv.effective_to, ambiguityNote: rv.ambiguity_note }, facts, onDate);
+    let d = decide({ ruleVersionId: rv.id, condition: rv.condition, effectiveFrom: rv.effective_from, effectiveTo: rv.effective_to, ambiguityNote: rv.ambiguity_note }, facts, onDate);
+    if (!d && rv.effective_to && rv.effective_to < onDate && prev && prev.decision !== 'not_applicable') {
+      // The rule's end date has passed (a repeal, or a rule that was bounded in time): it stops applying. The old
+      // decision and the work done under it stay as history; only open work is closed (see cancelOpenTasks).
+      d = { decision: 'not_applicable', trace: { result: 'false', note: 'expired' } as never, missingFacts: [], reason: `Kuralın yürürlük süresi ${rv.effective_to} tarihinde sona erdi (yürürlükten kaldırıldı).` };
+    }
     if (!d) continue;
     const factsSnap = snapshot(facts, rv.required_facts);
     if (!forced && prev && prev.rule_version_id === rv.id && prev.decision === d.decision
