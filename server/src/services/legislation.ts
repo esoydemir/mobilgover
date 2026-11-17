@@ -11,7 +11,7 @@ import { currentFacts } from './profile';
 import { approve as approveRuleVersion, insertDraft, publishVersion, validateDraftInput, needReason, type DraftInput } from './rules';
 import { topUpSite } from './tasks';
 import {
-  OFFICIAL_HOSTS, defaultFetcher, istanbulDay, parseWatchList, scanConsolidated, scanGazette, trDate,
+  OFFICIAL_HOSTS, defaultFetcher, errorKindOf, istanbulDay, parseWatchList, scanConsolidated, scanGazette, trDate,
   type DetectedChange, type Fetcher, type ScanOutcome, type SourceCode, type WatchDoc,
 } from './legislation-sources';
 
@@ -47,7 +47,7 @@ const addDays = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') 
 
 // ───────────── Scanning ─────────────
 
-export type SourceResult = { source: SourceCode; ok: boolean; seen: number; created: number; errors: string[]; notes: string[] };
+export type SourceResult = { source: SourceCode; ok: boolean; seen: number; docsRead: number; created: number; errors: string[]; errorKind: string | null; notes: string[] };
 
 async function ensureSources(tx: Tx, cfg: LegislationConfig) {
   for (const [code, base] of [['resmi_gazete', cfg.rgBase], ['mevzuat', cfg.mevzuatBase]] as const) {
@@ -98,18 +98,20 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
           [code, s.docKey, s.title, s.url, JSON.stringify(s.articles), sha(JSON.stringify(s.articles))]);
       }
       const ok = errors.length === 0;
+      const errorKind = errors.length ? (errors.map(e => errorKindOf(e.slice(Math.max(e.indexOf('['), 0)))).find(Boolean) ?? 'unknown') : null;
       await tx.query(
         `UPDATE legislation_sources SET last_attempt_at = now(), last_items_seen = $2,
            last_success_at = CASE WHEN $3 THEN now() ELSE last_success_at END,
+           last_error_kind = CASE WHEN $3 THEN NULL ELSE $5 END, last_docs_read = CASE WHEN $3 THEN $6 ELSE last_docs_read END,
            last_error = CASE WHEN $3 THEN NULL ELSE $4 END, last_error_at = CASE WHEN $3 THEN last_error_at ELSE now() END,
            failures_in_row = CASE WHEN $3 THEN 0 ELSE failures_in_row + 1 END WHERE code = $1`,
-        [code, out?.seen ?? 0, ok, errors.join(' | ').slice(0, 1500)]);
-      results.push({ source: code, ok, seen: out?.seen ?? 0, created, errors, notes: out?.notes ?? [] });
+        [code, out?.seen ?? 0, ok, errors.join(' | ').slice(0, 1500), errorKind, out?.docsRead ?? 0]);
+      results.push({ source: code, ok, seen: out?.seen ?? 0, docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
     }
     const status = results.every(r => r.ok) ? 'ok' : results.some(r => r.ok) ? 'partial' : 'failed';
     await tx.query(`UPDATE legislation_scan_runs SET finished_at = now(), status = $2, results = $3 WHERE id = $1`, [start.runId, status, JSON.stringify(results)]);
     await appendAudit(tx, { companyId: null, actorId: o.actorId ?? null, eventType: 'legislation.scanned', entityType: 'legislation_scan', entityId: start.runId,
-      payload: { trigger: o.trigger, status, results: results.map(r => ({ source: r.source, ok: r.ok, seen: r.seen, created: r.created, errors: r.errors.slice(0, 3) })) } });
+      payload: { trigger: o.trigger, status, results: results.map(r => ({ source: r.source, ok: r.ok, seen: r.seen, docsRead: r.docsRead, created: r.created, errorKind: r.errorKind, errors: r.errors.slice(0, 3) })) } });
     return { runId: start.runId, status, results };
   });
 }
@@ -132,7 +134,10 @@ async function storeChange(tx: Tx, c: DetectedChange, isExample: boolean): Promi
 export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfig) {
   if (!canView(p)) throw forbidden();
   if (cfg) await ensureSources(tx, cfg);
-  const sources = (await tx.query(`SELECT code, name, base_url, is_example, enabled, last_attempt_at, last_success_at, last_error, last_error_at, failures_in_row, last_items_seen FROM legislation_sources ORDER BY code`)).rows;
+  const sources = (await tx.query(`SELECT code, name, base_url, is_example, enabled, last_attempt_at, last_success_at, last_error, last_error_at, last_error_kind, failures_in_row, last_items_seen, last_docs_read,
+      (SELECT count(*)::int FROM legislation_changes c WHERE c.source_code = legislation_sources.code) AS queue_total,
+      (SELECT count(*)::int FROM legislation_changes c WHERE c.source_code = legislation_sources.code AND c.status IN ('pending','drafted')) AS queue_open
+      FROM legislation_sources ORDER BY code`)).rows;
   const counts = Object.fromEntries((await tx.query(`SELECT status, count(*)::int AS n FROM legislation_changes GROUP BY status`)).rows.map(r => [r.status, r.n]));
   const lastOk = (await tx.query(`SELECT finished_at, trigger FROM legislation_scan_runs WHERE status = 'ok' ORDER BY finished_at DESC LIMIT 1`)).rows[0] ?? null;
   const lastRun = (await tx.query(`SELECT id, trigger, status, started_at, finished_at, results FROM legislation_scan_runs ORDER BY started_at DESC LIMIT 1`)).rows[0] ?? null;
@@ -375,8 +380,11 @@ export async function approveChange(tx: Tx, p: Principal, id: string, reason: st
   // A repeal takes effect on the day after the old version's last day; its rule version carries that last day.
   const apply = c.change_type === 'repeal' && rv.effective_to ? addDays(String(rv.effective_to).slice(0, 10), 1) : eff;
   await tx.query(`UPDATE legislation_changes SET status = 'scheduled', approved_by = $2, approved_at = now(), approve_reason = $3, apply_on = $4 WHERE id = $1`, [id, p.userId, why, apply]);
+  // What the approver was shown: the preview AS OF APPROVAL. The actual effect on the effective day is recorded separately by 'legislation.applied'.
+  const pv = await previewImpact(tx, await specFromRuleVersion(tx, c.rule_version_id), apply > istanbulDay(now) ? apply : istanbulDay(now));
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'legislation.approved', entityType: 'legislation_change', entityId: id,
-    payload: { docRef: c.doc_ref, article: c.article_ref, sourceUrl: c.source_url, reason: why, applyOn: apply, ruleVersionId: c.rule_version_id, example: c.is_example } });
+    payload: { docRef: c.doc_ref, article: c.article_ref, sourceUrl: c.source_url, reason: why, applyOn: apply, ruleVersionId: c.rule_version_id, example: c.is_example,
+      previewAtApproval: { asOf: pv.onDate, affectedSites: pv.affectedSites, notifiedSites: pv.notifiedSites, outOfScopeSites: pv.outOfScopeSites, openTasksAffected: pv.openTasksAffected, sites: pv.sites.map(s => ({ siteId: s.siteId, site: s.site, from: s.from, to: s.to, effect: s.effect, openTasks: s.openTasks })) } } });
   const today = istanbulDay(now);
   if (apply <= today) return { status: 'applied' as const, applyOn: apply, result: await applyChange(tx, id, cfg, now) };
   return { status: 'scheduled' as const, applyOn: apply, result: null };
@@ -469,14 +477,14 @@ export async function legislationTick(db: Db, cfg: LegislationConfig, now = new 
   return out;
 }
 
-export function startLegislationScheduler(db: Db, cfg: LegislationConfig, log: (l: Record<string, unknown>) => void, everyMs = 10 * 60_000) {
+export function startLegislationScheduler(db: Db, cfg: LegislationConfig, log: (l: Record<string, unknown>) => void, everyMs = 10 * 60_000, o: { firstMs?: number; clock?: () => Date } = {}) {
   let running = false;
   const tick = async () => {
     if (running) return;
     running = true;
-    try { await legislationTick(db, cfg, new Date(), log); } catch (e) { log({ level: 'error', event: 'legislation_tick_failed', error: (e as Error).message }); } finally { running = false; }
+    try { await legislationTick(db, cfg, (o.clock ?? (() => new Date()))(), log); } catch (e) { log({ level: 'error', event: 'legislation_tick_failed', error: (e as Error).message }); } finally { running = false; }
   };
-  setTimeout(() => void tick(), 30_000).unref();
+  setTimeout(() => void tick(), o.firstMs ?? 30_000).unref();
   const t = setInterval(() => void tick(), everyMs);
   t.unref();
   return () => clearInterval(t);
