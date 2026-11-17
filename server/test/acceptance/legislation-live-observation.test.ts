@@ -39,6 +39,7 @@ describe.skipIf(!live)('live official-source observation', () => {
       watchedDocuments: [...perDoc].map(([key, v]) => ({ key, title: v.title, articlesParsed: v.articles })),
       realChangesQueued: changes,
       unpublished: (await env.ownerDb.query(`SELECT count(*)::int AS n FROM rule_versions WHERE status = 'published' AND created_at > now() - interval '1 hour'`)).rows[0].n === 0,
+      kanun5996FilterIdsPresent: Object.fromEntries((["22","24","29","30","31","32","36"]).map(id => [id, docs.some(d => d.doc_key === "mv:1.5.5996" && d.k === id)])),
       conclusion: '',
     };
     const okGazette = (first as any).results?.find((r: any) => r.source === 'resmi_gazete');

@@ -1,5 +1,5 @@
 {
- "observedAt": "2026-11-17T22:02:59.223Z",
+ "observedAt": "2026-11-17T22:04:23.456Z",
  "istanbulDay": "2026-11-18",
  "lookbackDays": 14,
  "dateRangeRead": [
@@ -20,7 +20,7 @@
  ],
  "firstScan": {
   "status": "ok",
-  "ms": 1505,
+  "ms": 1689,
   "results": [
    {
     "source": "resmi_gazete",
@@ -53,7 +53,7 @@
  },
  "secondScan": {
   "status": "ok",
-  "ms": 1059,
+  "ms": 1048,
   "results": [
    {
     "source": "resmi_gazete",
@@ -80,7 +80,7 @@
  "sources": [
   {
    "code": "mevzuat",
-   "lastSuccessAt": "2026-11-17T22:02:59.673Z",
+   "lastSuccessAt": "2026-11-17T22:04:23.187Z",
    "lastError": null,
    "lastErrorKind": null,
    "itemsSeen": 148,
@@ -88,7 +88,7 @@
   },
   {
    "code": "resmi_gazete",
-   "lastSuccessAt": "2026-11-17T22:02:59.673Z",
+   "lastSuccessAt": "2026-11-17T22:04:23.187Z",
    "lastError": null,
    "lastErrorKind": null,
    "itemsSeen": 149,
@@ -98,7 +98,7 @@
  "watchedDocuments": [
   {
    "key": "mv:1.5.5996",
-   "title": "VETERİNER HİZMETLERİ, BİTKİ SAĞLIĞI, GIDA VE YEM KANUNU Kanun Numarası : 5996 Kabul Tarihi : 11/6/2010 Yayımlandığı Resmî Gazete : Tarih : 13/6/2010 Sayı : 27610 Yayımlandığı Düstur : Tertip : 5 Cilt ",
+   "title": "VETERİNER HİZMETLERİ, BİTKİ SAĞLIĞI, GIDA VE YEM KANUNU",
    "articlesParsed": 59
   },
   {
@@ -118,12 +118,12 @@
   },
   {
    "key": "mv:9.5.20147",
-   "title": "TÜRK GIDA KODEKSİ HIZLI DONDURULMUŞ GIDALAR TEBLİĞİ (TEBLİĞ NO: 2014/47) Amaç",
+   "title": "TÜRK GIDA KODEKSİ HIZLI DONDURULMUŞ GIDALAR TEBLİĞİ (TEBLİĞ NO: 2014/47)",
    "articlesParsed": 19
   },
   {
    "key": "mv:9.5.20148",
-   "title": "TÜRK GIDA KODEKSİ HIZLI DONDURULMUŞ GIDALARIN DEPOLANMASI, MUHAFAZASI VE TAŞINMASI SIRASINDA SICAKLIĞIN İZLENMESİ HAKKINDA TEBLİĞ (TEBLİĞ NO: 2014/48) Amaç",
+   "title": "TÜRK GIDA KODEKSİ HIZLI DONDURULMUŞ GIDALARIN DEPOLANMASI, MUHAFAZASI VE TAŞINMASI SIRASINDA SICAKLIĞIN İZLENMESİ HAKKINDA TEBLİĞ (TEBLİĞ NO: 2014/48)",
    "articlesParsed": 9
   }
  ],
@@ -143,5 +143,14 @@
   }
  ],
  "unpublished": true,
+ "kanun5996FilterIdsPresent": {
+  "22": true,
+  "24": true,
+  "29": true,
+  "30": true,
+  "31": true,
+  "32": true,
+  "36": true
+ },
  "conclusion": "Gerçek kaynaktan 1 değişiklik/yayın kuyruğa düştü (yayımlanmadı, uzman onayı bekliyor)."
 }

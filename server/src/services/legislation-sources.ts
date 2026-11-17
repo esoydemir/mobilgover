@@ -291,7 +291,7 @@ const watchKey = (w: WatchDoc) => `mv:${w.tur}.${w.tertip}.${w.no}`;
 export function parseConsolidated(html: string): { title: string; articles: Record<string, string> } {
   const text = htmlToText(html);
   // The title is the heading block before the first article/section ("TÜRK" and "GIDA KODEKSİ ..." may sit on separate lines).
-  const head = text.split(/\n\s*(?:GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+\d|Kanun Numarası|BİRİNCİ\s+(?:BÖLÜM|KISIM)|\nAmaç\b/)[0] ?? '';
+  const head = text.split(/\n\s*(?:GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+\d|Kanun\s+Numarası|BİRİNCİ\s+(?:BÖLÜM|KISIM)|\sAmaç(?=\s|$)/)[0] ?? '';
   const title = normText(head.replace(/^\s*\d+\s+/, '')).slice(0, 200) || 'Başlıksız';
   const articles: Record<string, string> = {};
   const marks = [...text.matchAll(/(?:^|\n)\s*(GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+(\d+(?:\/[A-Za-z0-9]+)?)\s*[-–—]/g)];

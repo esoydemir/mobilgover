@@ -146,6 +146,8 @@ describe('real Resmî Gazete item (Peynir Tebliği 2026/24, RG 10.11.2026)', () 
   });
   it('the title of a consolidated text is its whole heading block', () => {
     expect(parseConsolidated(Buffer.from(fx('mevzuat-gida-hijyeni-2026-11-18.html')).toString('utf8')).title).toBe('GIDA HİJYENİ YÖNETMELİĞİ');
+    expect(parseConsolidated('<body><p>10559 VETERİNER HİZMETLERİ KANUNU</p><p>Kanun Numarası : 5996</p><p>MADDE 1- metin metin</p></body>').title).toBe('VETERİNER HİZMETLERİ KANUNU');
+    expect(parseConsolidated('<body><p>TEBLİĞ (TEBLİĞ NO: 2014/47) Amaç</p><p>MADDE 1- metin metin</p></body>').title).toBe('TEBLİĞ (TEBLİĞ NO: 2014/47)');
     expect(parseConsolidated('<body><p>TÜRK</p><p>GIDA KODEKSİ TEBLİĞİ</p><p>MADDE 1- metin metin</p></body>').title).toBe('TÜRK GIDA KODEKSİ TEBLİĞİ');
   });
 });
