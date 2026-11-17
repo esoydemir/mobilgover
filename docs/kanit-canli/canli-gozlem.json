@@ -1,0 +1,147 @@
+{
+ "observedAt": "2026-11-17T22:02:59.223Z",
+ "istanbulDay": "2026-11-18",
+ "lookbackDays": 14,
+ "dateRangeRead": [
+  "2026-11-04",
+  "2026-11-18"
+ ],
+ "official": [
+  {
+   "code": "mevzuat",
+   "base": "https://www.mevzuat.gov.tr",
+   "isExample": false
+  },
+  {
+   "code": "resmi_gazete",
+   "base": "https://www.resmigazete.gov.tr",
+   "isExample": false
+  }
+ ],
+ "firstScan": {
+  "status": "ok",
+  "ms": 1505,
+  "results": [
+   {
+    "source": "resmi_gazete",
+    "ok": true,
+    "seen": 149,
+    "docsRead": 1,
+    "created": 1,
+    "errors": [],
+    "errorKind": null,
+    "notes": []
+   },
+   {
+    "source": "mevzuat",
+    "ok": true,
+    "seen": 148,
+    "docsRead": 6,
+    "created": 0,
+    "errors": [],
+    "errorKind": null,
+    "notes": [
+     "Kanun 5996 (Veteriner Hizmetleri, Bitki Sağlığı, Gıda ve Yem): ilk okuma, 59 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Gıda Hijyeni Yönetmeliği: ilk okuma, 31 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Gıda İşletmelerinin Kayıt ve Onay İşlemlerine Dair Yönetmelik: ilk okuma, 16 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Hijyen Eğitimi Yönetmeliği: ilk okuma, 14 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Hızlı Dondurulmuş Gıdalar Tebliği (2014/47): ilk okuma, 19 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Hızlı Dondurulmuş Gıdaların Sıcaklık İzleme Tebliği (2014/48): ilk okuma, 9 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi)."
+    ]
+   }
+  ]
+ },
+ "secondScan": {
+  "status": "ok",
+  "ms": 1059,
+  "results": [
+   {
+    "source": "resmi_gazete",
+    "ok": true,
+    "seen": 149,
+    "docsRead": 1,
+    "created": 0,
+    "errors": [],
+    "errorKind": null,
+    "notes": []
+   },
+   {
+    "source": "mevzuat",
+    "ok": true,
+    "seen": 148,
+    "docsRead": 6,
+    "created": 0,
+    "errors": [],
+    "errorKind": null,
+    "notes": []
+   }
+  ]
+ },
+ "sources": [
+  {
+   "code": "mevzuat",
+   "lastSuccessAt": "2026-11-17T22:02:59.673Z",
+   "lastError": null,
+   "lastErrorKind": null,
+   "itemsSeen": 148,
+   "docsRead": 6
+  },
+  {
+   "code": "resmi_gazete",
+   "lastSuccessAt": "2026-11-17T22:02:59.673Z",
+   "lastError": null,
+   "lastErrorKind": null,
+   "itemsSeen": 149,
+   "docsRead": 1
+  }
+ ],
+ "watchedDocuments": [
+  {
+   "key": "mv:1.5.5996",
+   "title": "VETERİNER HİZMETLERİ, BİTKİ SAĞLIĞI, GIDA VE YEM KANUNU Kanun Numarası : 5996 Kabul Tarihi : 11/6/2010 Yayımlandığı Resmî Gazete : Tarih : 13/6/2010 Sayı : 27610 Yayımlandığı Düstur : Tertip : 5 Cilt ",
+   "articlesParsed": 59
+  },
+  {
+   "key": "mv:7.5.15592",
+   "title": "GIDA HİJYENİ YÖNETMELİĞİ",
+   "articlesParsed": 31
+  },
+  {
+   "key": "mv:7.5.15594",
+   "title": "GIDA İŞLETMELERİNİN KAYIT VE ONAY İŞLEMLERİNE DAİR YÖNETMELİK",
+   "articlesParsed": 16
+  },
+  {
+   "key": "mv:7.5.18552",
+   "title": "HİJYEN EĞİTİMİ YÖNETMELİĞİ",
+   "articlesParsed": 14
+  },
+  {
+   "key": "mv:9.5.20147",
+   "title": "TÜRK GIDA KODEKSİ HIZLI DONDURULMUŞ GIDALAR TEBLİĞİ (TEBLİĞ NO: 2014/47) Amaç",
+   "articlesParsed": 19
+  },
+  {
+   "key": "mv:9.5.20148",
+   "title": "TÜRK GIDA KODEKSİ HIZLI DONDURULMUŞ GIDALARIN DEPOLANMASI, MUHAFAZASI VE TAŞINMASI SIRASINDA SICAKLIĞIN İZLENMESİ HAKKINDA TEBLİĞ (TEBLİĞ NO: 2014/48) Amaç",
+   "articlesParsed": 9
+  }
+ ],
+ "realChangesQueued": [
+  {
+   "source_code": "resmi_gazete",
+   "change_type": "new_publication",
+   "doc_ref": "Resmî Gazete 33426 · 10.11.2026",
+   "doc_title": "Türk Gıda Kodeksi Peynir Tebliği (No: 2026/24)",
+   "article_ref": null,
+   "published_on": "2026-11-10",
+   "effective_from": null,
+   "date_status": "unclear",
+   "status": "pending",
+   "is_example": false,
+   "source_url": "https://www.resmigazete.gov.tr/eskiler/2026/11/20261110-7.htm"
+  }
+ ],
+ "unpublished": true,
+ "conclusion": "Gerçek kaynaktan 1 değişiklik/yayın kuyruğa düştü (yayımlanmadı, uzman onayı bekliyor)."
+}

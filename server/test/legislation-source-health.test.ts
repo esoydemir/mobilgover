@@ -132,3 +132,20 @@ describe('Resmî Gazete connector: only the configured source is contacted', () 
     expect(out.changes).toHaveLength(1);
   });
 });
+
+describe('real Resmî Gazete item (Peynir Tebliği 2026/24, RG 10.11.2026)', () => {
+  it('"yayımı tarihinde" next to a later transition date is NOT a plain known date', async () => {
+    const real = html(fx('rg-20261110-7-peynir-tebligi.htm'), 'text/html; charset=windows-1254');
+    const idx = '<div id="gunluk-akis"><div id="html-content" class="html-content"><div class="html-subtitle"> TEBLİĞ </div><div class="fihrist-item mb-1"><a href="/eskiler/2026/11/20261110-7.htm">Türk Gıda Kodeksi Peynir Tebliği (No: 2026/24)</a></div></div></div>' + '<!-- -->'.repeat(30);
+    const f: Fetcher = async url => (url.includes('/fihrist') ? html(idx) : real);
+    const out = await scanGazette({ baseUrl: 'https://www.resmigazete.gov.tr', today: '2026-11-10', lookbackDays: 0, fetcher: f, sleep: noSleep });
+    expect(out.errors).toEqual([]);
+    expect(out.changes).toHaveLength(1);
+    expect(out.changes[0]!.effective.status).toBe('unclear');
+    expect(out.changes[0]!.effective.note).toContain('30.04.2027');
+  });
+  it('the title of a consolidated text is its whole heading block', () => {
+    expect(parseConsolidated(Buffer.from(fx('mevzuat-gida-hijyeni-2026-11-18.html')).toString('utf8')).title).toBe('GIDA HİJYENİ YÖNETMELİĞİ');
+    expect(parseConsolidated('<body><p>TÜRK</p><p>GIDA KODEKSİ TEBLİĞİ</p><p>MADDE 1- metin metin</p></body>').title).toBe('TÜRK GIDA KODEKSİ TEBLİĞİ');
+  });
+});

@@ -237,7 +237,13 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
         const doc = parseGazetteDocument(requireHtml(await fetchWithRetry(o.fetcher, url, { sleep: o.sleep }), url), { title: it.title, publishedOn: day });
         out.docsRead += 1;
         const type = changeTypeFromTitle(it.title);
-        const eff = parseEffective(doc.effectiveClauses, day);
+        let eff = parseEffective(doc.effectiveClauses, day);
+        // "Yayımı tarihinde yürürlüğe girer" can sit next to transition dates in other articles (e.g. "30/4/2027 tarihinden sonra ...").
+        // Such a text has more than one date that matters, so an administrator must decide; it is never read as a plain known date.
+        if (eff.status === 'known') {
+          const later = [...new Set(doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).flatMap(a => datesIn(a.text)).filter(d => d > day))].sort();
+          if (later.length) eff = { status: 'unclear', date: null, note: `Yürürlük maddesi ${trDate(eff.date)} gösteriyor, ancak metinde ileri tarihli/geçiş hükümleri var (${later.slice(0, 4).map(trDate).join(', ')}). Hangi tarihin uygulanacağını yönetici metinden belirlemeli.` };
+        }
         const file = url.split('/').pop()!.replace(/\.html?$/i, '');
         const newText = type === 'repeal' ? null : doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).map(a => `MADDE ${a.id} – ${a.text}`).join('\n\n') || doc.text.slice(0, 4000);
         out.changes.push({
@@ -284,7 +290,9 @@ const watchKey = (w: WatchDoc) => `mv:${w.tur}.${w.tertip}.${w.no}`;
 
 export function parseConsolidated(html: string): { title: string; articles: Record<string, string> } {
   const text = htmlToText(html);
-  const title = text.split('\n').find(l => l.trim().length > 8)?.trim() ?? 'Başlıksız';
+  // The title is the heading block before the first article/section ("TÜRK" and "GIDA KODEKSİ ..." may sit on separate lines).
+  const head = text.split(/\n\s*(?:GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+\d|Kanun Numarası|BİRİNCİ\s+(?:BÖLÜM|KISIM)|\nAmaç\b/)[0] ?? '';
+  const title = normText(head.replace(/^\s*\d+\s+/, '')).slice(0, 200) || 'Başlıksız';
   const articles: Record<string, string> = {};
   const marks = [...text.matchAll(/(?:^|\n)\s*(GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+(\d+(?:\/[A-Za-z0-9]+)?)\s*[-–—]/g)];
   marks.forEach((m, i) => {
