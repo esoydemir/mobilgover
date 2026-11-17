@@ -1,0 +1,15 @@
+-[ RECORD 1 ]--+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+id             | cb66d445-0e07-4a76-b0a9-4fc510899baf
+source_code    | resmi_gazete
+change_type    | new_publication
+doc_ref        | Resmî Gazete 33426 · 10.11.2026
+doc_title      | Türk Gıda Kodeksi Peynir Tebliği (No: 2026/24)
+status         | pending
+date_status    | unclear
+effective_from | 
+date_note      | Yürürlük maddesi 10.11.2026 gösteriyor, ancak metinde ileri tarihli/geçiş hükümleri var (30.04.2027). Hangi tarihin uygulanacağını yönetici metinden belirlemeli
+source_url     | https://www.resmigazete.gov.tr/eskiler/2026/11/20261110-7.htm
+published_on   | 2026-11-10
+is_example     | f
+detected_at    | 2026-11-17 23:01:18.958375+00
+

@@ -1,65 +1,80 @@
-# Canlı mevzuat takibi ve kontrollü devreye alma — teslim raporu
+# Canlı mevzuat takibi — nihai teslim raporu
 
-Tarih: 18.11.2026 · Dal: `feat/canli-mevzuat-izleme` (taban: `goverhub-mobile` @ `5f655d8`) · Depo: `esoydemir/mobilgover`
+Tarih: 18.11.2026 · Depo: `esoydemir/mobilgover` (taban dal `goverhub-mobile`) · Kanıt: `docs/kanit-nihai-teslim/`
 
-## 1. Üç cevap
+## 1. Doğrudan cevaplar
 
-1. **Canlı tarama çalıştı mı?** **Evet.** Resmî Gazete (resmigazete.gov.tr) ve Mevzuat Bilgi Sistemi (mevzuat.gov.tr) gerçek adreslerinden, izole boş bir veritabanında iki kez okundu (18.11.2026, `docs/kanit-canli/canli-gozlem.json`).
-2. **Gerçek değişiklik gözlendi mi?** **Evet, bir yayın:** Resmî Gazete 33426, 10.11.2026, *Türk Gıda Kodeksi Peynir Tebliği (No: 2026/24)*. İnceleme kuyruğuna `bekliyor` olarak düştü, yürürlük tarihi **belirsiz** işaretlendi (metin "yayımı tarihinde" diyor ama 30/4/2027 geçiş tarihleri var). Yayımlanmadı, kural üretilmedi. Mevzuat tarafında taban okuması yapıldı; ikinci okumada değişiklik üretilmedi.
-3. **Gerçek işletmeye uygulandı mı?** **Hayır.** Hiçbir gerçek mevzuat kuralı, görev, yükümlülük veya bildirim hiçbir işletmeye uygulanmadı. Uygulama davranışı yalnız **sentetik** kaynakla doğrulandı.
+1. **8091'de otomatik tarama açık mı?** **Evet.** `LEGISLATION_SCAN_ENABLED=1`, her gün **06:00 Europe/Istanbul**. İlk tarama (elle, taban) 18.11.2026 02:01'de yapıldı. **İlk planlı koşu: 18.11.2026 06:00** (henüz gerçekleşmedi → durum **"planlandı"**). Ekranda görmek için: `http://127.0.0.1:8091/legislation` (platform yönetimi/kural onaylayıcı girişi) → "Son başarılı tarama", "Sıradaki planlı tarama", kaynak kartları.
+2. **Hangi resmî kaynaklar okunuyor, tabanda kaç belge var?** Mevzuat Bilgi Sistemi (mevzuat.gov.tr) **6 belge / 149 madde** (Kanun 5996: 60, Gıda Hijyeni: 31, Kayıt-Onay: 16, Hijyen Eğitimi: 14, 2014/47: 19, 2014/48: 9) ve Resmî Gazete (resmigazete.gov.tr) günlük içindekiler (son 14 gün, 149 kalem; 1 gıda belgesi okundu).
+3. **Hangi gerçek yayın incelemeye girdi?** Resmî Gazete 33426 (10.11.2026) **Türk Gıda Kodeksi Peynir Tebliği (No: 2026/24)**, kayıt `cb66d445-0e07-4a76-b0a9-4fc510899baf`, durum **inceleme bekliyor**, yürürlük **belirsiz** (genel hüküm "yayımı tarihinde", geçiş hükümleri 30.04.2027). Resmî bağlantı: https://www.resmigazete.gov.tr/eskiler/2026/11/20261110-7.htm. Kuyrukta başka kayıt yok.
+4. **İşletmeye onaysız hiçbir şey ulaşmadığı nasıl kanıtlandı?** 8091'de üç tarama (taban + 2 tekrar) öncesi/sonrası sayaç farkı: yalnızca `legislation_changes` (+1), `legislation_scan_runs` (+3) ve `audit_events` (+4: `legislation.detected` 1, `legislation.scanned` 3) değişti; **görev, yükümlülük, kural sürümü, kural, şablon, bildirim sayıları değişmedi**; mevzuat bağlantılı görev/bildirim/kural sürümü = 0 (`docs/kanit-nihai-teslim/8091-sayac-*.txt`). Normal günlük görev üretimi `tasks.generated` olay türüyle ve bağlı kayıt kimliğiyle ayrılır (mevzuat kaynaklı değişiklik yalnız `legislation.*` olaylarıdır). Onay/yürürlük/kapsam dışı şube davranışı gerçek PostgreSQL ile sentetik kabulde (bölüm 4).
+5. **5996'daki iki ayrıştırma farkı:** (a) `MADDE 10/Ç` gerçek bir hükümdü, `Ç` harfi madde numarası desenine girmediği için atlanıyordu → **düzeltildi** + regresyon testi; (b) ikinci `GEÇİCİ MADDE 2` geçişi hüküm değil, değişiklik geçmişi tablosundaki atıf → hüküm sayılmıyor, belgelendi. Sonuç: 61 "MADDE" geçişi = 60 hüküm + 1 tablo atfı. İzlenen yedi madde (22, 24, 29, 30, 31, 32, 36) metinle eşleşti.
+6. **Bekleyen uzman kararları ve karar yeri:** dokuz sorunun dokuzu da bekliyor (hiçbiri verilmedi). Peynir Tebliği (8. soru) **Mevzuat takibi** ekranında (`/legislation` → kayıt); diğer kural taslağı kararları **Yönetim → kural** (`/rule/<id>`); künye/bilgi soruları envantere işlenir. Ayrıntı: `docs/MEVZUAT_UZMAN_KARAR_PAKETI.md`.
+7. **Son commit, CI, yedek, kanıt:** bölüm 2.
 
-## 2. PR, CI, sürüm, ortam
+## 2. PR, CI, sürüm, yedek
 
-- PR: [PR #7](https://github.com/esoydemir/mobilgover/pull/7) · CI: [CI çalışması](https://github.com/esoydemir/mobilgover/actions/runs/44188290171) (3/3 yeşil) (son commit: `f836ee4`). Birleştirilmedi; incelemeye hazır.
-- Başlangıç doğrulaması: `origin/goverhub-mobile` = `5f655d8` (PR #6 birleştirme commit'i), PR #6 GitHub'da MERGED. İzole 49/49 kabul kanıtı `docs/kanit-mevzuat/kabul-kanit.json`'da (bu iş 51'e çıkardı).
-- Çalıştığı ortamlar: canlı gözlem = `gh-pilot-testdb` (izole test PostgreSQL, 55432); tarayıcı kabulü = izole `goverhub-mevzuat` ortamı, port 8098, sentetik kaynak 8199. **8091 ve 8080'e dokunulmadı.** 8091 doğrulaması (salt okunur): `LEGISLATION_SCAN_ENABLED=0`, taban adresleri boş, `legislation_sources`/`legislation_changes` boş; pilot verisi korunuyor. 8091 hâlâ önceki imajı çalıştırıyor (migrasyon 026 yok); açmak için yeniden kurulum gerekir (`docs/MEVZUAT_TAKIBI.md` → Canlı geçiş rehberi).
-
-## 3. Bu işte yapılanlar
-
-| Alan | Sonuç |
-|---|---|
-| İzleme envanteri | `docs/MEVZUAT_IZLEME_ENVANTERI.md`: 8 kayıt (6 izlenen, 1 rehber, 1 künyesi bulunamayan). Metinler resmî sayfalardan okundu; kaynak doğrulaması ile uzman incelemesi ayrı alanlarda. **Önceki araştırmadaki bir hata düzeltildi** (soğuk zincir Madde 18(5)-(6)'da, Madde 5'te değil). |
-| Makine okunur liste | Mevcut `LEGISLATION_MEVZUAT_WATCH` biçimi korundu; yalnız isteğe bağlı `m=` madde filtresi eklendi (5996'nın çoğu madde hayvan/bitki sağlığı; filtre ilgisiz kuyruk gürültüsünü önler). Öntanımlı liste artık 6 doğrulanmış belge. |
-| Kaynak sağlığı | Hata türleri ayrıldı: zaman aşımı, erişim engeli (403/429/robot sayfası), sayfa yok, sunucu hatası, bağlantı, boş yanıt, beklenmeyen biçim (PDF/JSON/HTML değil/liste biçimi değişmiş), bozuk/eksik metin (önceki okumanın %60'ından az madde), resmî olmayan bağlantı. Kart: son deneme, son başarılı okuma, okunan belge, taranan madde, kuyruk (açık/toplam), hata türü. Başarısız okuma tabanı ve son sağlıklı sayıları değiştirmez. |
-| Güvenlik sınırı | Belge bağlantıları yalnız yapılandırılmış kaynak ana bilgisayarında izlenir; başka ana bilgisayara yönlendirme reddedilir. Belge içindeki bağlantılar hiç izlenmez. |
-| Ayrıştırıcı | Görünmez/boşluk farkları (NBSP, sıfır genişlikli, yumuşak tire, CRLF) sahte değişiklik üretmez; rakam/büyük-küçük harf farkı hâlâ değişikliktir. Gerçek Mevzuat sayfası kaydedilip regresyon testi yazıldı. Başlık ayrıştırma düzeltildi. Geçiş/ileri tarihli hükmü olan yayın artık "bilinen yürürlük" sayılmaz (gerçek Peynir Tebliği ile bulundu). |
-| Denetim | Onay kaydı artık **onay anındaki etki önizlemesini** taşır (`previewAtApproval`); yürürlük gününün gerçek sonucu ayrıca `legislation.applied` kaydında. |
-| Zamanlayıcı | `startLegislationScheduler` gerçek zamanlayıcıyla, kontrollü saatle test edildi (kendiliğinden çalışır, günde bir kez, saatten önce çalışmaz). |
-
-## 4. Geçen testler
-
-- Birim: `legislation-sources.test.ts` + `legislation-source-health.test.ts` (kaydedilmiş gerçek sayfalarla): 15+ test.
-- Kabul (gerçek PostgreSQL, sentetik kaynak): `legislation-watch.test.ts` (16, mevcut), `legislation-live-readiness.test.ts` (11): zamanlayıcı kendiliğinden, kaynak hata türleri (zaman aşımı/engel/boş/PDF/robot), bozuk metinde taban korunur, kurtarma + yeniden başlatma + üst üste çakışan taramalarda tek kayıt, geçmiş tarihli onayın anında uygulanması (yalnız eşleşen şube, tek bildirim, tekrar çalıştırmada kopya yok), denetimde onay önizlemesi ≠ gerçek sonuç.
-- Tam sunucu paketi: 46 dosya geçti, 2 atlandı (canlı gözlem testi yalnız `LIVE_OBSERVE=1` ile koşar; yedek-geri yükleme yerelde hariç, CI'da çalışır) · 410 test geçti, 0 kaldı
-- Tarayıcı kabulü (izole ortam 8098, ayrı oturumlar: yazar, alan uzmanı, onaylayıcı, platform yöneticisi, işletme sahibi, şube personeli): **51 geçti, 0 kaldı** (`docs/kanit-mevzuat-canli-gecis/kabul-kanit.json`). Ekran görüntüleri: kaynak sağlığı (`14`, `15`), eski/yeni metin (`03`, `16`), şube önizlemesi (`04`), onay sonrası durum (`07`, `13`), işletme bildirim ayrıntısı (`08`, `09`).
-- Canlı gözlem (kanıt): `docs/kanit-canli/canli-gozlem.json` — erişim: iki kaynak 200; tarih aralığı 04.11–18.11.2026 (15 gün); Resmî Gazete: 149 kalem tarandı, 1 gıda belgesi okundu; Mevzuat: 6 belge, 148 madde (5996: 59, Gıda Hijyeni: 31, Kayıt-Onay: 16, Hijyen Eğitimi: 14, 2014/47: 19, 2014/48: 9), taban kaydedildi; ikinci okuma 0 kopya; 5996 filtre maddeleri (22, 24, 29, 30, 31, 32, 36) ayrıştırılan metinde var; her iki tarama yaklaşık 1–1,5 sn.
-
-## 5. Test edilmeyenler / sınırlar (açık yazıyor)
-
-- **Canlı kaynaktan bir yürürlük günü uygulaması** doğrulanamaz ve doğrulanmadı: hiçbir gerçek kural yayımlanmadı. Yürürlük günü, ileri tarihli, geçmiş tarihli, kaldırma davranışları yalnız sentetik kaynakla doğrulandı. Tarayıcıda zaman ilerletilemez; gün gelişi otomatik testte enjekte saatle.
-- Tarayıcı kabulünde **kapsam dışı şube için ayrı bir kullanıcı oturumu** açılmadı; kapsam dışı şubenin bildirim/görev/yükümlülük almadığı veritabanı sorgularıyla ve API ile doğrulandı (51 kontrolün içinde).
-- Gerçek bir geçerli Mevzuat **madde değişikliğinin** kuyruğa düşmesi canlıda gözlenmedi (yalnız Resmî Gazete yayını gözlendi); madde değişikliği sentetik ve kaydedilmiş gerçek sayfa üzerinde doğrulandı.
-- Mevzuat birleştirilmiş metni sayfasında madde başlığı bir önceki maddenin sonuna yapışır (kaynak biçimi). Başlık değişirse o madde "değişti" görünebilir; tek değişiklik olarak, eski/yeni metinle incelemeye düşer.
-- Kanun 5996'da 61 "MADDE" geçişi var, 59 madde ayrıştırıldı; filtre maddeleri doğrulandı, kalan iki fark (geçici/özel madde biçimleri olası) incelenmedi.
-- Tarayıcı penceresinde 8091 üzerinde canlı tarama açılmadı (şart değildi).
-- Gıda Hijyeni, Hijyen Eğitimi, 2014/47-48'de okunan metinde değişiklik işareti bulunmadı; bu "değişmedi" demek değildir, uzman Resmî Gazete'den teyit etmeli.
-
-## 6. Uzman bekleyen maddeler (genel "uzman onayı gerekli" değil; soru, dayanak, ilgili taslak)
-
-| # | Soru | Dayanak | İlgili kural taslağı |
+| İş | PR | Birleştirme commit'i | CI (3/3 yeşil) |
 |---|---|---|---|
-| 1 | Sıcaklık izleme görevi yasal yükümlülük mü (Md. 18(5) + 22(2)(ç)), yoksa işletmenin kendi HACCP planından mı doğar? Küçük kafelere HACCP'ın hangi sadeleştirilmiş uygulaması (Md. 22(5)) geçerli? | Gıda Hijyeni Yönetmeliği Md. 18(5)-(6), 22 | P-01, P-03 |
-| 2 | Kafe/restoran Hijyen Eğitimi Yönetmeliği'nin "perakende iş yeri" kapsamında mı? Belgenin geçerlilik süresi var mı (metinde yok)? | Hijyen Eğitimi Yön. Md. 2, 5 | P-04 |
-| 3 | 2014/47 ve 2014/48 toplu tüketim yerinin kendi dondurucusuna uygulanır mı? Md. 4(ç) bir yıllık kayıt saklama ve 4(e) 10 m³ altı basit termometre istisnası kafede geçerli mi? −18 °C ürün tanımı mı, işletme limiti mi? | Tebliğ 2014/47 Md. 2, 4; 2014/48 Md. 4 | P-02 |
-| 4 | Kafe kayıt (Ek-2) kapsamında mı, onay (Ek-1) kapsamında mı? Faaliyet değişikliğinde kayıt belgesi güncelleme süresi nedir? | Kayıt ve Onay Yön. Md. 5, 6, Ek-1/2 | — (kayıt numarası sorusu) |
-| 5 | Dezenfektan ruhsatı için yürürlükteki yönetmelik hangisi (künye ve madde)? Künye doğrulanamadı. | — | P-05 |
-| 6 | Temizlik/dezenfeksiyon için "yeterli sıklık" (Md. 14(1)(a)) hangi sayısal/plan temelli yorumla görev olur? | Gıda Hijyeni Yön. Md. 14 | P-05 |
-| 7 | Kanun Md. 36 idari para cezası bentlerinden hangileri toplu tüketim yerine uygulanır? (tutar kurala taşınmaz) | Kanun 5996 Md. 36 | — |
-| 8 | Kuyruktaki Peynir Tebliği (2026/24) kafe için geçerli mi (ürüne özgü)? 30/4/2027 geçiş tarihleri hangi işletmeler için ne anlama geliyor? Kapsam dışı ise reddedilir. | RG 33426, 10.11.2026, Md. 21–22 | — |
-| 9 | Toplu Tüketim İyi Hijyen Rehberi'ndeki sıcak tutma/süre değerleri "iyi uygulama — Bakanlık rehberi" etiketiyle kullanılsın mı? Değerler bu çalışmada yeniden okunmadı. | Rehber (Isparta İl Müd. PDF) | P-03 |
+| Canlı takip altyapısı | [#7](https://github.com/esoydemir/mobilgover/pull/7) | `95ae081` | [çalışma](https://github.com/esoydemir/mobilgover/actions/runs/44188769646) |
+| 5996 `10/Ç`, yürürlük ayrıntısı, kesinti telafisi, kapsam dışı şube testi | [#8](https://github.com/esoydemir/mobilgover/pull/8) | `bb20000` | [çalışma](https://github.com/esoydemir/mobilgover/actions/runs/44193506066) (son commit `b65745e`) |
+| "Sıradaki planlı tarama" düzeltmesi | [#9](https://github.com/esoydemir/mobilgover/pull/9) | `7ec0d9d` | [çalışma](https://github.com/esoydemir/mobilgover/actions/runs/44194413794) |
 
-Hiçbir satır uzman onaylı değildir; hiçbir kural taslağı oluşturulmadı.
+- **8091 çalışan sürüm:** `7ec0d9d` ile derlenmiş imaj (`goverhub-pilotfix-app:fix`), sağlık 200, migrasyon 026 uygulanmış, 8080'e dokunulmadı.
+- **Yedek:** `C:\dev\goverhub-pilot\veri\8091-yedek-nihai-oncesi-20261118-014622.dump` (SHA-256 `423bf42b65612b3f5fc6fccddf1a5701f984bfb9a9b4e4bb1fb13eff67d0cd86`), ayrı veritabanına geri yüklenip **79 tablonun tamamının satır sayısı eşit** doğrulandı (`veri/sayac-8091-nihai-once.txt` = `…-yedekten.txt`). Önceki yedek: `8091-yedek-pr7-oncesi-*.dump`.
+- **8091 yapılandırması** (yerel, depo dışı): `C:\dev\goverhub-pilot\ortam\pilotfix-override.yaml` → `LEGISLATION_SCAN_ENABLED: "1"`, `LEGISLATION_SCAN_HOUR: "6"`, `LEGISLATION_LOOKBACK_DAYS: "14"` (kayıt anahtarı tekrarı engeller). Kaynak adresleri boş = resmî adresler. Güvenli duruma dönmek: `"0"` yapıp uygulama kapsayıcısını yeniden oluştur.
 
-## 7. Kanıt dosyaları
+## 3. Canlı 8091 sonuçları (gerçek resmî kaynak) — sentetik kabulden ayrı
 
-`docs/MEVZUAT_IZLEME_ENVANTERI.md` · `docs/kanit-canli/` (resmî metin özetleri, canlı gözlem JSON) · `docs/kanit-mevzuat-canli-gecis/` (21 ekran, kabul-kanit.json) · `docs/MEVZUAT_TAKIBI.md` (canlı geçiş rehberi) · `server/test/fixtures/legislation/` (kaydedilmiş gerçek sayfalar).
+| Adım | Sonuç |
+|---|---|
+| Başlangıç | 8091 migrasyon 026, tarama kapalı, kaynak/kayıt boş; yedek + geri yükleme doğrulandı |
+| İzole canlı koşu (aynı sürüm, boş veritabanı) | `canli-gozlem-nihai.json`: iki kaynak 200; 1. tarama 6 belge/149 madde taban + 1 Resmî Gazete kaydı; 2. tarama 0 kopya |
+| 8091 1. tarama (elle, 02:01) | Mevzuat taban: 6 belge, 149 madde, 0 kayıt. Resmî Gazete (3 günlük pencere): 35 kalem, 0 belge |
+| Pencere 14 güne alındı, 2. tarama | Peynir Tebliği kuyruğa **1 kayıt**; 3. tarama **0 kopya** |
+| Yönetici ekranı | Son başarılı tarama, sıradaki planlı tarama (06:00), "ilk okuma yalnız taban" notu, kaynak kartları (okunan belge 6 / 1, taranan kalem 149, kuyruk 0 / 1 açık, hata yok), bekleyen 1, tarihi belirsiz 1 |
+| Kayıt ayrıntısı | Genel hüküm (md. 22), geçiş hükümleri (geçici md. 1: 4 fıkra, 30.04.2027), kapsam ayrı alanlarda; resmî bağlantı; "tek geçiş tarihi tüm işletmelere uygulanmaz" uyarısı |
+| Onaysız yazım yok | bölüm 1, madde 4 |
+| Durdur / yeniden aç | Kapatıldı → tarama geçmişi 3, kayıt 1, kaynak 2, mevzuat denetim olayı 4; yeniden açıldı → aynı sayılar (silinmedi) (`8091-durdur-yeniden-ac.txt`) |
+| Planlı koşu (gerçek 8091) | **Planlandı: 18.11.2026 06:00 Europe/Istanbul.** Henüz gerçekleşmedi; sonucu `/legislation` ekranından okunur |
+| Gerçek değişiklik | Yalnız bu yeni yayın gözlendi; **mevcut bir Mevzuat maddesinde gerçek değişiklik gözlenmedi** (bu tabana ilk okuma) |
+
+### Zamanlayıcının kendiliğinden çalıştığının ayrı kanıtı
+- Otomatik test (`legislation-live-readiness.test.ts`, 12 test, gerçek zamanlayıcı): kendiliğinden çalışır, günde bir kez, saatten önce çalışmaz, kaynak hata türleri, kurtarma, yeniden başlatma, makine kapalıyken kaçırılan aralık.
+- Gerçek süreç, izole ortam 8098 (sürüm 8091 ile aynı, sentetik kaynak): saat bugüne ayarlanıp uygulama yeniden başlatıldı; **elle tetikleme olmadan** ~30 sn sonra `trigger=schedule` koşusu `ok`; ikinci yeniden başlatmada ikinci koşu/kopya yok (`zamanlayici-8098.txt`).
+
+### Makine/Docker kapalıyken davranış
+- Kapsayıcılar `restart: unless-stopped`; makine açılınca otomatik kalkar. Zamanlayıcı 10 dakikada bir bakar; saat ≥ 06:00 ve o gün başarılı planlı koşu yoksa çalışır (kaçırılan saat, makine açıldığında telafi edilir).
+- Resmî Gazete taraması son sağlıklı okumadan bu yana geçen günleri kapsayacak şekilde geriye uzar (en çok 30 gün) ve ekrana "Kaçırılan aralık telafi edildi / UYARI" notu düşer; 30 günden uzun kesintide uyarı ekrandadır, atlanan gün sessizce geçmez.
+- Aynı gün elle + planlı çakışma tek kayıt üretir (testle doğrulandı).
+
+## 4. Sentetik kabul (gerçek PostgreSQL, sentetik kaynak) — canlı sonuçlardan ayrı
+
+- **Sunucu paketi:** gerçek PostgreSQL ile tamam (bölüm 6'daki sayılar); CI 3/3 yeşil.
+- **Tarayıcı kabulü** (izole 8098, ayrı oturumlar: yazar, alan uzmanı, onaylayıcı, platform yöneticisi, işletme sahibi, şube personeli): **51 geçti, 0 kaldı** (`kabul-kanit.json`).
+- Kontroller: zamanlayıcı yayını kuyruğa alır, taban/tekrar kopya üretmez · yetkisiz kullanıcı, boş gerekçe ve çözülmemiş tarih yayını engeller; reddedilen kayıt işletmeye ulaşmaz · gelecek tarihli onay erken uygulanmaz; saat ilerletilince yalnız eşleşen şube **tek** görev ve **tek** bildirim alır; **kapsam dışı şubenin ayrı oturumu** bildirim/görünüm almaz (yeni test) · kaldırma: açık görevler onaylı karara göre, tamamlanan görev/kanıt eski sürümde kalır · elle+planlı çakışma, kaynak kapanma/dönüş, yeniden başlatma kopya üretmez; başarısız okuma son sağlıklı metni bozmaz · işletme bildirimi doğru şube/kural/görev/termin/resmî dayanağı açar.
+- Sınır: tarayıcıda saat ilerletilemez; yürürlük günü ilerletmesi enjekte saatli otomatik testtedir.
+
+## 5. Bu çalışmada eklenenler
+
+- 5996 `10/Ç` ayrıştırma düzeltmesi (+ test); kapsam maddesi ("Kapsam" başlığı bir önceki maddenin sonuna yapışır → sonraki madde) doğru seçiliyor.
+- Resmî Gazete kayıtlarında **yürürlük ayrıntısı** ayrı alanlar: genel hüküm / geçiş tarihleri / kapsam. Uygulanabilirlik hükmü verilmez.
+- Kesinti telafisi (geriye dönük pencere) + uyarı notları.
+- Yönetici ekranı: sıradaki planlı tarama, "ilk okuma = taban" notu, yürürlük ayrıntısı blokları.
+- Envanter (altı kayıt doğrulama tablosu) ve dokuz soruluk karar paketi.
+
+## 6. Test sayıları
+
+Sunucu (gerçek PostgreSQL, yedek-geri yükleme yerelde hariç, CI'da koşar): 419 test geçti, 4 atlandı; mobil + sunucu `tsc` temiz; tarayıcı kabulü 51/51.
+
+## 7. Açık bırakılanlar (gizli boşluk yok)
+
+- İlk gerçek planlı koşu henüz gerçekleşmedi (18.11.2026 06:00); sonucu bu rapor yazıldıktan sonra ekrandan okunur.
+- Dokuz uzman kararı bekliyor; kararlar kaynak okumayı/kuyruğa almayı engellemez.
+- Gıda Hijyeni, Hijyen Eğitimi, 2014/47-48'de okunan metinde değişiklik işareti yoktur; bu "değişmedi" kanıtı değildir.
+- Rehber PDF'i (E-07) izlenmez; dezenfektan yönetmeliği künyesi (E-08) doğrulanamadığı için kaynak bağlanmadı.
+- 8080'deki demo ve üretim ortamına dokunulmadı; gerçek işletmeye kural yayımlanmadı.
+
+## 8. Kanıt dosyaları
+
+`docs/kanit-nihai-teslim/` (8091 özet/tarama/sayaç/durdur-aç, canlı gözlem, zamanlayıcı, tarayıcı kabul JSON + ekran görüntüleri) · `docs/MEVZUAT_IZLEME_ENVANTERI.md` · `docs/MEVZUAT_UZMAN_KARAR_PAKETI.md` · `docs/MEVZUAT_TAKIBI.md` (canlı geçiş rehberi) · `docs/kanit-canli/`, `docs/kanit-mevzuat-canli-gecis/` (önceki aşama).

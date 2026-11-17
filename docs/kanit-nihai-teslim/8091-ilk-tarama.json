@@ -1,0 +1,36 @@
+{
+ "status": 200,
+ "body": {
+  "runId": "d4ce018e-f66d-41f6-b80d-23ad17a2ec8c",
+  "status": "ok",
+  "results": [
+   {
+    "source": "resmi_gazete",
+    "ok": true,
+    "seen": 35,
+    "docsRead": 0,
+    "created": 0,
+    "errors": [],
+    "errorKind": null,
+    "notes": []
+   },
+   {
+    "source": "mevzuat",
+    "ok": true,
+    "seen": 149,
+    "docsRead": 6,
+    "created": 0,
+    "errors": [],
+    "errorKind": null,
+    "notes": [
+     "Kanun 5996 (Veteriner Hizmetleri, Bitki Sağlığı, Gıda ve Yem): ilk okuma, 60 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Gıda Hijyeni Yönetmeliği: ilk okuma, 31 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Gıda İşletmelerinin Kayıt ve Onay İşlemlerine Dair Yönetmelik: ilk okuma, 16 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Hijyen Eğitimi Yönetmeliği: ilk okuma, 14 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Hızlı Dondurulmuş Gıdalar Tebliği (2014/47): ilk okuma, 19 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi).",
+     "Hızlı Dondurulmuş Gıdaların Sıcaklık İzleme Tebliği (2014/48): ilk okuma, 9 madde, karşılaştırma tabanı kaydedildi (değişiklik üretilmedi)."
+    ]
+   }
+  ]
+ }
+}

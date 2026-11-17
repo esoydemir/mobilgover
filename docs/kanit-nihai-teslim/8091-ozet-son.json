@@ -1,0 +1,92 @@
+{
+ "status": 200,
+ "body": {
+  "sources": [
+   {
+    "code": "mevzuat",
+    "name": "Mevzuat Bilgi Sistemi",
+    "base_url": "https://www.mevzuat.gov.tr",
+    "is_example": false,
+    "enabled": true,
+    "last_attempt_at": "2026-11-17T23:01:19.999Z",
+    "last_success_at": "2026-11-17T23:01:19.999Z",
+    "last_error": null,
+    "last_error_at": null,
+    "last_error_kind": null,
+    "failures_in_row": 0,
+    "last_items_seen": 149,
+    "last_docs_read": 6,
+    "queue_total": 0,
+    "queue_open": 0
+   },
+   {
+    "code": "resmi_gazete",
+    "name": "Resmî Gazete",
+    "base_url": "https://www.resmigazete.gov.tr",
+    "is_example": false,
+    "enabled": true,
+    "last_attempt_at": "2026-11-17T23:01:19.999Z",
+    "last_success_at": "2026-11-17T23:01:19.999Z",
+    "last_error": null,
+    "last_error_at": null,
+    "last_error_kind": null,
+    "failures_in_row": 0,
+    "last_items_seen": 149,
+    "last_docs_read": 1,
+    "queue_total": 1,
+    "queue_open": 1
+   }
+  ],
+  "lastSuccessfulScan": {
+   "finished_at": "2026-11-17T23:01:19.999Z",
+   "trigger": "manual"
+  },
+  "lastRun": {
+   "id": "e666678e-c7ef-44a0-abe2-8d1a7986e498",
+   "trigger": "manual",
+   "status": "ok",
+   "started_at": "2026-11-17T23:01:19.116Z",
+   "finished_at": "2026-11-17T23:01:19.999Z",
+   "results": [
+    {
+     "ok": true,
+     "seen": 149,
+     "notes": [],
+     "errors": [],
+     "source": "resmi_gazete",
+     "created": 0,
+     "docsRead": 1,
+     "errorKind": null
+    },
+    {
+     "ok": true,
+     "seen": 149,
+     "notes": [],
+     "errors": [],
+     "source": "mevzuat",
+     "created": 0,
+     "docsRead": 6,
+     "errorKind": null
+    }
+   ]
+  },
+  "pendingReview": 1,
+  "counts": {
+   "pending": 1,
+   "drafted": 0,
+   "scheduled": 0,
+   "applied": 0,
+   "rejected": 0
+  },
+  "unclearDates": 1,
+  "schedule": {
+   "enabled": true,
+   "timezone": "Europe/Istanbul",
+   "dailyAtHour": 6,
+   "nextRunAt": "2026-11-18T03:00:00.000Z"
+  },
+  "baselineNote": "İlk okuma yalnız TABAN kaydeder: o gün mevcut metinler \"değişiklik\" sayılmaz, kuyruğa kayıt düşmez. Kuyruğa yalnız sonraki okumalardaki farklar ve yeni yayınlar girer.",
+  "canScan": true,
+  "exampleNote": "Örnek/sentetik kaynaktan gelen kayıtlar ÖRNEKTİR; gerçek veya uzman onaylı mevzuat olarak yayımlanamaz."
+ }
+}

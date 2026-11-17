@@ -1,0 +1,34 @@
+== 8091 durum 2026-11-18T01:46:35+03:00
+imaj=goverhub-pilotfix-app:fix id=sha256:b397f22a993cd1925ea6af1d75c0597d830ebd1ab95a70669dbac67178eb740b
+LEGISLATION_MEVZUAT_WATCH=
+LEGISLATION_LOOKBACK_DAYS=3
+MAIL_TRANSPORT=dev_outbox
+LEGISLATION_RG_BASE=
+LEGISLATION_SCAN_ENABLED=0
+LEGISLATION_MEVZUAT_BASE=
+PORT=3000
+LEGISLATION_SCAN_HOUR=6
+TZ=Europe/Istanbul
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover: iPhone Safari reports env(safe-area-inset-*) only with it; the tab bar reads it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#050505" />
+    <title>GoverHub</title>
+    <style id="expo-reset">
+      html, body { height: 100%; }
+      body { overflow: hidden; background: #050505; }
+      #root { display: flex; height: 100%; flex: 1; }
+    </style>
+  <link rel="icon" href="/favicon.ico"/></head>
+  <body>
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <div id="root"></div>
+  <script src="/_expo/static/js/web/entry-1e94ffb595df3f7d61612de4382dc373.js" defer></script>
+</body>
+</html>
+
+026_legislation_source_health.sql

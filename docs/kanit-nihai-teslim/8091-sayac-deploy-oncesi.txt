@@ -1,0 +1,70 @@
+== audit tipleri (deploy oncesi) 2026-11-18T01:57:17+03:00
+== is tablolari
+tasks|2362
+obligations|290
+rule_versions|7
+notifications|664
+rules|7
+task_templates|7
+legislation_changes|0
+legislation_scan_runs|0
+legislation_sources|0
+max_audit_seq|336
+== audit tipleri 2026-11-18T01:57:26+03:00
+assistant.asked 39
+audit.report_generated 14
+company.created 33
+document.created 82
+document.extraction_confirmed 6
+document.extraction_dismissed 1
+document.extraction_proposed 44
+document.version_added 78
+document.version_verified 20
+evidence.added 29
+evidence.stored 72
+measurement.recorded 5
+network.post_published 1
+network.profile_saved 2
+nonconformity.action_added 9
+nonconformity.action_done 4
+nonconformity.action_verified 4
+nonconformity.assigned 1
+nonconformity.cause_assessed 5
+nonconformity.opened 10
+nonconformity.step_done 10
+obligation.decided 290
+platform.role_granted 1
+pro.authorization_decided 1
+profile.fact_recorded 165
+pro.profile_saved 1
+pro.verification_decided 2
+pro.verification_submitted 3
+qr.created 12
+qr.deactivated 10
+qr.scanned 17
+rule.approved 7
+rule.area_reviewed 4
+rule.drafted 7
+rule.published 7
+rule.submitted 7
+service.accepted 11
+service.appointment_cancelled 1
+service.appointment_confirmed 12
+service.appointment_proposed 13
+service.appointment_rescheduled 13
+service.checked_in 15
+service.quote_accepted 17
+service.quote_submitted 19
+service.report_submitted 22
+service.request_cancelled 1
+service.requested 23
+service.revision_requested 8
+site.added 13
+task.completed 22
+task.report_evidence_selected 16
+task.report_evidence_stale 6
+tasks.generated 136
+verifier.invited 6
+tasks_max_created|2026-11-17 22:28:12.950647+00
+notif_max_created|2026-11-17 18:24:06.16103+00
+ruleversions_status|published|7

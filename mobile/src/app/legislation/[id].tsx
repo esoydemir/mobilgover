@@ -12,6 +12,8 @@ import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
 import { dayTr, STATUS_TR } from '../../features/legislation';
 
+/** Article ids come from the parser: "G1" = geçici madde 1, "E2" = ek madde 2. */
+const artTr = (id: string) => (/^G\d/.test(id) ? `geçici md. ${id.slice(1)}` : /^E\d/.test(id) ? `ek md. ${id.slice(1)}` : `md. ${id}`);
 type Impact = { onDate: string; affectedSites: number; notifiedSites: number; outOfScopeSites: number; openTasksAffected: number;
   sites: { siteId: string; site: string; company: string; from: string | null; to: string; effect: string; reason: string; openTasks: number; openTaskEffect: string; notify: boolean; missingFacts: string[] }[] };
 type Detail = {
@@ -105,9 +107,9 @@ export default function LegislationDetailRoute() {
             <Text testID="leg-eff-general" style={type(12, 400, { color: C.t2, lh: 1.5 })}>{sg.effectiveDetail.general.clause ?? 'Metinde genel yürürlük hükmü bulunamadı.'}</Text>
             <Text style={type(12.5, 600)}>Geçiş / ileri tarihli hükümler</Text>
             {sg.effectiveDetail.transitional.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>İleri tarihli geçiş hükmü bulunamadı.</Text> :
-              sg.effectiveDetail.transitional.map((t, i) => <Text key={i} testID="leg-eff-transition" style={type(12, 400, { color: C.t2, lh: 1.5 })}>• md. {t.articleId} · {t.dates.map(dayTr).join(', ')} — {t.sentence}</Text>)}
+              sg.effectiveDetail.transitional.map((t, i) => <Text key={i} testID="leg-eff-transition" style={type(12, 400, { color: C.t2, lh: 1.5 })}>• {artTr(t.articleId)} ·{t.dates.map(dayTr).join(', ')} — {t.sentence}</Text>)}
             <Text style={type(12.5, 600)}>Kapsam / faaliyet koşulu</Text>
-            <Text testID="leg-eff-scope" style={type(12, 400, { color: C.t2, lh: 1.5 })}>{sg.effectiveDetail.scope ? `md. ${sg.effectiveDetail.scope.articleId}: ${sg.effectiveDetail.scope.text}` : 'Ayrı bir kapsam maddesi bulunamadı.'}</Text>
+            <Text testID="leg-eff-scope" style={type(12, 400, { color: C.t2, lh: 1.5 })}>{sg.effectiveDetail.scope ? `${artTr(sg.effectiveDetail.scope.articleId)}: ${sg.effectiveDetail.scope.text}` : 'Ayrı bir kapsam maddesi bulunamadı.'}</Text>
             <Text style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>Tek bir geçiş tarihi tüm işletmelere uygulanmaz; hangi ürün/faaliyet için hangi tarihin geçerli olduğuna uzman/yönetici gerekçeli karar verir.</Text>
           </View>
         ) : null}

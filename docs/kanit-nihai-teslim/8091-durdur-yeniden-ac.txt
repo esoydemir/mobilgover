@@ -1,0 +1,8 @@
+== KAPATMA 2026-11-18T02:03:45+03:00
+ Container goverhub-pilotfix-app-1 Started 
+LEGISLATION_SCAN_ENABLED=0
+gecmis: kayit=1 tarama=3 kaynak=2 audit_mevzuat=4
+== YENIDEN ACMA 2026-11-18T02:03:49+03:00
+ Container goverhub-pilotfix-app-1 Started 
+LEGISLATION_SCAN_ENABLED=1
+gecmis: kayit=1 tarama=3 audit_mevzuat=4
