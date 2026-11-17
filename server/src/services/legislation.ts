@@ -74,14 +74,25 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
     const run = (await tx.query<{ id: string }>(`INSERT INTO legislation_scan_runs (trigger, actor_id, run_date) VALUES ($1,$2,$3) RETURNING id`, [o.trigger, o.actorId ?? null, today])).rows[0]!;
     const prev = new Map<string, Record<string, string>>();
     for (const r of (await tx.query(`SELECT doc_key, articles FROM legislation_documents WHERE source_code = 'mevzuat'`)).rows) prev.set(r.doc_key, r.articles);
-    return { runId: run.id, prev };
+    const lastRgOk = (await tx.query<{ t: Date | null }>(`SELECT last_success_at AS t FROM legislation_sources WHERE code = 'resmi_gazete'`)).rows[0]?.t ?? null;
+    return { runId: run.id, prev, lastRgOk };
   });
   if (!start) return { skipped: 'already_running' as const };
+
+  // Catch-up: the gazette window always reaches back to the last fully healthy read (machine off, process down, source outage),
+  // never shorter than the configured look-back and never longer than 30 days.
+  const gapDays = start.lastRgOk ? Math.ceil((now.getTime() - new Date(start.lastRgOk).getTime()) / 86_400_000) : 0;
+  const wanted = Math.max(cfg.lookbackDays, gapDays + 1);
+  const lookbackDays = Math.min(wanted, 30);
 
   // Phase 2 (no transaction): network.
   const outcomes: Partial<Record<SourceCode, ScanOutcome>> = {};
   const thrown: Partial<Record<SourceCode, string>> = {};
-  try { outcomes.resmi_gazete = await scanGazette({ baseUrl: cfg.rgBase, today, lookbackDays: cfg.lookbackDays, fetcher: cfg.fetcher, sleep: cfg.sleep }); } catch (e) { thrown.resmi_gazete = (e as Error).message; }
+  try {
+    outcomes.resmi_gazete = await scanGazette({ baseUrl: cfg.rgBase, today, lookbackDays, fetcher: cfg.fetcher, sleep: cfg.sleep });
+    if (lookbackDays > cfg.lookbackDays) outcomes.resmi_gazete.notes.push(`Kaçırılan aralık telafi edildi: son sağlıklı okumadan ${gapDays} gün geçmişti, ${lookbackDays + 1} günlük pencere okundu.`);
+    if (wanted > 30) outcomes.resmi_gazete.notes.push(`UYARI: son sağlıklı okumadan ${gapDays} gün geçti; pencere en çok 30 gün okunur, daha eski günler Resmî Gazete'den elle kontrol edilmeli.`);
+  } catch (e) { thrown.resmi_gazete = (e as Error).message; }
   try { outcomes.mevzuat = await scanConsolidated({ baseUrl: cfg.mevzuatBase, watch: cfg.watch, previous: start.prev, fetcher: cfg.fetcher, today, sleep: cfg.sleep }); } catch (e) { thrown.mevzuat = (e as Error).message; }
 
   // Phase 3: persist.
@@ -131,6 +142,19 @@ async function storeChange(tx: Tx, c: DetectedChange, isExample: boolean): Promi
 
 // ───────────── Admin screen data ─────────────
 
+/** Next planned daily run (Europe/Istanbul is a fixed UTC+3). Null when the scheduler is off. If today's scan already succeeded, tomorrow's slot. */
+function nextScheduledRun(cfg: LegislationConfig | undefined, lastOkAt: string | Date | null, now = new Date()): string | null {
+  if (!cfg?.enabled) return null;
+  const OFFSET = 3 * 3_600_000;
+  const local = new Date(now.getTime() + OFFSET);
+  let slot = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), cfg.scanHour) - OFFSET;
+  const lastOkLocalDay = lastOkAt ? new Date(new Date(lastOkAt).getTime() + OFFSET).toISOString().slice(0, 10) : null;
+  const todayLocal = local.toISOString().slice(0, 10);
+  if (lastOkLocalDay === todayLocal) slot += 24 * 3_600_000;           // today already done → tomorrow's slot
+  else if (now.getTime() > slot) return now.toISOString();            // slot passed, not done: due at the next tick
+  return new Date(slot).toISOString();
+}
+
 export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfig) {
   if (!canView(p)) throw forbidden();
   if (cfg) await ensureSources(tx, cfg);
@@ -146,7 +170,8 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
     sources, lastSuccessfulScan: lastOk, lastRun,
     pendingReview: (counts.pending ?? 0) + (counts.drafted ?? 0), counts: { pending: counts.pending ?? 0, drafted: counts.drafted ?? 0, scheduled: counts.scheduled ?? 0, applied: counts.applied ?? 0, rejected: counts.rejected ?? 0 },
     unclearDates: unclear,
-    schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6 },
+    schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, lastOk?.finished_at ?? null) },
+    baselineNote: 'İlk okuma yalnız TABAN kaydeder: o gün mevcut metinler "değişiklik" sayılmaz, kuyruğa kayıt düşmez. Kuyruğa yalnız sonraki okumalardaki farklar ve yeni yayınlar girer.',
     canScan: has(p, 'platform_admin') || has(p, 'rule_reviewer'),
     exampleNote: 'Örnek/sentetik kaynaktan gelen kayıtlar ÖRNEKTİR; gerçek veya uzman onaylı mevzuat olarak yayımlanamaz.',
   };

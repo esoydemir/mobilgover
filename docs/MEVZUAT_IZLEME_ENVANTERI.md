@@ -11,6 +11,28 @@ Erişim tarihi: **18.11.2026** · Kapsam: kafe/restoran (toplu tüketim yeri) g�
 - Ortamdan `mevzuat.gov.tr` ilk denemede User-Agent'sız istekte zaman aşımı verdi; tarayıcı benzeri User-Agent ile erişildi (bağlayıcı kendi User-Agent'ını gönderir ve 3 deneme yapar). Kayıt: erişim **kararsız olabilir**, tek hata "değişiklik yok" sayılmaz (bkz. kaynak sağlığı).
 - Erişilemeyen resmî kaynak: `tarimorman.gov.tr/GKGM/Belgeler/.../mevzuat-listesi-21.06.2023.pdf` (HTTP 404; liste kaldırılmış/taşınmış). Bakanlık mevzuat sayfası (`/GKGM/Menu/38/Mevzuat`) 200 döndü ama içeriği ayrıştırılıp doğrulanmadı.
 
+## Altı izlenen kaydın yeniden doğrulaması (18.11.2026, nihai teslim)
+
+Her satır resmî Mevzuat sayfasından yeniden okundu; "ayrıştırılan madde" sayısı bağlayıcının (`parseConsolidated`) çıkardığı sayıdır. **Üç durum ayrıdır:** *kaynak doğrulandı* ≠ *uzman uygulanabilirlik incelemesi bekliyor* ≠ *kural yayına onaylandı* (hiçbirinde yok).
+
+| Kayıt | Resmî bağlantı | Belge no (tür/no/tertip) | İzlenen madde | Kaynak türü | Ayrıştırılan madde | Son doğrulama | Kaynak doğrulandı | Uzman incelemesi | Kural yayına onaylandı |
+|---|---|---|---|---|---|---|---|---|---|
+| E-01 Kanun 5996 | [Mevzuat](https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=1&MevzuatNo=5996&MevzuatTertip=5) | 1 / 5996 / 5 | 22, 24, 29, 30, 31, 32, 36 (yedisi de metinle eşleşti) | Bağlayıcı kanun | **60** (önceden 59) | 18.11.2026 | Evet | Bekliyor | Hayır |
+| E-02 Gıda Hijyeni Yön. | [Mevzuat](https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=15592&MevzuatTertip=5) | 7 / 15592 / 5 | Tüm belge (öncelik 5, 10, 14, 17, 18, 21, 22) | Bağlayıcı yönetmelik | 31 | 18.11.2026 | Evet | Bekliyor | Hayır |
+| E-03 Kayıt ve Onay Yön. | [Mevzuat](https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=15594&MevzuatTertip=5) | 7 / 15594 / 5 | Tüm belge (öncelik 5, 6, 12, Ek-1, Ek-2) | Bağlayıcı yönetmelik | 16 | 18.11.2026 | Evet | Bekliyor | Hayır |
+| E-04 Hijyen Eğitimi Yön. | [Mevzuat](https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=7&MevzuatNo=18552&MevzuatTertip=5) | 7 / 18552 / 5 | Tüm belge (md. 2, 5, 9) | Bağlayıcı yönetmelik; kapsam HOLD | 14 | 18.11.2026 | Evet | Bekliyor | Hayır |
+| E-05 Tebliğ 2014/47 | [Mevzuat](https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=9&MevzuatNo=20147&MevzuatTertip=5) | 9 / 20147 / 5 | Tüm belge | Bağlayıcı tebliğ; ürüne özgü HOLD | 19 | 18.11.2026 | Evet | Bekliyor | Hayır |
+| E-06 Tebliğ 2014/48 | [Mevzuat](https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=9&MevzuatNo=20148&MevzuatTertip=5) | 9 / 20148 / 5 | Md. 4 (belge tamamı da izlenir) | Bağlayıcı tebliğ; ürüne özgü HOLD | 9 | 18.11.2026 | Evet | Bekliyor | Hayır |
+
+E-07 (rehber, bağlayıcı değil, izlenmez) ve E-08 (künye doğrulanamadı, **tutuldu**) taranmaz; doğrulanamayan kaynak kuyruğa bağlanmadı.
+
+### Kanun 5996: iki ayrıştırma farkı (61 "MADDE" geçişi, 60 madde)
+
+1. **`MADDE 10/Ç` gerçek bir hükümdü ve atlanıyordu** (ıslah amaçlı yetiştirici birlikleri). Numara Türkçe harf (`Ç`) taşıyordu; ilk ayrıştırıcı yalnız `A-Z` kabul ettiğinden hüküm bir önceki maddenin içine gömülüyordu. **Düzeltildi** (`legislation-sources.ts`, madde numarası deseni `\d+(?:\/[A-Za-z0-9ÇĞİÖŞÜçğıöşü]+)?`); regresyon testi `server/test/legislation-madde-numbers.test.ts`. İzlenen yedi maddeden hiçbiri bundan etkilenmedi.
+2. **İkinci `GEÇİCİ MADDE 2` geçişi hüküm değil, değişiklik geçmişi tablosundaki bir atıftır** ("10, 10/A, …, GEÇİCİ MADDE 2" — 6589 sayılı Kanunun hangi maddeleri değiştirdiğini sayar). Satır başında değildir ve tire taşımaz; hüküm sayılmamalıdır, sayılmıyor. Aynı testle sabitlendi.
+
+Diğer beş belgede metindeki madde geçişi sayısı ile ayrıştırılan sayı birebir eşit (fark yok). Kanunun RG künyesi (13.06.2010, 27610) Mevzuat sayfa başlığından alındı.
+
 ## Düzeltme (önceki araştırmaya göre)
 
 `docs/kurallar/KAYNAK_ARASTIRMASI_P01-P05.md` "Madde 5: soğuk zinciri korumak ve kayıt altına almak" diyordu. Resmî metinde **Madde 5 genel sorumluluk** maddesidir; soğuk zincir hükmü **Madde 18(5) ve (6)**'dadır ve **"kayıt altına alma"** ifadesi bu maddelerde yoktur. Kayıt yükümlülüğü HACCP kapsamında Madde 22(2)(f)'de geçer. Önceki belgedeki ifade kural taslağında kullanılmamalıdır.
@@ -26,7 +48,7 @@ Alan anlamları: **Kaynak doğrulandı** = resmî metin okundu ve künye eşleş
 | Künye | Kanun 5996 · Mevzuat: tür 1, tertip 5, no 5996 · [bağlantı](https://www.mevzuat.gov.tr/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=1&MevzuatNo=5996&MevzuatTertip=5) |
 | İlk yayım / erişim | Kabul 11.06.2010; RG 13.06.2010 sayı 27610 / 18.11.2026 |
 | Son değişiklik (okunan metinde) | **11.06.2026, 7584 sayılı Kanun** (md. 26 ve 27); etkilenen maddeler **5** (hayvan hastalık tazminatı) ve **36(f)** (hayvan sevk belgesi cezası) — ikisi de kafe/restoran dışı |
-| İzlenecek madde | **22** (sorumluluklar), **24** (izlenebilirlik), **29** (hijyen esasları), **30** (kayıt ve onay), **31** (resmî kontroller), **32** (uygun olmayan ürün), **36** (idari para cezaları) ayrıca izlenir ama tutar kurala taşınmaz. Belgenin tamamı 61 madde başlığı içerir; çoğu hayvan/bitki sağlığına ilişkindir. |
+| İzlenecek madde | **22** (sorumluluklar), **24** (izlenebilirlik), **29** (hijyen esasları), **30** (kayıt ve onay), **31** (resmî kontroller), **32** (uygun olmayan ürün), **36** (idari para cezaları) ayrıca izlenir ama tutar kurala taşınmaz. Metinde 61 "MADDE" geçişi vardır; 60'ı hüküm, biri değişiklik geçmişi tablosundaki atıftır (bkz. yukarı); çoğu hayvan/bitki sağlığına ilişkindir. |
 | Kapsamı belirleyen | Gıda işletmecisi olmak; (30. madde) kayıt/onay rejimi |
 | Bağlayıcılık | Bağlayıcı hüküm (kanun) |
 | Kaynak doğrulandı | **Evet** (metin okundu, künye eşleşti) |

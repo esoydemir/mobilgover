@@ -172,3 +172,28 @@ describe('a past-dated change applies at approval; approval-time preview and the
     expect(applied.approvedBy).toBeTruthy();
   });
 });
+
+describe('machine off / process down: the missed interval is caught up on the next scan', () => {
+  it('a publication from 5 days ago (older than the 2-day look-back) is found after a 6-day gap; a 40-day gap warns', async () => {
+    const day = addDays(today, -5);
+    src.publish(day, { id: `${day.replaceAll('-', '')}-9`, category: 'YÖNETMELİKLER', title: 'Sentetik Gıda Hijyeni Kaçırılan Gün Yönetmeliği', sayi: 99009, articles: ['Gıda işletmelerinde hijyen kuralları belirlenir.', 'Bu Yönetmelik yayımı tarihinde yürürlüğe girer.'] });
+    // Scan with the configured 2-day look-back right after a healthy read: not seen.
+    await env.ownerDb.query(`UPDATE legislation_sources SET last_success_at = now() WHERE code = 'resmi_gazete'`);
+    await admin().post('/admin/legislation/scan');
+    expect(await cnt(`SELECT count(*)::int AS n FROM legislation_changes WHERE doc_title ILIKE '%Kaçırılan Gün%'`)).toBe(0);
+    // The machine was off for 6 days: the last healthy read is 6 days old.
+    await env.ownerDb.query(`UPDATE legislation_sources SET last_success_at = now() - interval '6 days' WHERE code = 'resmi_gazete'`);
+    const r = await admin().post('/admin/legislation/scan');
+    const rg = r.body.results.find((x: any) => x.source === 'resmi_gazete');
+    expect(rg).toMatchObject({ ok: true, created: 1 });
+    expect(rg.notes.join(' ')).toContain('Kaçırılan aralık telafi edildi');
+    expect(await cnt(`SELECT count(*)::int AS n FROM legislation_changes WHERE doc_title ILIKE '%Kaçırılan Gün%'`)).toBe(1);
+    // Again: no duplicate.
+    await admin().post('/admin/legislation/scan');
+    expect(await cnt(`SELECT count(*)::int AS n FROM legislation_changes WHERE doc_title ILIKE '%Kaçırılan Gün%'`)).toBe(1);
+    // A gap beyond 30 days is read as far as the window allows and says so.
+    await env.ownerDb.query(`UPDATE legislation_sources SET last_success_at = now() - interval '40 days' WHERE code = 'resmi_gazete'`);
+    const w = await admin().post('/admin/legislation/scan');
+    expect(w.body.results.find((x: any) => x.source === 'resmi_gazete').notes.join(' ')).toContain('UYARI');
+  });
+});

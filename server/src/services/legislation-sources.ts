@@ -207,6 +207,32 @@ export function parseGazetteDocument(html: string, fallback: { title: string; pu
 /** `docsRead`: documents (gazette items / watched consolidated texts) read and parsed in this scan, separate from `seen` (items or articles). */
 export type ScanOutcome = { seen: number; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
 
+/**
+ * The effective-date parts of a gazette instrument, kept in SEPARATE fields: the general entry-into-force clause, the
+ * transition/later-dated provisions found in other articles, and the scope clause (what it covers: product / activity).
+ * Reading them out is not a decision: which of them applies to which business is for the expert/admin.
+ */
+export type EffectiveDetail = {
+  general: { articleIds: string[]; clause: string | null };
+  transitional: { articleId: string; dates: string[]; sentence: string }[];
+  scope: { articleId: string; text: string } | null;
+};
+export function effectiveDetail(doc: Pick<GazetteDocument, 'articles' | 'effectiveClauses'>, day: string): EffectiveDetail {
+  const eff = doc.articles.filter(a => doc.effectiveClauses.includes(a.text));
+  const transitional: EffectiveDetail['transitional'] = [];
+  for (const a of doc.articles.filter(x => !doc.effectiveClauses.includes(x.text))) {
+    for (const s of a.text.split(/(?<=[.;])\s+/)) {
+      const dates = [...new Set(datesIn(s))].filter(d => d > day).sort();
+      if (dates.length && transitional.length < 8) transitional.push({ articleId: a.id, dates, sentence: normText(s).slice(0, 400) });
+    }
+  }
+  const sc = doc.articles.slice(0, 4).find(a => /kapsa(r|m)/i.test(a.text));
+  return {
+    general: { articleIds: eff.map(a => a.id), clause: doc.effectiveClauses.length ? normText(doc.effectiveClauses.join(' • ')).slice(0, 400) : null },
+    transitional, scope: sc ? { articleId: sc.id, text: sc.text.slice(0, 400) } : null,
+  };
+}
+
 /** The date list of a scan window, newest last, in the Istanbul calendar. */
 export function istanbulDay(d = new Date()) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(d); }
 export function daysBack(today: string, n: number): string[] {
@@ -250,7 +276,7 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
           sourceCode: 'resmi_gazete', externalKey: `rg:${file}`, changeType: type,
           docRef: `Resmî Gazete ${doc.sayi ?? '(sayı okunamadı)'} · ${trDate(day)}`, docTitle: it.title, articleRef: null, sourceUrl: url, publishedOn: day, effective: eff,
           oldText: null, newText,
-          suggestion: { relevance: rel.why, category: it.category, issuer: doc.issuer, kind: type,
+          suggestion: { relevance: rel.why, category: it.category, issuer: doc.issuer, kind: type, effectiveDetail: effectiveDetail(doc, day),
             hint: type === 'article_amendment' ? 'Değişiklik metni var; değişen maddenin eski metni için ilgili mevzuatın birleştirilmiş metnine bakın.' : type === 'repeal' ? 'Yürürlükten kaldırma: ilgili kural sürümü için bitiş tarihi önerilir.' : 'Yeni düzenleme: kural koşulunu ve görevleri uzman yazmalı.',
             ...compareTexts(null, newText) },
         });
@@ -294,7 +320,8 @@ export function parseConsolidated(html: string): { title: string; articles: Reco
   const head = text.split(/\n\s*(?:GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+\d|Kanun\s+Numarası|BİRİNCİ\s+(?:BÖLÜM|KISIM)|\sAmaç(?=\s|$)/)[0] ?? '';
   const title = normText(head.replace(/^\s*\d+\s+/, '')).slice(0, 200) || 'Başlıksız';
   const articles: Record<string, string> = {};
-  const marks = [...text.matchAll(/(?:^|\n)\s*(GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+(\d+(?:\/[A-Za-z0-9]+)?)\s*[-–—]/g)];
+  // Article numbers can carry a Turkish letter suffix (Kanun 5996: 10/A … 10/Ç …); [A-Za-z] alone skipped "10/Ç" and folded its text into the article before it.
+  const marks = [...text.matchAll(/(?:^|\n)\s*(GEÇİCİ\s+MADDE|EK\s+MADDE|MADDE)\s+(\d+(?:\/[A-Za-z0-9ÇĞİÖŞÜçğıöşü]+)?)\s*[-–—]/g)];
   marks.forEach((m, i) => {
     const prefix = m[1]!.startsWith('GEÇİCİ') ? 'G' : m[1]!.startsWith('EK') ? 'E' : '';
     const end = i + 1 < marks.length ? marks[i + 1]!.index! : text.length;
