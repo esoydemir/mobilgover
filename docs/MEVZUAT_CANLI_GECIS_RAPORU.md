@@ -10,7 +10,7 @@ Tarih: 18.11.2026 · Dal: `feat/canli-mevzuat-izleme` (taban: `goverhub-mobile` 
 
 ## 2. PR, CI, sürüm, ortam
 
-- PR: PR_LINK_BURAYA · CI: CI_LINK_BURAYA (son commit: COMMIT_BURAYA). Birleştirilmedi; incelemeye hazır.
+- PR: [PR #7](https://github.com/esoydemir/mobilgover/pull/7) · CI: [CI çalışması](https://github.com/esoydemir/mobilgover/actions/runs/44188290171) (3/3 yeşil) (son commit: `f836ee4`). Birleştirilmedi; incelemeye hazır.
 - Başlangıç doğrulaması: `origin/goverhub-mobile` = `5f655d8` (PR #6 birleştirme commit'i), PR #6 GitHub'da MERGED. İzole 49/49 kabul kanıtı `docs/kanit-mevzuat/kabul-kanit.json`'da (bu iş 51'e çıkardı).
 - Çalıştığı ortamlar: canlı gözlem = `gh-pilot-testdb` (izole test PostgreSQL, 55432); tarayıcı kabulü = izole `goverhub-mevzuat` ortamı, port 8098, sentetik kaynak 8199. **8091 ve 8080'e dokunulmadı.** 8091 doğrulaması (salt okunur): `LEGISLATION_SCAN_ENABLED=0`, taban adresleri boş, `legislation_sources`/`legislation_changes` boş; pilot verisi korunuyor. 8091 hâlâ önceki imajı çalıştırıyor (migrasyon 026 yok); açmak için yeniden kurulum gerekir (`docs/MEVZUAT_TAKIBI.md` → Canlı geçiş rehberi).
 
