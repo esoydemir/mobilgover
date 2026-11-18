@@ -8,10 +8,21 @@ Tarih: 18.11.2026 · Kapsam: kafe/restoran gıda güvenliği · Depo: `esoydemir
 
 **Görev kaynağı üç sınıftan biridir, karıştırılmaz:** **BAĞ** = bağlayıcı hüküm (kanun/yönetmelik/tebliğ) · **REH** = resmî rehber (bağlayıcı değil, "iyi uygulama") · **HACCP** = işletmenin kendi HACCP planı.
 
-**Karar yeri:**
-- Madde 8 (kuyruktaki gerçek kayıt): **Mevzuat takibi** ekranı (`/legislation`) → "Peynir Tebliği (No: 2026/24)" satırı → kayıt ayrıntısı.
-- Madde 1, 2, 3, 6, 9 (kural taslağı kararları): **Yönetim** (`/admin`) → kural listesi → ilgili taslak (`/rule/<id>`). Taslağı yalnız kural yazarı açar; alan incelemesi ve onay ayrı kullanıcılardadır.
-- Madde 4, 5, 7: kural taslağı gerektirmez; yanıt `docs/MEVZUAT_IZLEME_ENVANTERI.md` notuna işlenir (5'te künye gelirse izleme listesine eklenir).
+**Karar yeri (gerçek kayıtlar, 8091):** giriş `http://127.0.0.1:8091/login` (demo yönetici/onaylayıcı/yazar/alan uzmanı hesapları). Taslaklar **yayımlanmamıştır** (durum `draft`, gerçek kaynaklı, `is_example=false`); hiçbiri işletmeye görev üretmez. Yetki: taslağı yazar düzenler, alan incelemesini alan uzmanı, onayı onaylayıcı verir; gerekçesiz onay reddedilir.
+
+| Soru | Karar kaydı (gerçek bağlantı) | Ekran / işlem |
+|---|---|---|
+| 1 Sıcaklık izleme: yasal mı, HACCP mı | MV-P01 · http://127.0.0.1:8091/rule/1a8dfc2a-0f60-4c5a-b67f-3b653914cf02 ve MV-P03 · http://127.0.0.1:8091/rule/18d6f9bc-71f4-4e4d-a92d-1dbb95589809 | Kural taslağı → düzenle (sınıf) / alan incelemesi / onay-ret |
+| 2 Hijyen Eğitimi kapsamı | MV-P04 · http://127.0.0.1:8091/rule/c36f4728-6b82-4317-825d-29f47bffe4fa | aynı |
+| 3 2014/47-48 dondurucu | MV-P02 · http://127.0.0.1:8091/rule/4740c702-8a7b-427d-a32f-339e8b4c4cb5 | aynı |
+| 4 Kayıt mı onay mı, süre | MV-P06 · http://127.0.0.1:8091/rule/f025e495-6923-4d0f-8ed3-17e06562e328 | aynı (yanıt taslağın belirsizlik notuna ve envantere işlenir) |
+| 5 Dezenfektan künyesi | MV-P05 · http://127.0.0.1:8091/rule/bfab895b-eb15-422e-840c-3f15c12354e4 (belirsizlik notu: künye doğrulanamadı) | Künye gelirse izleme listesine eklenir; ayrı uygulama kaydı yok |
+| 6 Temizlik sıklığı | MV-P05 · http://127.0.0.1:8091/rule/bfab895b-eb15-422e-840c-3f15c12354e4 | Kural taslağı → düzenle / onay-ret |
+| 7 Md. 36 ceza bentleri | **Uygulamada karar kaydı yok** (görev üretilmez); yanıt `docs/MEVZUAT_IZLEME_ENVANTERI.md` E-01 notuna işlenir | — |
+| 8 Peynir Tebliği (2026/24) | http://127.0.0.1:8091/legislation/cb66d445-0e07-4a76-b0a9-4fc510899baf | Mevzuat takibi → kayıt → *Yürürlük tarihini sen belirle (gerekçeli)* / *Reddet (gerekçeli)* |
+| 9 Rehber değerleri | MV-P03 · http://127.0.0.1:8091/rule/18d6f9bc-71f4-4e4d-a92d-1dbb95589809 | Kural taslağı → onay-ret (rehber etiketi) |
+
+Gerçek taslak kimlikleri `rule_versions.id`'dir; taslaklar `docs/kanit-nihai-teslim/8091-taslaklar.json` içinde kayıtlıdır.
 
 Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 
@@ -28,7 +39,7 @@ Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 | Kapsam koşulu | Gıda işletmecisi; soğuk/sıcak tutma yapıyor |
 | Okunan metin | Md. 18(5): patojen üremesine imkân verecek sıcaklıkta tutulmaz, soğuk zincir kırılmaz. **Sayısal sıcaklık yok.** Md. 22: kritik limitler işletmenin kendi analizinde belirlenir |
 | Belirsizlik | Kanun sayı vermiyor; 22(5)'in hangi işletmeyi sadeleştirdiği net değil |
-| Önerilen görev (P-01, P-03) | "Soğutucu sıcaklığını kendi limitinize göre ölçüp kaydedin" — **limit yazılmaz**. Sınıf: **HACCP** (BAĞ yalnız "soğuk zinciri kırma" ilkesi) |
+| Önerilen görev (MV-P01, MV-P03) | "Soğutucu sıcaklığını kendi limitinize göre ölçüp kaydedin" — **limit yazılmaz**. Sınıf: **HACCP** (BAĞ yalnız "soğuk zinciri kırma" ilkesi) |
 | Kanıt | `docs/kanit-canli/metin`; envanter E-02 |
 | Termin | belirlenmedi |
 | Seçenekler | Onay: "işletme limiti" biçiminde hazırlanır · Düzelt: yalnız HACCP sınıfı · Reddet: kural yazılmaz |
@@ -43,7 +54,7 @@ Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 | Faaliyet | Çalışanı olan kafe/restoran |
 | Kapsam koşulu | Çalışan sayısı > 0 **ve** md. 2'nin toplu tüketim yerini kapsaması (HOLD) |
 | Belirsizlik | Perakende tanımı kafeyi kapsıyor varsayılmadı; geçerlilik süresi metinde aranıp **bulunmadı**, yazılmadı |
-| Önerilen görev (P-04) | "Çalışanların hijyen eğitimi belgesini yükleyin" — yalnız kapsam onaylanırsa. Sınıf: BAĞ |
+| Önerilen görev (MV-P04) | "Çalışanların hijyen eğitimi belgesini yükleyin" — yalnız kapsam onaylanırsa. Sınıf: BAĞ |
 | Kanıt | Envanter E-04 |
 | Termin | belirlenmedi |
 | Seçenekler | Onay (kapsıyor) · Reddet (kapsamıyor) · Düzelt (koşul/süre ekle) |
@@ -58,10 +69,10 @@ Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 | Faaliyet | Hazır hızlı dondurulmuş ürün saklayan toplu tüketim yeri |
 | Kapsam koşulu | Ürünün "hızlı dondurulmuş gıda" tanımına girmesi; dondurma/buz kapsam dışı |
 | Belirsizlik | −18 °C bir **ürün tanımıdır**, işletme limiti olarak kullanılmaz. 4(ç) bir yıllık kayıt saklama ve 4(e) 10 m³ altı termometre istisnasının kafede geçerliliği belirsiz; "sık ve düzenli" için sayı yok |
-| Önerilen görev (P-02) | Yalnız uzman onaylarsa "dondurucu sıcaklık kaydı" (BAĞ, ürüne özgü) |
+| Önerilen görev (MV-P02) | Yalnız uzman onaylarsa "dondurucu sıcaklık kaydı" (BAĞ, ürüne özgü) |
 | Kanıt | Envanter E-05, E-06 |
 | Termin | belirlenmedi |
-| Seçenekler | Onay · Reddet (P-02 yalnız HACCP kalır) · Düzelt |
+| Seçenekler | Onay · Reddet (MV-P02 yalnız HACCP kalır) · Düzelt |
 
 ## 4 · Kafe kayıt mı onay mı; faaliyet değişikliğinde süre
 
@@ -73,7 +84,7 @@ Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 | Faaliyet | Kafe/restoran işletme kaydı |
 | Kapsam koşulu | Md. 6: toplu tüketim işletmecileri Ek-2 ile başvurur; unvan/kişi/adres/faaliyet konusu değişirse belge geçerliliğini kaybeder |
 | Belirsizlik | Yenileme **süresi metinden çıkarılmadı**, yazılmadı |
-| Önerilen görev | Kural taslağı yok; yalnız onaylanırsa profil kontrol sorusu |
+| Önerilen görev | Taslak MV-P06 (yayımlanmamış); yalnız uzman onaylarsa yayına hazırlanır |
 | Kanıt | Envanter E-03 |
 | Termin | belirlenmedi |
 | Seçenekler | Yanıt envantere işlenir; kural açılacaksa kural yazarı açar |
@@ -86,9 +97,9 @@ Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 |---|---|
 | Resmî dayanak | **Yok — künye doğrulanamadı** (E-08); *kaynak doğrulandı = Hayır* |
 | Belirsizlik | Doğrulanmamış yönetmeliğe dayanak yazılmaz; kaynak kuyruğa **bağlanmadı** |
-| Önerilen görev (P-05) | Künye doğrulanana kadar HOLD |
+| Önerilen görev (MV-P05) | Künye doğrulanana kadar HOLD |
 | Termin | belirlenmedi |
-| Seçenekler | Uzman künyeyi verir → izleme listesine eklenir ve doğrulanır · Verilmezse P-05 yalnız Md. 14'e dayanır |
+| Seçenekler | Uzman künyeyi verir → izleme listesine eklenir ve doğrulanır · Verilmezse MV-P05 yalnız Md. 14'e dayanır |
 
 ## 6 · Temizlik/dezenfeksiyon "yeterli sıklık" nasıl göreve dönüşür?
 
@@ -99,7 +110,7 @@ Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 | Resmî dayanak | Gıda Hijyeni Yön. Md. 14(1)(a) |
 | Faaliyet | Gıda ile temas eden ekipman/yüzey temizliği |
 | Belirsizlik | Sayı yok; sıklık işletmenin risk analizine bırakılmış |
-| Önerilen görev (P-05) | "Temizlik planınızı tanımlayın ve uygulandığını kaydedin" — sıklığı **işletme** belirler. Sınıf: HACCP (ilke: BAĞ) |
+| Önerilen görev (MV-P05) | "Temizlik planınızı tanımlayın ve uygulandığını kaydedin" — sıklığı **işletme** belirler. Sınıf: HACCP (ilke: BAĞ) |
 | Kanıt | Envanter E-02 |
 | Termin | belirlenmedi |
 | Seçenekler | Onay · Düzelt (ifade/sınıf) · Reddet |
@@ -142,7 +153,7 @@ Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
 |---|---|
 | Resmî dayanak | [Rehber PDF](https://isparta.tarimorman.gov.tr/BelgelerArsiv/G%C4%B1da%20ve%20Yem/Hijyen%20Uygulama%20Rehberleri/toplutuketimhijyen.pdf) — **REH**, bağlayıcı değil |
 | Belirsizlik | Sayısal değerler bu çalışmada **yeniden okunmadı**; PDF bağlayıcıyla taranamaz |
-| Önerilen görev (P-03) | Rehber değeri yalnız "öneri" etiketiyle; işletme kendi limitini girer |
+| Önerilen görev (MV-P03) | Rehber değeri yalnız "öneri" etiketiyle; işletme kendi limitini girer |
 | Kanıt | Envanter E-07 |
 | Termin | belirlenmedi |
 | Seçenekler | Onay (öneri etiketli) · Reddet · Önce değerlerin okunması istenir |
