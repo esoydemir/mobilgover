@@ -23,7 +23,7 @@ const trDay = (d: string | Date | null) => (d ? new Date(d).toLocaleDateString('
 
 const CAUSE_TR: Record<string, string> = { knowledge: 'bilgi', equipment: 'ekipman', resource: 'kaynak', process: 'süreç' };
 const ACTION_TR: Record<string, string> = { correction: 'düzeltme', corrective_action: 'düzeltici faaliyet', follow_up: 'takip' };
-const clip = (x: unknown, n = 150) => { const t = String(x ?? '').replace(/s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+const clip = (x: unknown, n = 150) => { const t = String(x ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 /** One readable line per audit event of a closed case; null for events that add nothing to the sequence. */
 function caseLine(type: string, pl: any): string | null {
   switch (type) {
