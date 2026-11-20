@@ -1,0 +1,54 @@
+{
+ "MV-P01": {
+  "status": "draft",
+  "effectiveFrom": "2026-12-01",
+  "placeholder": true,
+  "confirmed": null
+ },
+ "MV-P02": {
+  "status": "draft",
+  "effectiveFrom": "2026-12-01",
+  "placeholder": true,
+  "confirmed": null
+ },
+ "MV-P03": {
+  "status": "draft",
+  "effectiveFrom": "2026-12-01",
+  "placeholder": true,
+  "confirmed": null
+ },
+ "MV-P04": {
+  "status": "draft",
+  "effectiveFrom": "2026-12-01",
+  "placeholder": true,
+  "confirmed": null
+ },
+ "MV-P05": {
+  "status": "draft",
+  "effectiveFrom": "2026-12-01",
+  "placeholder": true,
+  "confirmed": null
+ },
+ "MV-P06": {
+  "status": "draft",
+  "effectiveFrom": "2026-12-01",
+  "placeholder": true,
+  "confirmed": null
+ },
+ "sonraki_submit_MV_P01": {
+  "s": 409,
+  "b": {
+   "error": {
+    "code": "EFFECTIVE_NOT_CONFIRMED",
+    "message": "Yürürlük tarihi ve dayanağı yetkili kişi tarafından açıkça belirlenmeden bu kural onaylanamaz/yayımlanamaz."
+   }
+  }
+ },
+ "yazar_confirm_MV_P01": 403,
+ "bos_dayanak_MV_P01": 422,
+ "tarihsiz_MV_P01": 422,
+ "MV_P01_sonra": {
+  "status": "draft",
+  "placeholder": true
+ }
+}

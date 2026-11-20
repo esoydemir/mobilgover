@@ -22,6 +22,8 @@ Tarih: 18.11.2026 · Kapsam: kafe/restoran gıda güvenliği · Depo: `esoydemir
 | 8 Peynir Tebliği (2026/24) | http://127.0.0.1:8091/legislation/cb66d445-0e07-4a76-b0a9-4fc510899baf | Mevzuat takibi → kayıt → *Yürürlük tarihini sen belirle (gerekçeli)* / *Reddet (gerekçeli)* |
 | 9 Rehber değerleri | MV-P03 · http://127.0.0.1:8091/rule/18d6f9bc-71f4-4e4d-a92d-1dbb95589809 | Kural taslağı → onay-ret (rehber etiketi) |
 
+**Taslaklardaki 01.12.2026 tarihi yer tutucudur.** Yetkili kişi (onaylayıcı/yönetici) kural ekranında gerçek tarihi ve dayanağını yazmadan taslak incelemeye gönderilemez, onaylanamaz, yayımlanamaz (`EFFECTIVE_NOT_CONFIRMED`); tarih inceleme başlayınca kilitlenir.
+
 Gerçek taslak kimlikleri `rule_versions.id`'dir; taslaklar `docs/kanit-nihai-teslim/8091-taslaklar.json` içinde kayıtlıdır.
 
 Termin: türetilemeyen yerde **"belirlenmedi"**; tarih uydurulmaz.
