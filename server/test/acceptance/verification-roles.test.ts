@@ -68,6 +68,18 @@ describe('low risk: labelled self-verification by the only manager', () => {
     expect((await owner().post(`${N}/verify`, { result: 'effective', selfVerify: true, notes: 'Tek yöneticiyiz; bir haftalık temizlik kayıtları tam.' })).body.status).toBe('closed');
     const v = (await owner().get(N)).body.verifications.at(-1);
     expect(v).toMatchObject({ result: 'effective', verification_mode: 'self' });
+    // The audit file carries the case as a sequence (not only "closed"): action, verification, effectiveness check, closure, in order.
+    const from = new Date(Date.now() - 864e5).toISOString(), to = new Date(Date.now() + 864e5).toISOString();
+    const repRes = await owner().get(`${C()}/audit-report?format=json&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`); const rep = repRes.body; expect(repRes.status, JSON.stringify(repRes.body).slice(0, 200)).toBe(200);
+    const kase = rep.sections.closures.cases.find((c: any) => c.id === n.id);
+    expect(kase, 'closed case in audit file').toBeTruthy();
+    const lines: string[] = kase.sequence.map((e: any) => e.text);
+    const at = (re: RegExp) => lines.findIndex(l => re.test(l));
+    expect([at(/^Vaka açıldı/), at(/^Aksiyon eklendi/), at(/yapıldı beyanı/), at(/öz doğrulandı/), at(/^Etkinlik kontrolü/), at(/^Vaka kapandı/)].every(i => i >= 0), lines.join(' | ')).toBe(true);
+    expect(at(/^Vaka açıldı/)).toBeLessThan(at(/^Aksiyon eklendi/));
+    expect(at(/^Aksiyon eklendi/)).toBeLessThan(at(/öz doğrulandı/));
+    expect(at(/öz doğrulandı/)).toBeLessThan(at(/^Etkinlik kontrolü/));
+    expect(at(/^Etkinlik kontrolü/)).toBeLessThan(at(/^Vaka kapandı/));
   });
 });
 

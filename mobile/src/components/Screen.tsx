@@ -23,14 +23,16 @@ type Props = {
   contentStyle?: StyleProp<ViewStyle>;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /** Site of the record shown (task, case). Sub-screens always say which business, and this site, the person is looking at. */
+  siteId?: string | null;
 };
 
-export function Screen({ children, title, titleEn, gap = 12, contentStyle, onRefresh, refreshing = false }: Props) {
+export function Screen({ children, title, titleEn, gap = 12, contentStyle, onRefresh, refreshing = false, siteId }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <View style={{ paddingTop: insets.top + 8 }}>
-        {title === undefined ? <BrandHeader /> : <SubHeader title={title} titleEn={titleEn} />}
+        {title === undefined ? <BrandHeader /> : <SubHeader title={title} titleEn={titleEn} siteId={siteId} />}
       </View>
       <ScrollView
         style={{ flex: 1 }}
@@ -131,7 +133,10 @@ function NotificationBell({ companyId }: { companyId: string }) {
   );
 }
 
-function SubHeader({ title, titleEn }: { title: string; titleEn?: string }) {
+function SubHeader({ title, titleEn, siteId }: { title: string; titleEn?: string; siteId?: string | null }) {
+  const { company } = useSession();
+  const siteName = siteId ? company?.sites.find(s => s.id === siteId)?.name : null;
+  const where = company ? `${company.name}${siteName ? ` · ${siteName}` : ''}` : null;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4, paddingHorizontal: 22, paddingBottom: 14 }}>
       <Tap accessibilityLabel="Geri" onPress={goBack} style={{ width: 36, height: 36, borderRadius: 999, borderWidth: 1, borderColor: C.bd, backgroundColor: C.chip, alignItems: 'center', justifyContent: 'center' }}>
@@ -140,6 +145,7 @@ function SubHeader({ title, titleEn }: { title: string; titleEn?: string }) {
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={type(16, 700, { ls: -0.015 })}>{title}</Text>
         {titleEn ? <Text style={[type(10.5, 400, { color: C.t3 }), { marginTop: 1 }]}>{titleEn}</Text> : null}
+        {where ? <Text testID="subheader-context" numberOfLines={2} style={[type(11, 600, { color: C.t2, lh: 1.3 }), { marginTop: 2 }]}>{where}</Text> : null}
       </View>
       <EnvBadge />
     </View>
