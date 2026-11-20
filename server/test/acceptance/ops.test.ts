@@ -8,7 +8,7 @@ import { writeHead } from '../../src/ops/backup';
 import { pilotCheck } from '../../src/ops/pilotcheck';
 import { DirTarget } from '../../src/ops/target';
 import { EXAMPLE_RULES, seedPlatform } from '../../src/seed/demo';
-import { approve, areaReview, createDraft, publish, submitForReview } from '../../src/services/rules';
+import { approve, areaReview, confirmEffective, createDraft, publish, submitForReview } from '../../src/services/rules';
 import { freshEnv, type Env } from '../support/env';
 
 /** Real PostgreSQL. Role administration from the shell, and the pilot readiness check. */
@@ -82,6 +82,7 @@ describe('pilot readiness check', () => {
       const prov = (await tx.query(`INSERT INTO provisions (source_version_id, ref, excerpt) VALUES ($1, 'Md. 1', 'Test hükmü') RETURNING id`, [sv])).rows[0].id;
       const base = { ...EXAMPLE_RULES[0]!, code: 'T-COLD', title: 'Test kuralı', isExample: false, provisionIds: [prov] };
       const d = await createDraft(tx, p(ids['yazar@ornek.com.tr']!, ['rule_author']), base);
+      await confirmEffective(tx, p(ids['onay@ornek.com.tr']!, ['rule_reviewer']), d.id, { date: '2024-06-01', basis: 'Test: kaynak belge yürürlük maddesi (md. 1)' });
       await submitForReview(tx, p(ids['yazar@ornek.com.tr']!, ['rule_author']), d.id);
       await areaReview(tx, p(ids['uzman@ornek.com.tr']!, ['rule_reviewer']), d.id, 'food_safety', 'approved', 'Kaynakla karşılaştırıldı');
       await approve(tx, p(ids['onay@ornek.com.tr']!, ['rule_reviewer']), d.id, 'Test: onay gerekçesi');

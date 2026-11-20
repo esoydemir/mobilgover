@@ -123,6 +123,7 @@ export async function submitForReview(tx: Tx, p: Principal, id: string) {
   if (!has(p, 'rule_author')) throw forbidden();
   const rv = await version(tx, id);
   if (rv.status !== 'draft') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
+  needEffectiveConfirmation(rv); // the date is locked once review starts, so it must be set first
   await tx.query(`UPDATE rule_versions SET status = 'in_review' WHERE id = $1`, [id]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.submitted', entityType: 'rule_version', entityId: id, payload: { code: rv.code } });
 }
@@ -167,12 +168,38 @@ export function needReason(reason: string | null | undefined, what: string): str
   return r;
 }
 
-export async function approve(tx: Tx, p: Principal, id: string, reason: string | null | undefined) {
+/** Real rules need the effective date AND its basis set explicitly by an authorised person; the date a draft was written with is only a placeholder. */
+export function needEffectiveConfirmation(rv: { is_example: boolean; effective_confirmed_at: unknown }) {
+  if (!rv.is_example && !rv.effective_confirmed_at) {
+    throw conflict('EFFECTIVE_NOT_CONFIRMED', 'Yürürlük tarihi ve dayanağı yetkili kişi tarafından açıkça belirlenmeden bu kural onaylanamaz/yayımlanamaz.');
+  }
+}
+
+/**
+ * The authorised person states the real effective date and where it comes from (document, article, link). Nothing is defaulted:
+ * both come from the request, the basis must say something, and the confirmation is cleared if the date is edited afterwards.
+ */
+export async function confirmEffective(tx: Tx, p: Principal, id: string, raw: { date?: unknown; basis?: unknown }) {
+  if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) throw forbidden('Yürürlük tarihini yalnızca yetkili inceleyici veya yönetici belirler.');
+  const date = z.iso.date().safeParse(raw.date);
+  if (!date.success) throw invalid('Yürürlük tarihini YYYY-AA-GG olarak açıkça yaz.');
+  const basis = typeof raw.basis === 'string' ? raw.basis.trim() : '';
+  if (basis.length < 15) throw invalid('Tarihin dayanağını yaz (belge, madde veya bağlantı; en az 15 karakter).');
+  const rv = await version(tx, id);
+  if (rv.status !== 'draft') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yürürlük tarihi inceleme başlamadan, taslakta belirlenir (sonra kilitlenir).`);
+  await tx.query(`UPDATE rule_versions SET effective_from = $2, effective_confirmed_by = $3, effective_confirmed_at = now(), effective_basis = $4 WHERE id = $1`, [id, date.data, p.userId, basis]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.effective_confirmed', entityType: 'rule_version', entityId: id,
+    payload: { code: rv.code, version: rv.version, date: date.data, previousPlaceholder: String(rv.effective_from).slice(0, 10), basis } });
+  return { id, effectiveFrom: date.data };
+}
+
+export async function approve(tx: Tx, p: Principal, id: string, reason: string | null | undefined, opts: { dateSetByLegislationFlow?: boolean } = {}) {
   if (!has(p, 'rule_reviewer')) throw forbidden('Onay yalnızca kural inceleyicisi tarafından verilebilir.');
   const why = needReason(reason, 'Kuralı onaylamak');
   const rv = await version(tx, id);
   if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını onaylayamaz.');
+  if (!opts.dateSetByLegislationFlow) needEffectiveConfirmation(rv);
   const missing = await pendingAreas(tx, rv);
   if (missing.length) throw conflict('AREA_REVIEW_MISSING', `Önce alan uzmanı incelemesi gerekiyor: ${missing.join(', ')}`, { missing });
   await tx.query(`UPDATE task_templates SET emergency_approved_by = $2 WHERE rule_version_id = $1 AND emergency_instruction IS NOT NULL`, [id, p.userId]);
@@ -197,9 +224,10 @@ export async function publish(tx: Tx, p: Principal, id: string, opts: { allowExa
  * Moves an approved version to "published" and retires the previous one. No re-evaluation here: the manual path above
  * evaluates every company, the legislation path only the sites in scope.
  */
-export async function publishVersion(tx: Tx, actorId: string, id: string, opts: { allowExampleRules: boolean; reason: string; extra?: Record<string, unknown> }) {
+export async function publishVersion(tx: Tx, actorId: string, id: string, opts: { allowExampleRules: boolean; reason: string; extra?: Record<string, unknown>; dateSetByLegislationFlow?: boolean }) {
   const rv = await version(tx, id);
   if (rv.status !== 'approved') throw conflict('INVALID_STATE', 'Yalnızca onaylanmış sürüm yayınlanabilir.');
+  if (!opts.dateSetByLegislationFlow) needEffectiveConfirmation(rv);
   if (rv.is_example && !opts.allowExampleRules) throw forbidden('Örnek kurallar yalnızca demo ortamında yayınlanabilir.');
   await tx.query(`UPDATE rule_versions SET status = 'retired', retired_at = now() WHERE rule_id = $1 AND status = 'published'`, [rv.rule_id]);
   await tx.query(`UPDATE rule_versions SET status = 'published', published_by = $2, published_at = now() WHERE id = $1`, [id, actorId]);
@@ -278,6 +306,8 @@ export async function ruleVersionDetail(tx: Tx, p: Principal, id: string) {
     ambiguityNote: rv.ambiguity_note, requiredReviewAreas: rv.required_review_areas, pendingAreaReviews: rv.status === 'in_review' ? await pendingAreas(tx, rv) : [],
     provisionIds: rv.provision_ids, sources, reviews, templates, usedByTasks,
     sourceNote: !sources.length ? 'Kaynak hükmü bağlı değil: yalnız örnek ya da iyi uygulama olarak kalabilir.' : sources.some(s => s.is_example) ? 'Örnek kaynağa dayanıyor: gerçek kural olarak yayımlanamaz.' : null,
+    effectiveConfirmation: rv.effective_confirmed_at ? { at: rv.effective_confirmed_at, basis: rv.effective_basis, confirmedBy: rv.effective_confirmed_by } : null,
+    effectivePlaceholder: !rv.is_example && !rv.effective_confirmed_at,
     canEdit: rv.status === 'draft' && rv.author_id === p.userId,
     samplePreview: samplePreview(rv, templates.map(t => ({ code: t.code, title: t.title, recurrence: t.recurrence, evidence: t.evidence, limits: t.limits }))),
   };
@@ -303,6 +333,7 @@ export async function updateDraft(tx: Tx, p: Principal, id: string, raw: DraftIn
      obligation_summary = $9, effective_from = $10, effective_to = $11, change_reason = $12, required_review_areas = $13 WHERE id = $1`,
     [id, input.kind, input.isExample, input.provisionIds, JSON.stringify(cond.condition), cond.facts, input.ambiguityNote, input.obligationTitle, input.obligationSummary,
       input.effectiveFrom, input.effectiveTo, input.changeReason, input.requiredReviewAreas]);
+  if (String(rv.effective_from).slice(0, 10) !== input.effectiveFrom) await tx.query(`UPDATE rule_versions SET effective_confirmed_by = NULL, effective_confirmed_at = NULL, effective_basis = NULL WHERE id = $1`, [id]);
   await tx.query(`DELETE FROM task_templates WHERE rule_version_id = $1`, [id]);
   for (const t of input.templates) {
     await tx.query(`INSERT INTO task_templates (rule_version_id, code, title, instructions, recurrence, evidence, limits, severity, hazard_type, emergency_instruction) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,

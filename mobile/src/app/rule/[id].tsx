@@ -18,7 +18,7 @@ type Tpl = { code: string; title: string; instructions: string; freq: 'daily' | 
 type Detail = { id: string; code: string; title: string; version: number; status: string; kind: string; isExample: boolean; condition: any; obligationTitle: string; obligationSummary: string;
   effectiveFrom: string; effectiveTo: string | null; changeReason: string; ambiguityNote: string | null; requiredReviewAreas: string[]; pendingAreaReviews: string[]; provisionIds: string[];
   sources: { id: string; ref: string; title: string; is_example: boolean }[]; reviews: { area: string; decision: string; notes: string; reviewer: string }[];
-  templates: any[]; usedByTasks: number; sourceNote: string | null; canEdit: boolean;
+  templates: any[]; usedByTasks: number; sourceNote: string | null; canEdit: boolean; effectivePlaceholder?: boolean; effectiveConfirmation?: { at: string; basis: string } | null;
   samplePreview: { profile: string; label: string; decision: string; reason: string; missingFacts: string[]; tasks: { code: string; title: string; schedule: string; count: number; note: string }[] }[] };
 
 const STATUS: Record<string, string> = { draft: 'TASLAK', in_review: 'İNCELEMEDE', approved: 'ONAYLI', published: 'YAYINDA', retired: 'ESKİ SÜRÜM' };
@@ -67,6 +67,8 @@ export default function RuleEditorRoute() {
   const provisions = useApi<{ id: string; ref: string; title: string; is_example: boolean }[]>('/admin/provisions');
   const q = useApi<Detail>(isNew ? null : `/admin/rule-versions/${id}`);
   const d = q.data;
+  const [effDate, setEffDate] = useState('');
+  const [effBasis, setEffBasis] = useState('');
   const [f, setF] = useState({ code: '', title: '', kind: 'good_practice' as 'legal_requirement' | 'good_practice', isExample: true, obligationTitle: '', obligationSummary: '',
     effectiveFrom: today(), effectiveTo: '', changeReason: '', ambiguityNote: '' });
   const [prov, setProv] = useState<string[]>([]);
@@ -212,6 +214,8 @@ export default function RuleEditorRoute() {
           <Text style={type(14, 600)}>{d.obligationTitle}</Text>
           <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{d.obligationSummary}</Text>
           <Text style={type(11.5, 400, { color: C.t3 })}>Yürürlük {String(d.effectiveFrom).slice(0, 10)}{d.effectiveTo ? ` – ${String(d.effectiveTo).slice(0, 10)}` : ''} · {d.changeReason}</Text>
+          {d.effectivePlaceholder ? <Text testID="rule-eff-placeholder" style={type(11.5, 700, { color: C.warn, lh: 1.45 })}>⚠ Bu tarih YER TUTUCUDUR; yetkili kişi gerçek tarihi ve dayanağını belirlemeden incelemeye gönderilemez, onaylanamaz, yayımlanamaz.</Text> : null}
+          {d.effectiveConfirmation ? <Text testID="rule-eff-confirmed" style={type(11.5, 500, { color: C.t2, lh: 1.45 })}>Yürürlük tarihi yetkili kişice belirlendi ({String(d.effectiveConfirmation.at).slice(0, 10)}). Dayanak: {d.effectiveConfirmation.basis}</Text> : null}
           {d.templates.map(t => <Text key={t.code} style={type(12, 500)}>{t.title} · {t.recurrence.freq}{t.recurrence.perEquipmentType ? ` · ${t.recurrence.perEquipmentType}` : ''}</Text>)}
         </Card>
       ) : null}
@@ -239,6 +243,16 @@ export default function RuleEditorRoute() {
               );
             })}
           </Card>
+          {d.status === 'draft' && (me?.platformRoles ?? []).some(r => r === 'rule_reviewer' || r === 'platform_admin') ? (
+            <Card style={{ gap: 8 }}>
+              <Eyebrow>YÜRÜRLÜK TARİHİNİ VE DAYANAĞINI SEN BELİRLE</Eyebrow>
+              <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Taslaktaki tarih yer tutucudur ve kendiliğinden kabul edilmez. Gerçek tarihi ve nereden çıktığını (belge, madde, bağlantı) yaz; inceleme başlayınca tarih kilitlenir.</Text>
+              <Field testID="rule-eff-date" label="Gerçek yürürlük tarihi (YYYY-AA-GG)" value={effDate} onChangeText={setEffDate} placeholder="" />
+              <Field testID="rule-eff-basis" label="Dayanak (belge, madde, bağlantı)" value={effBasis} onChangeText={setEffBasis} />
+              <GhostButton testID="rule-eff-save" label="Tarihi ve dayanağı kaydet" height={38} size={12} disabled={!/^d{4}-d{2}-d{2}$/.test(effDate) || effBasis.trim().length < 15}
+                onPress={async () => { try { await call('POST', `/admin/rule-versions/${d.id}/confirm-effective`, { date: effDate, basis: effBasis.trim() }); showToast('Yürürlük tarihi belirlendi'); setEffDate(''); setEffBasis(''); await q.reload(); } catch (e) { setError(errorText(e)); } }} />
+            </Card>
+          ) : null}
           {d.status === 'draft' && d.canEdit ? (
             <GhostButton testID="rule-submit" label="İncelemeye gönder" onPress={async () => { try { await call('POST', `/admin/rule-versions/${d.id}/submit`); showToast('İncelemeye gönderildi'); await q.reload(); } catch (e) { setError(errorText(e)); } }} />
           ) : null}

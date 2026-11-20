@@ -16,7 +16,7 @@ type Source = { code: string; name: string; base_url: string; is_example: boolea
   last_error_kind?: string | null; last_docs_read?: number | null; last_items_seen?: number | null; queue_total?: number; queue_open?: number };
 type Overview = {
   sources: Source[]; lastSuccessfulScan: { finished_at: string; trigger: string } | null; lastRun: { status: string; started_at: string; trigger: string } | null;
-  pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number; nextRunAt?: string | null }; baselineNote?: string; canScan: boolean; exampleNote: string;
+  pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number; nextRunAt?: string | null; missedDays?: string[] }; baselineNote?: string; canScan: boolean; exampleNote: string;
 };
 type Row = { id: string; source_code: string; change_type: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null;
   date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null };
@@ -63,6 +63,7 @@ export default function LegislationRoute() {
               {o.schedule.enabled ? `Her gün ${String(o.schedule.dailyAtHour).padStart(2, '0')}:00 (${o.schedule.timezone}) kendiliğinden taranır; başarısız gün yarım saat arayla yeniden denenir.` : 'Günlük otomatik tarama bu ortamda kapalı; yalnız elle taranır.'}
             </Text>
             {o.schedule.enabled ? <Text testID="leg-next-run" style={type(12.5, 600)}>Sıradaki planlı tarama: {o.schedule.nextRunAt ? fmtDateTime(o.schedule.nextRunAt) : '—'}</Text> : null}
+            {o.schedule.enabled && o.schedule.missedDays?.length ? <Text testID="leg-missed-days" style={type(12, 600, { color: C.warn, lh: 1.45 })}>⚠ Planlı tarama çalışmayan gün(ler): {o.schedule.missedDays.map(d => d.split('-').reverse().join('.')).join(', ')} (makine/Docker kapalıydı). Sonraki açılışta telafi edilir; Resmî Gazete taraması aradaki günleri geriye dönük okur.</Text> : null}
             {o.baselineNote ? <Text testID="leg-baseline-note" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{o.baselineNote}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 18, flexWrap: 'wrap' }}>
               <View><Text testID="leg-pending-count" style={type(26, 700, { color: o.pendingReview ? C.warn : C.t1 })}>{o.pendingReview}</Text><Text style={type(11, 500, { color: C.t3 })}>İnceleme bekleyen</Text></View>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextScheduledRun } from '../src/services/legislation';
+import { missedScheduledDays, nextScheduledRun } from '../src/services/legislation';
 
 const cfg = { enabled: true, scanHour: 6 } as any;
 describe('next planned scan (Europe/Istanbul, UTC+3)', () => {
@@ -15,5 +15,10 @@ describe('next planned scan (Europe/Istanbul, UTC+3)', () => {
   });
   it('scheduler off: no planned run', () => {
     expect(nextScheduledRun({ enabled: false, scanHour: 6 } as any, false)).toBeNull();
+  });
+  it('days without a successful scheduled run are listed (machine off at 06:00)', () => {
+    expect(missedScheduledDays(['2026-11-18', '2026-11-20'], '2026-11-20')).toEqual(['2026-11-19']);
+    expect(missedScheduledDays(['2026-11-18'], '2026-11-21')).toEqual(['2026-11-19', '2026-11-20']);
+    expect(missedScheduledDays([], '2026-11-21')).toEqual([]);
   });
 });
