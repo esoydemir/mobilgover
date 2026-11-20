@@ -546,7 +546,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/tasks/:taskId/report-evidence', async (req, reply) => {
     const companyId = company(req);
     const { taskId } = z.object({ taskId: uuid }).parse(req.params);
-    const b = z.object({ documentId: uuid, versionId: uuid }).parse(req.body);
+    const b = z.object({ documentId: uuid, versionId: uuid, basisNote: z.string().max(500).nullish() }).parse(req.body);
     return mutate(req, reply, companyId, tx => selectServiceReportEvidence(tx, req.principal, companyId, taskId, b));
   });
   app.post('/companies/:companyId/tasks/:taskId/complete', async (req, reply) => {

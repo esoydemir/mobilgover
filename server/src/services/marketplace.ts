@@ -553,7 +553,8 @@ export async function reportEvidenceCompany(tx: Tx, p: Principal, jobId: string,
  */
 export async function taskServiceReports(tx: Tx, companyId: string, taskId: string) {
   const rows = (await tx.query(
-    `SELECT sr.id AS request_id, sr.title AS request_title, j.id AS job_id, j.status AS job_status, pp.display_name AS provider_name,
+    `SELECT sr.id AS request_id, sr.title AS request_title, sr.created_at AS request_created_at, n.id AS case_id, n.title AS case_title, n.detected_at AS case_detected_at, n.status AS case_status,
+            (sr.task_id = $2 OR n.task_id = $2) AS direct, j.id AS job_id, j.status AS job_status, pp.display_name AS provider_name,
             d.id AS document_id, d.title AS document_title, d.site_id, s.name AS site_name, v.id AS version_id, v.version, v.review_status, v.review_notes, v.reviewed_at,
             v.uploaded_at, rb.display_name AS reviewed_by_name, e.status AS file_status, jr.version AS report_version,
             (v.version = (SELECT max(x.version) FROM document_versions x WHERE x.document_id = d.id)) AS is_latest
@@ -572,14 +573,17 @@ export async function taskServiceReports(tx: Tx, companyId: string, taskId: stri
       ORDER BY sr.created_at DESC, v.version DESC`, [companyId, taskId])).rows;
   const byJob = new Map<string, any>();
   for (const r of rows) {
-    const g = byJob.get(r.job_id) ?? { requestId: r.request_id, requestTitle: r.request_title, jobStatus: r.job_status, providerName: r.provider_name, documentId: r.document_id,
+    const g = byJob.get(r.job_id) ?? { requestId: r.request_id, requestTitle: r.request_title, requestCreatedAt: r.request_created_at, jobId: r.job_id,
+      // direct: the request was opened from this task or the task is the case's own task. equipment: only the same branch and equipment (another case's service).
+      relation: (r.direct ? 'direct' : 'equipment') as 'direct' | 'equipment', caseId: r.case_id as string | null, caseTitle: r.case_title as string | null, caseDetectedAt: r.case_detected_at, caseStatus: r.case_status as string | null, jobStatus: r.job_status, providerName: r.provider_name, documentId: r.document_id,
       documentTitle: r.document_title, siteId: r.site_id, siteName: r.site_name, versions: [] as any[] };
     g.versions.push({ versionId: r.version_id, version: r.version, reportVersion: r.report_version, reviewStatus: r.review_status, reviewNotes: r.review_notes, reviewedAt: r.reviewed_at, reviewedBy: r.reviewed_by_name,
       uploadedAt: r.uploaded_at, fileStatus: r.file_status, isLatest: r.is_latest });
     byJob.set(r.job_id, g);
   }
   const reports = [...byJob.values()].map(g => ({ ...g, latest: g.versions.find((v: any) => v.isLatest) ?? g.versions[0] }));
-  const unverified = reports.filter(g => g.latest.reviewStatus !== 'verified');
+  // Only a report that belongs to this task or its case can hold it open; another case's unreviewed report is not this task's evidence.
+  const unverified = reports.filter(g => g.relation === 'direct' && g.latest.reviewStatus !== 'verified');
   return { reports, blocked: unverified.length > 0,
     reason: unverified.length ? `Servis raporu (${unverified[0].requestTitle}) ${unverified[0].latest.reviewStatus === 'rejected' ? 'kabul edilmedi, yeni sürüm bekleniyor' : 'incelenip doğrulanmadı'}; teslimin kabulü görevi kapatmaz.` : null };
 }
