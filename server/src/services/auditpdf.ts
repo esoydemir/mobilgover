@@ -91,8 +91,8 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
      LEFT JOIN users u ON u.id = t.completed_by WHERE t.company_id = $1 AND t.site_id = ANY($2) AND t.status = 'done' AND t.completed_at >= $3 AND t.completed_at < $4
      ORDER BY t.completed_at DESC LIMIT 200`, [companyId, siteIds, q.from, q.to])).rows
     .filter(t => can(p, 'task.read', { companyId, siteId: t.site_id, assigneeId: p.userId }).ok);
-  const basis = closedTasks.length ? (await tx.query(`SELECT r.task_id, r.document_id, d.title, r.version_number, r.file_sha256, v.review_status, v.reviewed_at FROM task_report_evidence r
-     JOIN documents d ON d.id = r.document_id JOIN document_versions v ON v.id = r.document_version_id WHERE r.task_id = ANY($1) AND r.completion_basis ORDER BY r.version_number`, [closedTasks.map(t => t.id)])).rows : [];
+  const basis = closedTasks.length ? (await tx.query(`SELECT r.task_id, r.document_id, d.title, r.version_number, r.file_sha256, v.review_status, v.reviewed_at, r.relation, r.basis_note, cn.title AS case_title FROM task_report_evidence r
+     JOIN documents d ON d.id = r.document_id JOIN document_versions v ON v.id = r.document_version_id LEFT JOIN nonconformities cn ON cn.id = r.case_id WHERE r.task_id = ANY($1) AND r.completion_basis ORDER BY r.version_number`, [closedTasks.map(t => t.id)])).rows : [];
   const closedCases = (await tx.query(`SELECT n.id, n.site_id, n.title, n.closed_at, u.display_name AS by,
        (SELECT v.verification_mode FROM ncr_verifications v WHERE v.ncr_id = n.id ORDER BY v.verified_at DESC LIMIT 1) AS mode
      FROM nonconformities n LEFT JOIN users u ON u.id = n.closed_by WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status = 'closed' AND n.closed_at >= $3 AND n.closed_at < $4
@@ -125,7 +125,8 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
       closures: {
         tasks: closedTasks.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), closed: tr(t.completed_at), by: t.by ?? '—', outcome: t.outcome ?? null,
           measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, at: tr(m.measured_at) })),
-          basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi' })) })),
+          basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
+            otherCase: b.relation === 'equipment' ? (b.case_title ?? 'başka vaka') : null, basisNote: b.basis_note ?? null })) })),
         cases: closedCases.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
           sequence: caseEvents.filter(e => e.ref === n.id || caseLink.some(l => l.ncr_id === n.id && (l.request_id === e.ref || l.job_id === e.ref)))
             .map(e => ({ at: tr(e.occurred_at), who: e.actor ?? '—', text: caseLine(e.event_type, e.payload) })).filter(x => x.text) })),
@@ -194,7 +195,10 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     for (const t of r.sections.closures.tasks) {
       p(`${t.title} · ${t.site} · kapanış ${t.closed} · ${t.by}`, { bold: true });
       for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'} · ${m.at}`, { color: '#555' });
-      for (const b of t.basis) p(`   Dayanak: ${b.title} · sürüm ${b.version} · ${b.review}${b.sha256 ? ` · özet ${b.sha256.slice(0, 12)}…` : ''}`, { color: '#555' });
+      for (const b of t.basis) {
+        p(`   Dayanak: ${b.title} · sürüm ${b.version} · ${b.review}${b.sha256 ? ` · özet ${b.sha256.slice(0, 12)}…` : ''}`, { color: '#555' });
+        if (b.otherCase) p(`   Rapor başka bir vakanın servisine ait (${b.otherCase}); görevle ilişkisi kullanıcı beyanıdır: ${b.basisNote ?? '—'}`, { color: '#555' });
+      }
     }
     for (const n of r.sections.closures.cases) {
       p(`Kayıt kapandı: ${n.title} · ${n.site} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
