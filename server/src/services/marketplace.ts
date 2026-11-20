@@ -245,11 +245,13 @@ function sharedFields(shareNcr: boolean) {
 
 export async function listRequests(tx: Tx, p: Principal, companyId: string) {
   if (!can(p, 'service.request', { companyId, siteId: null }).ok && !p.memberships.some(m => m.companyId === companyId && m.role === 'site_manager')) throw forbidden();
-  return (await tx.query(
+  const rows = (await tx.query(
     `SELECT r.*, c.name AS category_name, (SELECT count(*)::int FROM quotes q WHERE q.request_id = r.id AND q.status = 'submitted') AS open_quotes,
             j.id AS job_id, j.status AS job_status
        FROM service_requests r JOIN service_categories c ON c.code = r.category_code LEFT JOIN service_jobs j ON j.request_id = r.id
       WHERE r.company_id = $1 ORDER BY r.created_at DESC`, [companyId])).rows;
+  // Same rule as requestDetail: a site manager lists only their own site's requests (title, description and case link are site data).
+  return rows.filter(r => can(p, 'service.request', { companyId, siteId: r.site_id }).ok);
 }
 
 export async function requestDetail(tx: Tx, p: Principal, companyId: string, id: string) {

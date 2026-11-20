@@ -110,6 +110,17 @@ describe('board', () => {
     expect(Object.keys(s.sections)).toEqual(['actions', 'tasks', 'cases']);
   });
 
+  it('a service request of one site is not listed for the other site\'s manager (list = detail visibility)', async () => {
+    const mk = await manager().post(`${C()}/service-requests`, { siteId: demo.siteId, categoryCode: 'refrigeration_service', title: 'Birinci şube soğutucu servisi', description: 'Yalnız birinci şubeyi ilgilendirir.', city: 'İstanbul', taskId: null, ncrId: null, shareNcrSummary: false, invitedProfileId: null, invitedProfileIds: [] });
+    expect(mk.status, JSON.stringify(mk.body)).toBe(201);
+    const id = mk.body.id as string;
+    const ids = async (c: ReturnType<typeof client>) => (await c.get(`${C()}/service-requests`)).body.map((r: any) => r.id);
+    expect(await ids(manager())).toContain(id);
+    expect(await ids(owner())).toContain(id);
+    expect(await ids(mgr2)).not.toContain(id);
+    expect((await mgr2.get(`${C()}/service-requests/${id}`)).status).toBe(404);
+  });
+
   it('mark unrelated / link with a reason; nothing merged; the cases do not change', async () => {
     const before = (await env.ownerDb.query(`SELECT id, status, title FROM nonconformities WHERE id = ANY($1) ORDER BY id`, [[A, B]])).rows;
     expect((await manager().post(`${C()}/nonconformities/${B}/relations`, { relatedId: A, decision: 'unrelated', reason: 'kısa' })).status).toBe(422);
