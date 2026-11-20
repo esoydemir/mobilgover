@@ -76,6 +76,7 @@ describe('low risk: labelled self-verification by the only manager', () => {
     const lines: string[] = kase.sequence.map((e: any) => e.text);
     const at = (re: RegExp) => lines.findIndex(l => re.test(l));
     expect([at(/^Vaka açıldı/), at(/^Aksiyon eklendi/), at(/yapıldı beyanı/), at(/öz doğrulandı/), at(/^Etkinlik kontrolü/), at(/^Vaka kapandı/)].every(i => i >= 0), lines.join(' | ')).toBe(true);
+    expect(lines.join(' | ')).toContain('Raf silindi.'); // text is not mangled (whitespace folding must not touch letters)
     expect(at(/^Vaka açıldı/)).toBeLessThan(at(/^Aksiyon eklendi/));
     expect(at(/^Aksiyon eklendi/)).toBeLessThan(at(/öz doğrulandı/));
     expect(at(/öz doğrulandı/)).toBeLessThan(at(/^Etkinlik kontrolü/));
