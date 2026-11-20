@@ -563,7 +563,12 @@ export async function taskServiceReports(tx: Tx, companyId: string, taskId: stri
        JOIN document_versions v ON v.document_id = d.id LEFT JOIN users rb ON rb.id = v.reviewed_by
        LEFT JOIN service_job_reports jr ON jr.document_version_id = v.id
        LEFT JOIN LATERAL (SELECT x.status FROM evidence x WHERE x.document_version_id = v.id ORDER BY x.created_at DESC LIMIT 1) e ON true
-      WHERE sr.company_id = $1 AND (sr.task_id = $2 OR n.task_id = $2) AND sr.status <> 'cancelled' AND j.status <> 'cancelled'
+      WHERE sr.company_id = $1 AND sr.status <> 'cancelled' AND j.status <> 'cancelled'
+        AND (sr.task_id = $2 OR n.task_id = $2
+             -- A follow-up task of the same case: same branch, same equipment, case detected within 90 days, task still open.
+             OR (n.id IS NOT NULL AND n.equipment_id IS NOT NULL AND n.site_id = sr.site_id AND n.detected_at >= now() - interval '90 days'
+                 AND EXISTS (SELECT 1 FROM tasks tk WHERE tk.id = $2 AND tk.company_id = sr.company_id AND tk.site_id = n.site_id
+                                AND tk.equipment_id = n.equipment_id AND tk.status = 'open' AND tk.id IS DISTINCT FROM n.task_id)))
       ORDER BY sr.created_at DESC, v.version DESC`, [companyId, taskId])).rows;
   const byJob = new Map<string, any>();
   for (const r of rows) {
