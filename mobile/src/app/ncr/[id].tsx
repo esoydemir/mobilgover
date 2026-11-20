@@ -44,7 +44,7 @@ export default function NcrRoute() {
   };
 
   return (
-    <Screen title="Uygunsuzluk" titleEn="Nonconformity" onRefresh={q.reload} refreshing={q.loading}>
+    <Screen title="Uygunsuzluk" titleEn="Nonconformity" onRefresh={q.reload} refreshing={q.loading} siteId={n.site_id}>
       {q.stale ? <StaleNote /> : null}
       <View style={{ borderWidth: 1, borderColor: tint.crit(0.3), borderRadius: 28, padding: 20, overflow: 'hidden' }}>
         <GradientFill angle={155} stops={[[0, '#1a0a0a'], [0.6, '#0a0505'], [1, C.bg]]} />

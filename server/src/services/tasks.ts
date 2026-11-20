@@ -225,7 +225,7 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
   const canReadReports = can(p, 'document.read', { companyId, siteId: t.site_id }).ok;
   const links = await reportLinks(tx, companyId, t.id);
   return {
-    id: t.id, status: t.status, outcome: t.outcome, dueAt: t.due_at, periodKey: t.period_key, reviewFlag: t.review_flag,
+    id: t.id, siteId: t.site_id, status: t.status, outcome: t.outcome, dueAt: t.due_at, periodKey: t.period_key, reviewFlag: t.review_flag,
     title: t.title, instructions: t.instructions, severity: t.severity,
     equipment: t.equipment_id ? { id: t.equipment_id, name: t.equipment_name, type: t.equipment_type } : null,
     rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example, title: t.obligation_title, summary: t.obligation_summary },

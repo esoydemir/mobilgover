@@ -61,7 +61,7 @@ export default function TaskDetailRoute() {
   const canComplete = open && (t.progress.complete || local.length > 0);
 
   return (
-    <Screen title="Görev" titleEn="Task detail" gap={13} onRefresh={q.reload} refreshing={q.loading}>
+    <Screen title="Görev" titleEn="Task detail" gap={13} onRefresh={q.reload} refreshing={q.loading} siteId={t.siteId}>
       {q.stale ? <StaleNote /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <SevPill sev={t.severity === 'critical' ? 'crit' : t.severity === 'major' ? 'imp' : 'low'} big />
