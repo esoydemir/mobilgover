@@ -38,7 +38,7 @@ import * as net from '../services/network';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
-import { SAMPLE_PROFILES, approve, areaReview, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
+import { SAMPLE_PROFILES, approve, areaReview, confirmEffective, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
 import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, selectServiceReportEvidence, taskDetail, topUpSite } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
@@ -752,6 +752,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const q = z.object({ region: z.string().max(60).optional(), type: z.string().max(60).optional() }).parse(req.query);
     return institutionView(q);
   });
+  app.post('/admin/rule-versions/:id/confirm-effective', async req => { platformGate(req); return db.system(tx => confirmEffective(tx, req.principal, rvId(req), (req.body ?? {}) as Record<string, unknown>)); });
   app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
   app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason)); return { ok: true }; });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });

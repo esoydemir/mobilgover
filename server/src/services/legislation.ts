@@ -153,6 +153,18 @@ export function nextScheduledRun(cfg: LegislationConfig | undefined, scheduledOk
   return new Date(slot).toISOString();
 }
 
+/** Days (Istanbul, before today) since the first successful scheduled run on which NO scheduled run succeeded, e.g. the machine/Docker was off at 06:00. */
+export function missedScheduledDays(okDays: string[], today: string): string[] {
+  if (!okDays.length) return [];
+  const have = new Set(okDays);
+  const out: string[] = [];
+  for (let t = Date.parse([...have].sort()[0]! + 'T00:00:00Z'); t < Date.parse(today + 'T00:00:00Z'); t += 86_400_000) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    if (!have.has(d)) out.push(d);
+  }
+  return out;
+}
+
 export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfig) {
   if (!canView(p)) throw forbidden();
   if (cfg) await ensureSources(tx, cfg);
@@ -164,12 +176,13 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
   const lastOk = (await tx.query(`SELECT finished_at, trigger FROM legislation_scan_runs WHERE status = 'ok' ORDER BY finished_at DESC LIMIT 1`)).rows[0] ?? null;
   const lastRun = (await tx.query(`SELECT id, trigger, status, started_at, finished_at, results FROM legislation_scan_runs ORDER BY started_at DESC LIMIT 1`)).rows[0] ?? null;
   const unclear = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM legislation_changes WHERE status IN ('pending','drafted') AND date_status = 'unclear'`)).rows[0]!.n;
+  const okDays = (await tx.query<{ d: string }>(`SELECT DISTINCT to_char(run_date, 'YYYY-MM-DD') AS d FROM legislation_scan_runs WHERE trigger = 'schedule' AND status = 'ok'`)).rows.map(r => r.d);
   const schedOkToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [istanbulDay()])).rowCount ?? 0) > 0;
   return {
     sources, lastSuccessfulScan: lastOk, lastRun,
     pendingReview: (counts.pending ?? 0) + (counts.drafted ?? 0), counts: { pending: counts.pending ?? 0, drafted: counts.drafted ?? 0, scheduled: counts.scheduled ?? 0, applied: counts.applied ?? 0, rejected: counts.rejected ?? 0 },
     unclearDates: unclear,
-    schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday) },
+    schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday), missedDays: cfg?.enabled ? missedScheduledDays(okDays, istanbulDay()) : [] },
     baselineNote: 'İlk okuma yalnız TABAN kaydeder: o gün mevcut metinler "değişiklik" sayılmaz, kuyruğa kayıt düşmez. Kuyruğa yalnız sonraki okumalardaki farklar ve yeni yayınlar girer.',
     canScan: has(p, 'platform_admin') || has(p, 'rule_reviewer'),
     exampleNote: 'Örnek/sentetik kaynaktan gelen kayıtlar ÖRNEKTİR; gerçek veya uzman onaylı mevzuat olarak yayımlanamaz.',
@@ -399,7 +412,7 @@ export async function approveChange(tx: Tx, p: Principal, id: string, reason: st
   if (!c.source_url) throw conflict('NO_SOURCE', 'Resmî kaynak bağlantısı olmadan onaylanamaz.');
   const rv = (await tx.query(`SELECT effective_from, effective_to, is_example FROM rule_versions WHERE id = $1`, [c.rule_version_id])).rows[0];
   if (c.is_example && !cfg.allowExampleRules) throw forbidden('Örnek/sentetik kaynaklı kural yalnızca demo ortamında onaylanıp yayımlanabilir.');
-  await approveRuleVersion(tx, p, c.rule_version_id, why);
+  await approveRuleVersion(tx, p, c.rule_version_id, why, { dateSetByLegislationFlow: true });
   const eff = String(c.effective_from).slice(0, 10);
   // A repeal takes effect on the day after the old version's last day; its rule version carries that last day.
   const apply = c.change_type === 'repeal' && rv.effective_to ? addDays(String(rv.effective_to).slice(0, 10), 1) : eff;
@@ -426,7 +439,7 @@ export async function applyChange(tx: Tx, id: string, cfg: Pick<LegislationConfi
   const spec = await specFromRuleVersion(tx, c.rule_version_id);
   // Scope is decided BEFORE publishing, from the current state: which sites the new version touches.
   const impact = await previewImpact(tx, spec, today);
-  const rvRow = await publishVersion(tx, c.approved_by, c.rule_version_id, { allowExampleRules: cfg.allowExampleRules, reason: c.approve_reason,
+  const rvRow = await publishVersion(tx, c.approved_by, c.rule_version_id, { allowExampleRules: cfg.allowExampleRules, reason: c.approve_reason, dateSetByLegislationFlow: true,
     extra: { viaLegislationChange: id, docRef: c.doc_ref, scheduledFor: String(c.apply_on).slice(0, 10) } });
   const sitesDone: any[] = [];
   let tasksCreated = 0, notified = 0, cancelled = 0, missed = 0;
