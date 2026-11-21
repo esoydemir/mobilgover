@@ -10,7 +10,7 @@ import { ErrorBox, Field, Loading, StaleNote } from '../../components/states';
 import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { SEVERITY_LABEL } from '../../features/labels';
-import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
+import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, ServiceLinkCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
 import { HAZARDS, type NcrDetail } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -116,6 +116,7 @@ export default function NcrRoute() {
       ) : null}
 
       <VerificationCard n={n} base={base} reload={q.reload} />
+      <ServiceLinkCard n={n} base={base} reload={q.reload} />
       {n.status !== 'closed' && n.permissions.serviceRequest ? (
         <GhostButton testID="ncr-service-request" label="Bu sorun için uzman hizmeti iste"
           onPress={() => router.push(`/service/new?ncrId=${n.id}&title=${encodeURIComponent(n.title)}`)} />

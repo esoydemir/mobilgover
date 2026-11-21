@@ -554,12 +554,17 @@ export async function reportEvidenceCompany(tx: Tx, p: Principal, jobId: string,
 export async function taskServiceReports(tx: Tx, companyId: string, taskId: string) {
   const rows = (await tx.query(
     `SELECT sr.id AS request_id, sr.title AS request_title, sr.created_at AS request_created_at, n.id AS case_id, n.title AS case_title, n.detected_at AS case_detected_at, n.status AS case_status,
-            (sr.task_id = $2 OR n.task_id = $2) AS direct, j.id AS job_id, j.status AS job_status, pp.display_name AS provider_name,
+            (sr.task_id = $2 OR n.task_id = $2) AS direct, NOT EXISTS (SELECT 1 FROM nonconformities n2 WHERE n.id IS NOT NULL AND n2.company_id = n.company_id AND n2.site_id = n.site_id AND n2.equipment_id = n.equipment_id AND n2.id <> n.id
+                        AND n2.detected_at >= now() - interval '90 days') AS sole, lk.id AS link_id, lk.ncr_id AS link_ncr_id, lk.title AS link_case_title, lk.basis AS link_basis, lk.linked_at, lk.linked_by_name,
+            eq.name AS equipment_name, j.id AS job_id, j.status AS job_status, pp.display_name AS provider_name,
             d.id AS document_id, d.title AS document_title, d.site_id, s.name AS site_name, v.id AS version_id, v.version, v.review_status, v.review_notes, v.reviewed_at,
             v.uploaded_at, rb.display_name AS reviewed_by_name, e.status AS file_status, jr.version AS report_version,
             (v.version = (SELECT max(x.version) FROM document_versions x WHERE x.document_id = d.id)) AS is_latest
-       FROM service_requests sr LEFT JOIN nonconformities n ON n.id = sr.ncr_id
+       FROM service_requests sr LEFT JOIN nonconformities n ON n.id = sr.ncr_id LEFT JOIN equipment eq ON eq.id = n.equipment_id
        JOIN service_jobs j ON j.request_id = sr.id JOIN professional_profiles pp ON pp.id = j.provider_profile_id
+       LEFT JOIN LATERAL (SELECT scl.id, scl.ncr_id, tn.title, scl.basis, scl.linked_at, lu.display_name AS linked_by_name FROM service_case_links scl
+                            JOIN nonconformities tn ON tn.id = scl.ncr_id JOIN tasks tk2 ON tk2.id = $2 JOIN users lu ON lu.id = scl.linked_by
+                           WHERE scl.job_id = j.id AND tn.equipment_id = tk2.equipment_id AND tn.site_id = tk2.site_id ORDER BY scl.linked_at DESC LIMIT 1) lk ON true
        JOIN documents d ON d.service_job_id = j.id JOIN sites s ON s.id = d.site_id
        JOIN document_versions v ON v.document_id = d.id LEFT JOIN users rb ON rb.id = v.reviewed_by
        LEFT JOIN service_job_reports jr ON jr.document_version_id = v.id
@@ -575,7 +580,8 @@ export async function taskServiceReports(tx: Tx, companyId: string, taskId: stri
   for (const r of rows) {
     const g = byJob.get(r.job_id) ?? { requestId: r.request_id, requestTitle: r.request_title, requestCreatedAt: r.request_created_at, jobId: r.job_id,
       // direct: the request was opened from this task or the task is the case's own task. equipment: only the same branch and equipment (another case's service).
-      relation: (r.direct ? 'direct' : 'equipment') as 'direct' | 'equipment', caseId: r.case_id as string | null, caseTitle: r.case_title as string | null, caseDetectedAt: r.case_detected_at, caseStatus: r.case_status as string | null, jobStatus: r.job_status, providerName: r.provider_name, documentId: r.document_id,
+      relation: (r.direct ? 'direct' : r.sole ? 'sole' : r.link_id ? 'linked' : 'equipment') as 'direct' | 'sole' | 'linked' | 'equipment', equipmentName: r.equipment_name as string | null,
+      linkId: r.link_id as string | null, linkedCaseId: r.link_ncr_id as string | null, linkedCaseTitle: r.link_case_title as string | null, linkBasis: r.link_basis as string | null, linkedAt: r.linked_at, linkedBy: r.linked_by_name as string | null, caseId: r.case_id as string | null, caseTitle: r.case_title as string | null, caseDetectedAt: r.case_detected_at, caseStatus: r.case_status as string | null, jobStatus: r.job_status, providerName: r.provider_name, documentId: r.document_id,
       documentTitle: r.document_title, siteId: r.site_id, siteName: r.site_name, versions: [] as any[] };
     g.versions.push({ versionId: r.version_id, version: r.version, reportVersion: r.report_version, reviewStatus: r.review_status, reviewNotes: r.review_notes, reviewedAt: r.reviewed_at, reviewedBy: r.reviewed_by_name,
       uploadedAt: r.uploaded_at, fileStatus: r.file_status, isLatest: r.is_latest });

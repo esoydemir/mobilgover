@@ -133,7 +133,9 @@ async function taskContext(tx: Tx, companyId: string, t: any) {
 /** Service reports of the task's linked services, only for people who may read the business's documents at the task's site. */
 async function taskReports(tx: Tx, p: Principal, companyId: string, t: any) {
   if (!can(p, 'document.read', { companyId, siteId: t.site_id }).ok) return { reports: [], blocked: false, reason: null };
-  const sr = await taskServiceReports(tx, companyId, t.id);
+  const sr0 = await taskServiceReports(tx, companyId, t.id);
+  // A task whose rule does not take a service report as evidence lists only the services opened from it or its case.
+  const sr = acceptsReport((t.evidence as unknown[]).map(x => evidenceRequirementSchema.parse(x))) ? sr0 : { ...sr0, reports: sr0.reports.filter(g => g.relation === 'direct') };
   // A closed task is not held open by a report that was revised after it closed.
   return t.status === 'open' ? sr : { ...sr, blocked: false, reason: null };
 }
@@ -141,16 +143,23 @@ async function taskReports(tx: Tx, p: Principal, companyId: string, t: any) {
 /** The task's ties to service-report versions, and whether each one still counts as document evidence right now. */
 async function reportLinks(tx: Tx, companyId: string, taskId: string) {
   const rows = (await tx.query(
-    `SELECT l.id, l.document_id, l.document_version_id, l.version_number, l.file_sha256, l.status, l.status_reason, l.completion_basis, l.selected_at, l.relation, l.case_id, l.basis_note, cn.title AS case_title,
+    `SELECT l.id, l.document_id, l.document_version_id, l.version_number, l.file_sha256, l.status, l.status_reason, l.completion_basis, l.selected_at, l.relation, l.case_id, l.basis_note, cn.title AS case_title, l.service_link_id, scl.basis AS link_basis, scl.linked_at, lu.display_name AS linked_by_name, ltn.title AS linked_case_title,
             u.display_name AS selected_by_name, d.title AS document_title, v.review_status,
             (v.version = (SELECT max(x.version) FROM document_versions x WHERE x.document_id = l.document_id)) AS is_latest,
             (SELECT x.status FROM evidence x WHERE x.document_version_id = v.id ORDER BY x.created_at DESC LIMIT 1) AS file_status
        FROM task_report_evidence l JOIN users u ON u.id = l.selected_by JOIN documents d ON d.id = l.document_id JOIN document_versions v ON v.id = l.document_version_id
-      LEFT JOIN nonconformities cn ON cn.id = l.case_id
+      LEFT JOIN nonconformities cn ON cn.id = l.case_id LEFT JOIN service_case_links scl ON scl.id = l.service_link_id LEFT JOIN users lu ON lu.id = scl.linked_by
+       LEFT JOIN nonconformities ltn ON ltn.id = scl.ncr_id
       WHERE l.company_id = $1 AND l.task_id = $2 ORDER BY l.selected_at DESC`, [companyId, taskId])).rows;
   return rows.map(l => ({ ...l, counts: l.status === 'active' && l.is_latest === true && l.review_status === 'verified' && l.file_status === 'stored' }));
 }
 const acceptsReport = (reqs: EvidenceRequirement[]) => reqs.some(r => r.kind === 'document' && r.acceptsServiceReport === true);
+
+/** A report of another case of the same equipment, not linked to a case of this equipment: shown as supporting material only. */
+function unlinkedReason(g: any): string | null {
+  if (g.relation !== 'equipment') return null;
+  return `Bu rapor “${g.caseTitle ?? g.requestTitle}” vakasının servisine ait; bu ekipmanın bir vakasıyla ilişkisi kayıtlı değil. Destekleyici ek olarak görülebilir, zorunlu kanıtı karşılamaz. Karşılaması için yetkili kişi servisi vaka ekranından ilişkilendirmelidir.`;
+}
 
 /** Why a report's latest version cannot be chosen for this task (null = it can). */
 function reportBlocker(t: any, g: any): string | null {
@@ -173,14 +182,15 @@ async function reportEvidenceView(links: Awaited<ReturnType<typeof reportLinks>>
     accepted,
     links: links.filter(l => open ? true : l.completion_basis).map(l => ({
       id: l.id, documentId: l.document_id, documentTitle: l.document_title, version: l.version_number, fileSha256: l.file_sha256,
-      selectedBy: l.selected_by_name, selectedAt: l.selected_at, relation: l.relation, caseId: l.case_id, caseTitle: l.case_title, basisNote: l.basis_note, status: l.status, counts: open && l.counts, completionBasis: l.completion_basis,
+      selectedBy: l.selected_by_name, selectedAt: l.selected_at, relation: l.relation, caseId: l.case_id, caseTitle: l.case_title, basisNote: l.basis_note, linkBasis: l.link_basis, linkedAt: l.linked_at, linkedBy: l.linked_by_name, linkedCaseTitle: l.linked_case_title, status: l.status, counts: open && l.counts, completionBasis: l.completion_basis,
       reason: l.completion_basis ? null : l.status === 'stale' || l.status === 'replaced' ? l.status_reason
         : l.status === 'active' && !l.counts ? (l.is_latest !== true ? 'Seçilen sürümden sonra yeni sürüm geldi.' : 'Seçilen sürümün incelemesi olumlu değil.') : null,
     })),
     options: accepted && open ? sr.reports.map(g => ({
       documentId: g.documentId, requestId: g.requestId, requestTitle: g.requestTitle, requestCreatedAt: g.requestCreatedAt, providerName: g.providerName, jobId: g.jobId,
-      relation: g.relation, caseId: g.caseId, caseTitle: g.caseTitle, caseDetectedAt: g.caseDetectedAt, caseStatus: g.caseStatus, siteName: g.siteName, versionId: g.latest.versionId, version: g.latest.version,
-      reason: reportBlocker(t, g), selected: links.some(l => l.counts && l.document_version_id === g.latest.versionId),
+      relation: g.relation, caseId: g.caseId, caseTitle: g.caseTitle, caseDetectedAt: g.caseDetectedAt, caseStatus: g.caseStatus, equipmentName: g.equipmentName ?? t.equipment_name ?? null, serviceDate: g.latest.uploadedAt,
+      linkedCaseTitle: g.linkedCaseTitle, linkBasis: g.linkBasis, linkedBy: g.linkedBy, linkedAt: g.linkedAt, siteName: g.siteName, versionId: g.latest.versionId, version: g.latest.version,
+      reason: reportBlocker(t, g) ?? unlinkedReason(g), selected: links.some(l => l.counts && l.document_version_id === g.latest.versionId),
     })) : [],
   };
 }
@@ -189,7 +199,7 @@ async function reportEvidenceView(links: Awaited<ReturnType<typeof reportLinks>>
  * Ties one reviewed version of a task-linked service report to the task as its document evidence, without uploading the file again.
  * Only the latest version of a report of the same site and the same task, whose review came out positive, can be chosen.
  */
-export async function selectServiceReportEvidence(tx: Tx, p: Principal, companyId: string, taskId: string, b: { documentId: string; versionId: string; basisNote?: string | null }) {
+export async function selectServiceReportEvidence(tx: Tx, p: Principal, companyId: string, taskId: string, b: { documentId: string; versionId: string }) {
   await tx.query(`SELECT 1 FROM tasks WHERE id = $1 AND company_id = $2 FOR UPDATE`, [taskId, companyId]);
   const t = await loadTask(tx, p, companyId, taskId, 'task.execute');
   if (!can(p, 'document.read', { companyId, siteId: t.site_id }).ok) throw notFound('Servis raporu');
@@ -205,22 +215,20 @@ export async function selectServiceReportEvidence(tx: Tx, p: Principal, companyI
   }
   const blocked = reportBlocker(t, g);
   if (blocked) throw new AppError(422, 'REPORT_NOT_SELECTABLE', blocked);
-  // A report that belongs to another case of the same equipment is a proposal, not a proof: the person must say why it covers this task.
-  const basisNote = b.basisNote?.trim() || null;
-  if (g.relation === 'equipment' && (basisNote?.length ?? 0) < 15)
-    throw new AppError(422, 'REPORT_BASIS_REQUIRED', `Bu rapor “${g.caseTitle ?? g.requestTitle}” vakasına ait; bu görevle ilişkisi kayıtlı değil. Bu görevin neden bu servisi doğruladığını yazın (en az 15 karakter).`,
-      { caseId: g.caseId, caseTitle: g.caseTitle, requestTitle: g.requestTitle });
+  // A report that belongs to another case of the same equipment may be seen, but it is required evidence only once an authorised person has linked the service to a case of this equipment.
+  const unlinked = unlinkedReason(g);
+  if (unlinked) throw new AppError(422, 'REPORT_NOT_LINKED', unlinked, { caseId: g.caseId, caseTitle: g.caseTitle, requestTitle: g.requestTitle });
   const existing = (await tx.query(`SELECT id FROM task_report_evidence WHERE task_id = $1 AND document_id = $2 AND status = 'active' AND document_version_id = $3`, [taskId, b.documentId, b.versionId])).rows[0];
   if (existing) return { id: existing.id as string, duplicate: true, version: g.latest.version };
   await tx.query(`UPDATE task_report_evidence SET status = 'replaced', status_changed_at = clock_timestamp(), status_reason = 'Başka bir rapor sürümü seçildi.'
                    WHERE task_id = $1 AND document_id = $2 AND status = 'active'`, [taskId, b.documentId]);
   const sha = (await tx.query(`SELECT sha256 FROM evidence WHERE document_version_id = $1 AND status = 'stored' ORDER BY created_at DESC LIMIT 1`, [b.versionId])).rows[0]?.sha256 ?? null;
   const id = (await tx.query<{ id: string }>(
-    `INSERT INTO task_report_evidence (company_id, task_id, document_id, document_version_id, version_number, file_sha256, selected_by, relation, case_id, basis_note) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-    [companyId, taskId, b.documentId, b.versionId, g.latest.version, sha, p.userId, g.relation, g.relation === 'equipment' ? g.caseId : null, g.relation === 'equipment' ? basisNote : null])).rows[0]!.id;
+    `INSERT INTO task_report_evidence (company_id, task_id, document_id, document_version_id, version_number, file_sha256, selected_by, relation, case_id, service_link_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [companyId, taskId, b.documentId, b.versionId, g.latest.version, sha, p.userId, g.relation, g.relation === 'linked' ? g.caseId : null, g.relation === 'linked' ? g.linkId : null])).rows[0]!.id;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'task.report_evidence_selected', entityType: 'task', entityId: taskId,
     payload: { linkId: id, documentId: b.documentId, versionId: b.versionId, version: g.latest.version, sha256: sha, requestId: g.requestId,
-      relation: g.relation, caseId: g.relation === 'equipment' ? g.caseId : null, basisNote: g.relation === 'equipment' ? basisNote : null } });
+      relation: g.relation, sourceCaseId: g.relation === 'linked' ? g.caseId : null, targetCaseId: g.relation === 'linked' ? g.linkedCaseId : null, serviceLinkId: g.relation === 'linked' ? g.linkId : null, linkBasis: g.relation === 'linked' ? g.linkBasis : null } });
   return { id, duplicate: false, version: g.latest.version };
 }
 
@@ -463,6 +471,6 @@ export async function completeTask(tx: Tx, p: Principal, companyId: string, task
   }
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'task.completed', entityType: 'task', entityId: taskId,
     clientTime: clientCompletedAt ?? null, payload: { outcome, reasons: a.nonconforming, nonconformityId, reviewFlag,
-      serviceReportBasis: basis.map(l => ({ documentId: l.document_id, versionId: l.document_version_id, version: l.version_number, sha256: l.file_sha256, relation: l.relation, caseId: l.case_id, basisNote: l.basis_note })) } });
+      serviceReportBasis: basis.map(l => ({ documentId: l.document_id, versionId: l.document_version_id, version: l.version_number, sha256: l.file_sha256, relation: l.relation, caseId: l.case_id, serviceLinkId: l.service_link_id, basisNote: l.basis_note })) } });
   return { outcome, nonconformityId, reviewFlag, nonconformities: a.nonconforming };
 }

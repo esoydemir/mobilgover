@@ -201,12 +201,20 @@ const SEVERITY_RISK = { critical: "Kritik kontrol: süresi geçerse Risk Merkezi
  * file again. Other steps (measurement, note, photo, approval) stay required, so the missing ones are named here. A closed task shows
  * the version it rested on.
  */
+type ReportLink = NonNullable<NonNullable<TaskDetail['reportEvidence']>['links']>[number];
+/** How the report a task rested on relates to the task, in words an auditor can check. */
+function relationLine(l: ReportLink): string {
+  if (l.relation === 'linked') return `\nBu rapor başka bir vakanın servisine ait (${l.caseTitle ?? 'vaka'}); servis ${l.linkedCaseTitle ?? 'bu ekipmanın bir vakası'} vakasıyla ${l.linkedBy ?? '—'} tarafından ${l.linkedAt ? fmtDateTime(l.linkedAt) : ''} ilişkilendirildi. Dayanak: ${l.linkBasis ?? '—'}`;
+  if (l.relation === 'sole') return `\nRapor, bu ekipmanın o dönemdeki tek vakasının servisine ait (${l.caseTitle ?? 'vaka'}).`;
+  if (l.relation === 'declared') return `\nEski kayıt · rapor başka bir vakanın servisine ait (${l.caseTitle ?? 'vaka'}); servis–vaka ilişkisi kaydı yok, yalnız serbest metin gerekçe: ${l.basisNote ?? '—'}`;
+  if (l.relation === 'legacy') return `\nEski kayıt · ilişkinin türü kaydedilmemiş${l.caseTitle ? ` (rapor “${l.caseTitle}” vakasının servisine ait; bu görevle ilişkisi kayıt kimlikleriyle doğrulanamıyor)` : ''}.`;
+  return '';
+}
 function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; onChanged: () => void }) {
   const { call } = useSession();
   const { showToast } = useUi();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notes, setNotes] = useState<Record<string, string>>({});
   const re = t.reportEvidence;
   if (!re || !re.accepted) return null;
   const open = t.status === 'open';
@@ -214,7 +222,7 @@ function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; o
   const use = async (o: NonNullable<TaskDetail['reportEvidence']>['options'][number]) => {
     setBusy(o.documentId); setError(null);
     try {
-      await call('POST', `${base}/tasks/${t.id}/report-evidence`, { documentId: o.documentId, versionId: o.versionId, ...(o.relation === 'equipment' ? { basisNote: (notes[o.documentId] ?? '').trim() } : {}) });
+      await call('POST', `${base}/tasks/${t.id}/report-evidence`, { documentId: o.documentId, versionId: o.versionId });
       showToast('Servis raporu göreve bağlandı', `Sürüm ${o.version} belge kanıtı olarak kullanılacak.`, 'ok');
       onChanged();
     } catch (e) { setError(errorText(e)); } finally { setBusy(null); }
@@ -227,32 +235,33 @@ function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; o
         basis.length ? basis.map(l => (
           <Text key={l.id} testID="task-report-basis" style={type(12.5, 500, { lh: 1.45 })}>
             Görev şu rapor sürümüne dayanarak kapandı: {l.documentTitle} · sürüm {l.version} ({fmtDateTime(l.selectedAt)}, {l.selectedBy} seçti){l.fileSha256 ? ` · özet ${l.fileSha256.slice(0, 12)}…` : ''}
-            {l.relation === 'equipment' ? `
-Bu rapor başka bir vakanın servisine ait (${l.caseTitle ?? 'vaka'}); göreve bağlanma gerekçesi: ${l.basisNote ?? '—'}` : ''}
+            {relationLine(l)}
           </Text>
         )) : <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görev kendi yüklenen belgesiyle kapandı; servis raporuna dayanmadı.</Text>
       ) : (
         <>
-          <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görevin kuralı belge kanıtı yerine incelenmiş servis raporunu kabul eder. Yalnız aynı şubenin, olumlu incelenmiş güncel rapor sürümü seçilebilir; dosyayı yeniden yüklemen gerekmez. Başka vakanın servisi için görevle ilişkisini yazman gerekir.</Text>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görevin kuralı belge kanıtı yerine incelenmiş servis raporunu kabul eder. Yalnız aynı şubenin, olumlu incelenmiş güncel rapor sürümü seçilebilir; dosyayı yeniden yüklemen gerekmez. Başka vakanın servisi, vaka ekranında bu ekipmanın bir vakasıyla ilişkilendirilmedikçe yalnız destekleyici ek olarak görünür.</Text>
           {re.options.length === 0 ? <Text testID="task-report-none" style={type(12, 500, { color: C.t3, lh: 1.45 })}>Bu göreve bağlı servis raporu yok. Servis talebini görevden aç ya da belgeyi kendin yükle.</Text> : null}
           {re.options.map(o => (
             <View key={o.documentId} testID={`task-report-option-${o.documentId}`} style={{ gap: 4 }}>
-              <Text style={type(13, 600, { lh: 1.35 })}>{o.requestTitle}</Text>
-              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {o.siteName} · güncel sürüm {o.version}{o.providerName ? ` · Uzman: ${o.providerName}` : ''}{o.requestCreatedAt ? ` · talep ${fmtDateTime(o.requestCreatedAt)}` : ''}</Text>
+              <Text style={type(13, 600, { lh: 1.35 })}>{o.requestTitle} · sürüm {o.version}</Text>
+              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {o.siteName}{o.equipmentName ? ` · Ekipman: ${o.equipmentName}` : ''}</Text>
+              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>{o.serviceDate ? `Rapor ${fmtDateTime(o.serviceDate)}` : ''}{o.requestCreatedAt ? ` · talep ${fmtDateTime(o.requestCreatedAt)}` : ''}{o.providerName ? ` · Uzman: ${o.providerName}` : ''}</Text>
+              {o.relation === 'direct' ? <Text style={type(11.5, 500, { color: C.t2, lh: 1.45 })}>Bu göreve veya bu görevin vakasına doğrudan bağlı servis.</Text> : null}
+              {o.relation === 'sole' ? <Text style={type(11.5, 500, { color: C.t2, lh: 1.45 })}>Vaka: {o.caseTitle ?? '—'}{o.caseDetectedAt ? ` (${fmtDateTime(o.caseDetectedAt)})` : ''} · bu ekipmanın o dönemdeki tek vakası.</Text> : null}
+              {o.relation === 'linked' ? (
+                <Text testID={`task-report-linked-${o.documentId}`} style={type(11.5, 500, { color: C.t2, lh: 1.45 })}>
+                  Başka vakanın servisi: {o.caseTitle ?? '—'}. {o.linkedCaseTitle ?? 'Bu ekipmanın bir vakası'} vakasıyla {o.linkedBy ?? '—'} ilişkilendirdi{o.linkedAt ? ` (${fmtDateTime(o.linkedAt)})` : ''}. Dayanak: {o.linkBasis ?? '—'}
+                </Text>
+              ) : null}
               {o.relation === 'equipment' ? (
                 <Text testID={`task-report-other-${o.documentId}`} style={type(12, 600, { color: C.warn, lh: 1.45 })}>
-                  Başka vakanın servisi: {o.caseTitle ?? 'vaka'}{o.caseDetectedAt ? ` (${fmtDateTime(o.caseDetectedAt)})` : ''}. Bu görevle ilişkisi kayıtlı değil; aynı şube ve ekipman olduğu için öneriliyor.
+                  Destekleyici ek · başka vakanın servisi: {o.caseTitle ?? '—'}{o.caseDetectedAt ? ` (${fmtDateTime(o.caseDetectedAt)})` : ''}. Bu ekipmanın bir vakasıyla ilişkisi kayıtlı değil.
                 </Text>
-              ) : <Text style={type(11.5, 500, { color: C.t2, lh: 1.45 })}>Bu göreve veya bu görevin vakasına doğrudan bağlı servis.</Text>}
+              ) : null}
               {o.selected ? <Text testID={`task-report-selected-${o.documentId}`} style={type(12, 600, { color: C.lime })}>Seçili: sürüm {o.version} göreve bağlı</Text>
-                : o.reason ? <Text testID={`task-report-reason-${o.documentId}`} style={type(12, 500, { color: C.warn, lh: 1.45 })}>Seçilemez: {o.reason}</Text>
-                : <>
-                  {o.relation === 'equipment' ? (
-                    <Field testID={`task-report-basis-${o.documentId}`} value={notes[o.documentId] ?? ''} onChangeText={v => setNotes(n => ({ ...n, [o.documentId]: v }))} multiline placeholder="Bu görev neden bu servisi doğruluyor? (en az 15 karakter)" />
-                  ) : null}
-                  <PrimaryButton testID={`task-report-use-${o.documentId}`} label="İncelenmiş servis raporunu kanıt olarak kullan" disabled={busy !== null || (o.relation === 'equipment' && (notes[o.documentId] ?? '').trim().length < 15)} onPress={() => use(o)} />
-                  {o.relation === 'equipment' && (notes[o.documentId] ?? '').trim().length < 15 ? <Text style={type(11.5, 500, { color: C.t3, lh: 1.4 })}>Düğme, gerekçe en az 15 karakter olunca açılır.</Text> : null}
-                </>}
+                : o.reason ? <Text testID={`task-report-reason-${o.documentId}`} style={type(12, 500, { color: C.warn, lh: 1.45 })}>Zorunlu kanıt olarak seçilemez: {o.reason}</Text>
+                : <PrimaryButton testID={`task-report-use-${o.documentId}`} label="İncelenmiş servis raporunu kanıt olarak kullan" disabled={busy !== null} onPress={() => use(o)} />}
             </View>
           ))}
           {re.links.filter(l => !l.counts && l.reason).map(l => (
@@ -281,7 +290,7 @@ function ServiceReports({ t }: { t: TaskDetail }) {
       {sr.reports.map(r => (
         <View key={r.documentId} testID={`task-report-${r.documentId}`} style={{ gap: 4 }}>
           <Text style={type(13, 600, { lh: 1.35 })}>{r.requestTitle}</Text>
-          <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {r.siteName} · Uzman: {r.providerName}{r.relation === 'equipment' ? ` · başka vaka: ${r.caseTitle ?? '—'} (bu görevi kapatmayı tutmaz)` : ''}</Text>
+          <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Şube: {r.siteName} · Uzman: {r.providerName}{r.relation === 'equipment' ? ` · destekleyici ek, başka vaka: ${r.caseTitle ?? '—'}` : ''}</Text>
           {r.versions.map(v => (
             <Text key={v.version} style={type(11.5, v.isLatest ? 600 : 400, { color: v.isLatest ? C.t1 : C.t3, lh: 1.45 })}>
               Sürüm {v.version}{v.isLatest ? ' · SON SÜRÜM' : ' · önceki'} · <Text style={{ color: REVIEW_TR[v.reviewStatus][1] }}>{REVIEW_TR[v.reviewStatus][0]}</Text>{v.reviewNotes ? ` · ${v.reviewNotes}` : ''}

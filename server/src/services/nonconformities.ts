@@ -94,6 +94,7 @@ async function notifyNew(tx: Tx, companyId: string, siteId: string, id: string, 
 const RISK_TR: Record<string, string> = { low: 'düşük', medium: 'orta', high: 'yüksek', critical: 'kritik' };
 
 /** Loads with access check. Staff may work on a case they own or hold an action in. */
+export async function loadNonconformity(tx: Tx, p: Principal, companyId: string, id: string, action: 'ncr.read' | 'ncr.act' | 'ncr.verify_close' | 'ncr.manage' | 'ncr.verify', forUpdate = false) { return load(tx, p, companyId, id, action, forUpdate); }
 async function load(tx: Tx, p: Principal, companyId: string, id: string, action: 'ncr.read' | 'ncr.act' | 'ncr.verify_close' | 'ncr.manage' | 'ncr.verify', forUpdate = false) {
   const n = (await tx.query(`SELECT * FROM nonconformities WHERE id = $1 AND company_id = $2 ${forUpdate ? 'FOR UPDATE' : ''}`, [id, companyId])).rows[0];
   if (!n) throw notFound('Uygunsuzluk');

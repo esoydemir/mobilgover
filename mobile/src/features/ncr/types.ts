@@ -29,6 +29,8 @@ export type NcrDetail = {
   trainings: import('./parts').TrainingRow[];
   relatedTraining: { id: string; title: string; summary: string; is_example: boolean }[];
   services: { id: string; title: string; status: string; category_code: string; job_status: string | null }[];
+  serviceLinks?: { linked: { id: string; job_id: string; version_number: number; basis: string; linked_at: string; linked_by: string; request_title: string; source_case_title: string | null }[];
+    linkable: { job_id: string; request_title: string; request_created_at: string; source_case_title: string | null; version: number; uploaded_at: string }[] };
   history: { event_type: string; payload: any; occurred_at: string; actor_name: string | null }[];
   cause: { initial: NcrDetail['causes'][number] | null; verified: NcrDetail['causes'][number] | null };
   suggestions: { key: string; category: Cause; kind: string; title: string; body: string; available: boolean; serviceCategory: string | null; equipmentId: string | null;

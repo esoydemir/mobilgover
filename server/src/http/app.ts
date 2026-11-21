@@ -23,6 +23,7 @@ import * as padmin from '../services/platform-admin';
 import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
+import { caseServiceLinks, linkServiceToCase } from '../services/case-links';
 import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, decideSuggestion, equipmentHistory, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
 import { listNotifications, markProviderRead, markRead, providerNotifications } from '../services/notifications';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
@@ -546,7 +547,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/tasks/:taskId/report-evidence', async (req, reply) => {
     const companyId = company(req);
     const { taskId } = z.object({ taskId: uuid }).parse(req.params);
-    const b = z.object({ documentId: uuid, versionId: uuid, basisNote: z.string().max(500).nullish() }).parse(req.body);
+    const b = z.object({ documentId: uuid, versionId: uuid }).parse(req.body);
     return mutate(req, reply, companyId, tx => selectServiceReportEvidence(tx, req.principal, companyId, taskId, b));
   });
   app.post('/companies/:companyId/tasks/:taskId/complete', async (req, reply) => {
@@ -573,7 +574,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.get('/companies/:companyId/nonconformities/:id', async req => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
-    return db.tenant(companyId, tx => getNonconformity(tx, req.principal, companyId, id));
+    return db.tenant(companyId, async tx => { const n = await getNonconformity(tx, req.principal, companyId, id); return { ...n, serviceLinks: await caseServiceLinks(tx, req.principal, companyId, { id: n.id, site_id: n.siteId ?? n.site_id, equipment_id: n.equipment?.id ?? null, status: n.status }) }; });
   });
   app.post('/companies/:companyId/nonconformities/:id/steps', async (req, reply) => {
     const companyId = company(req);
@@ -1196,6 +1197,12 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   // Case share: preview (nothing stored) and, with an authorised person's permission, a draft post.
   const caseBody = z.object({ fields: z.array(z.enum(net.CASE_FIELDS)).max(5), summary: z.string().max(3000) });
+  app.post('/companies/:companyId/nonconformities/:id/service-links', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ jobId: uuid, basis: z.string().min(1).max(1000) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => linkServiceToCase(tx, req.principal, companyId, id, b), 201);
+  });
   app.post('/companies/:companyId/nonconformities/:id/share-preview', async req => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
