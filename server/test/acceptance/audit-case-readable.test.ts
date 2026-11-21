@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedDemoCompany, seedPlatform } from '../../src/seed/demo';
+import { seedDemoCompany, seedDemoProvider, seedPlatform } from '../../src/seed/demo';
 import { topUpAllSites } from '../../src/services/horizon';
 import { client, freshEnv, type Env } from '../support/env';
 
@@ -14,7 +15,8 @@ const owner = () => client(env, demo.users.owner.token);
 const manager = () => client(env, demo.users.manager.token);
 const later = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
 
-beforeAll(async () => { env = await freshEnv(); await seedPlatform(env.db); demo = await seedDemoCompany(env.db, { isDemo: true }); await topUpAllSites(env.db, 2); });
+let pro: { id: string; token: string };
+beforeAll(async () => { env = await freshEnv(); const platform = await seedPlatform(env.db); demo = await seedDemoCompany(env.db, { isDemo: true }); await topUpAllSites(env.db, 2); pro = await seedDemoProvider(env.db, platform.marketReviewer.id, 'murat.denetim@ornek.test'); });
 afterAll(async () => { await env?.close(); });
 
 describe('audit file: open, closed and reopened case', () => {
@@ -54,6 +56,15 @@ describe('audit file: open, closed and reopened case', () => {
       await manager().post(`${N(closed)}/actions/${a}`, { op: 'done', notes: 'Yapıldı.' });
       await owner().post(`${N(closed)}/actions/${a}`, { op: 'verify', result: 'accepted', notes: 'Yerinde baktım.' });
     }
+    // A service report for this case, delivered but not reviewed.
+    const P = client(env, pro.token);
+    const reqId = (await owner().post(`${C()}/service-requests`, { siteId: demo.siteId, categoryCode: 'refrigeration_service', title: 'Conta servisi', description: 'Servis.', city: 'İstanbul', ncrId: closed, taskId: null })).body.id;
+    const q = (await P.post(`/pro/requests/${reqId}/quotes`, { scope: 'Servis', exclusions: 'Kompresör', priceNet: 1500, vatRate: 20, materials: 'Parça', durationText: '2 saat', warrantyText: '3 ay', validUntil: later(48), deliverable: 'Servis raporu (PDF)' })).body.id;
+    const jobId = (await owner().post(`${C()}/quotes/${q}/accept`)).body.jobId;
+    await P.post(`/pro/jobs/${jobId}/check-in`, { code: (await owner().get(`${C()}/service-requests/${reqId}`)).body.job.checkin_code });
+    const file = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.from(`rapor-${jobId}`)]);
+    const rr = await P.post(`/pro/jobs/${jobId}/report`, { report: 'Conta servisi: kapı contası değiştirildi, kapı hizalandı.', file: { mime: 'application/pdf', sha256: createHash('sha256').update(file).digest('hex'), sizeBytes: file.length } });
+    await P.put(`/pro/jobs/${jobId}/report/${rr.body.evidenceId}/content`, file, 'application/pdf');
     await owner().post(`${N(closed)}/causes`, { stage: 'verified', categories: ['equipment'], notes: 'Conta doğrulandı.' });
     await manager().post(`${N(closed)}/steps`, { step: 'effectiveness_check', notes: 'İki gün ölçüm.', measurement: { value: 3 } });
     expect((await owner().post(`${N(closed)}/verify`, { result: 'effective', notes: 'Kendi ölçümümle 3 °C.' })).body.status).toBe('closed');
@@ -63,5 +74,10 @@ describe('audit file: open, closed and reopened case', () => {
     expect(seq).toContain('Aksiyon bağımsız doğrulandı [Conta kontrolünü bakım planına ekle.]');
     expect(seq).toMatch(/yeni ölçüm 3( |,)/);
     expect(seq).not.toContain('ölçüm 3 )');
+    expect((rep2.sections.closures.cases as any[]).find(c => c.id === closed)!.serviceReports.join(' ')).toContain('ŞU AN İNCELENMEMİŞ');
+    const vid = (await owner().get(`${C()}/documents/${rr.body.documentId}`)).body.versions[0].id as string;
+    await owner().post(`${C()}/documents/${rr.body.documentId}/versions/${vid}/review`, { decision: 'verified', notes: 'Rapor okundu.' });
+    const rep3 = (await owner().get(`${C()}/audit-report?siteId=${demo.siteId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&format=json`)).body;
+    expect((rep3.sections.closures.cases as any[]).find(c => c.id === closed)!.serviceReports.join(' ')).toContain('incelendi (');
   });
 });
