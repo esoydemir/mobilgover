@@ -120,6 +120,9 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
   const steps = caseIds.length ? (await tx.query(`SELECT s.ncr_id, s.iteration, s.data, (SELECT m.limit_source->>'basis' FROM nonconformities n JOIN measurements m ON m.id = n.measurement_id WHERE n.id = s.ncr_id) AS basis FROM ncr_steps s WHERE s.ncr_id = ANY($1) AND s.step = 'effectiveness_check' ORDER BY s.done_at`, [caseIds])).rows : [];
   const actionText = new Map<string, string>(); for (const e of caseEvents) if (e.event_type === 'nonconformity.action_added') actionText.set(String(e.payload?.actionId), clip(e.payload?.description, 70));
   const ctx: LineCtx = { action: id => actionText.get(String(id)) ?? null, effect: (ncr, it) => { const x = steps.filter(y => y.ncr_id === ncr && String(y.iteration) === String(it)).at(-1); return x?.data ? { ...x.data, example: x.basis === 'example' } : null; } };
+  const svcDocs = caseIds.length ? (await tx.query(`SELECT r.ncr_id, d.title, v.version, v.review_status, v.reviewed_at, u.display_name AS reviewer FROM service_requests r JOIN service_jobs j ON j.request_id = r.id
+     JOIN documents d ON d.service_job_id = j.id JOIN document_versions v ON v.document_id = d.id LEFT JOIN users u ON u.id = v.reviewed_by
+     WHERE r.ncr_id = ANY($1) AND v.version = (SELECT max(x.version) FROM document_versions x WHERE x.document_id = d.id) ORDER BY r.created_at`, [caseIds])).rows : [];
   const caseLink = caseIds.length ? (await tx.query(`SELECT r.ncr_id, r.id AS request_id, j.id AS job_id FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.ncr_id = ANY($1)`, [caseIds])).rows : [];
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
@@ -147,7 +150,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
           measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', at: tr(m.measured_at) })),
           basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
             relation: b.relation as string, sourceCase: b.case_title ?? null, linkedCase: b.linked_case_title ?? null, linkedBy: b.linked_by ?? null, linkedAt: b.linked_at ?? null, linkBasis: b.link_basis ?? null, basisNote: b.basis_note ?? null })) })),
-        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
+        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
           sequence: caseEvents.filter(e => e.ref === n.id || caseLink.some(l => l.ncr_id === n.id && (l.request_id === e.ref || l.job_id === e.ref)))
             .map(e => ({ at: tr(e.occurred_at), who: e.actor ?? '—', text: caseLine(e.event_type, e.payload, e.ref, ctx) })).filter(x => x.text) })),
       },
@@ -231,6 +234,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     }
     for (const n of r.sections.closures.cases) {
       p(`Kayıt kapandı: ${n.title} · kayıt no ${n.ref} · ${n.site} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
+      for (const sr of n.serviceReports) p(`   Servis raporu: ${sr}`, { color: '#555', size: 8.5 });
       for (const e of n.sequence) p(`   ${e.at} · ${e.who} · ${e.text}`, { color: '#555', size: 8.5 });
       doc.moveDown(0.2);
     }
