@@ -116,7 +116,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
          OR (e.event_type IN ('service.requested','service.quote_accepted','service.report_submitted','service.revision_requested','service.accepted')
              AND (e.entity_id IN (SELECT id::text FROM service_requests WHERE ncr_id = ANY($2::uuid[])) OR e.entity_id IN (SELECT j.id::text FROM service_jobs j JOIN service_requests r ON r.id = j.request_id WHERE r.ncr_id = ANY($2::uuid[])))))
       ORDER BY e.occurred_at`, [companyId, caseIds])).rows : [];
-  const steps = caseIds.length ? (await tx.query(`SELECT ncr_id, iteration, data FROM ncr_steps WHERE ncr_id = ANY($1) AND step = 'effectiveness_check' ORDER BY created_at`, [caseIds])).rows : [];
+  const steps = caseIds.length ? (await tx.query(`SELECT ncr_id, iteration, data FROM ncr_steps WHERE ncr_id = ANY($1) AND step = 'effectiveness_check' ORDER BY done_at`, [caseIds])).rows : [];
   const actionText = new Map<string, string>(); for (const e of caseEvents) if (e.event_type === 'nonconformity.action_added') actionText.set(String(e.payload?.actionId), clip(e.payload?.description, 70));
   const ctx: LineCtx = { action: id => actionText.get(String(id)) ?? null, effect: (ncr, it) => steps.filter(x => x.ncr_id === ncr && String(x.iteration) === String(it)).at(-1)?.data ?? null };
   const caseLink = caseIds.length ? (await tx.query(`SELECT r.ncr_id, r.id AS request_id, j.id AS job_id FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.ncr_id = ANY($1)`, [caseIds])).rows : [];

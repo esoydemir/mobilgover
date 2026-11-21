@@ -45,5 +45,23 @@ describe('audit file: open, closed and reopened case', () => {
     expect(r.history.join('\n')).toContain('Vaka kapandı (bağımsız doğrulama)');
     expect(r.history.join('\n')).toContain('YENİDEN AÇILDI');
     expect(r.history.join('\n')).toContain('Üç gün sonra yine 8 °C');
+    // A case closed in the period reads on its own too: action lines name the action, the measurement carries unit and limit.
+    const closed = await mk('Kapalı vaka: kapı contası');
+    await owner().post(`${N(closed)}/assignment`, { ownerId: demo.users.manager.id, dueAt: later(72), reason: 'Sorumlu' });
+    await manager().post(`${N(closed)}/causes`, { stage: 'initial', categories: ['equipment'], notes: 'Conta.' });
+    for (const [kind, description] of [['correction', 'Contayı değiştir.'], ['corrective_action', 'Conta kontrolünü bakım planına ekle.']]) {
+      const a = (await manager().post(`${N(closed)}/actions`, { kind, description })).body.id;
+      await manager().post(`${N(closed)}/actions/${a}`, { op: 'done', notes: 'Yapıldı.' });
+      await owner().post(`${N(closed)}/actions/${a}`, { op: 'verify', result: 'accepted', notes: 'Yerinde baktım.' });
+    }
+    await owner().post(`${N(closed)}/causes`, { stage: 'verified', categories: ['equipment'], notes: 'Conta doğrulandı.' });
+    await manager().post(`${N(closed)}/steps`, { step: 'effectiveness_check', notes: 'İki gün ölçüm.', measurement: { value: 3 } });
+    expect((await owner().post(`${N(closed)}/verify`, { result: 'effective', notes: 'Kendi ölçümümle 3 °C.' })).body.status).toBe('closed');
+    const rep2 = (await owner().get(`${C()}/audit-report?siteId=${demo.siteId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&format=json`)).body;
+    const seq = (rep2.sections.closures.cases as any[]).find(c => c.id === closed)!.sequence.map((x: any) => x.text).join('\n');
+    expect(seq).toContain('Aksiyon yapıldı beyanı [Contayı değiştir.]');
+    expect(seq).toContain('Aksiyon bağımsız doğrulandı [Conta kontrolünü bakım planına ekle.]');
+    expect(seq).toMatch(/yeni ölçüm 3( |,)/);
+    expect(seq).not.toContain('ölçüm 3 )');
   });
 });
