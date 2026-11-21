@@ -8,6 +8,8 @@ import { appendAudit } from './audit';
 import { notify } from './notifications';
 import { relatedCourses } from './training';
 import { currentFacts, recordFact } from './profile';
+import { describeCondition, frequencyText, reasonLines } from '../domain/explain-text';
+import { evidenceLabels } from './task-assignment';
 import { FACTS, isFactKey, matchesType, type FactKey } from '../domain/facts';
 
 const today = (now = new Date()) => now.toISOString().slice(0, 10);
@@ -22,7 +24,8 @@ function snapshot(facts: Facts, keys: string[]) {
 /** Current decision per rule for a site: the latest row wins, older rows are history. */
 export async function currentObligations(tx: Tx, companyId: string, siteId?: string) {
   const r = await tx.query(
-    `SELECT DISTINCT ON (o.site_id, o.rule_id) o.*, rv.version AS rule_version, rv.kind, rv.is_example, rv.obligation_title, rv.status AS rule_status, r.code AS rule_code
+    `SELECT DISTINCT ON (o.site_id, o.rule_id) o.*, rv.version AS rule_version, rv.kind, rv.is_example, rv.obligation_title, rv.status AS rule_status, r.code AS rule_code,
+            EXISTS (SELECT 1 FROM obligation_override_requests q WHERE q.obligation_id = o.id AND q.status = 'pending') AS review_pending
        FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id JOIN rules r ON r.id = o.rule_id
       WHERE o.company_id = $1 AND ($2::uuid IS NULL OR o.site_id = $2)
       ORDER BY o.site_id, o.rule_id, o.decided_at DESC`, [companyId, siteId ?? null]);
@@ -149,7 +152,33 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
         WHERE company_id = $1 AND (site_id IS NULL OR site_id = $2) AND key = ANY($3) AND verification <> 'rejected'
         ORDER BY key, (site_id IS NULL), recorded_at DESC`, [companyId, o.site_id, Object.keys(o.facts_snapshot ?? {})])).rows.map(r => [r.key, { sourceRef: r.source_ref, note: r.note }])),
     trace: o.trace,
+    // GH-02: the decision in the person's own words, and what the rule itself requires.
+    ...(await explanationExtras(tx, o, rv, pending)),
     history,
+  };
+}
+
+/** Wording for the person (why, in their answers), the rule's definition and the review status. Pure reading; decides nothing. */
+async function explanationExtras(tx: Tx, o: any, rv: any, pending: any) {
+  const lines = reasonLines(o.decision, o.trace);
+  const templates = (await tx.query(`SELECT code, title, recurrence, evidence FROM task_templates WHERE rule_version_id = $1 ORDER BY code`, [rv.id])).rows;
+  // Two separate labels on purpose: an internal good practice is never presented as a legal duty, and an example is never presented as verified.
+  const label = `${rv.is_example ? 'Örnek ' : ''}${rv.kind === 'good_practice' ? 'iyi uygulama (mevzuat hükmü değil)' : 'kural (hukuki dayanağı doğrulanmadı)'}`.replace(/^./, c => c.toLocaleUpperCase('tr'));
+  return {
+    reasonText: lines.text, matchedStatements: lines.matched, missingStatements: lines.missing,
+    // While a "does not apply" request is under review the obligation is still in force; say so in plain words.
+    reviewStatus: pending
+      ? { state: 'in_review', text: 'İnceleme sürüyor: bu yükümlülük incelemenin sonucuna kadar geçerli; görevler devam ediyor.' }
+      : o.decision === 'needs_info' ? { state: 'needs_info', text: 'Bilgi bekleniyor: eksik yanıt gelene kadar yükümlülük “uygulanmaz” sayılmaz ve uygunluk verilmez.' }
+      : { state: 'none', text: null },
+    definition: {
+      label, kind: rv.kind, scope: rv.scope ?? {}, appliesWhen: describeCondition(rv.condition),
+      notApplicableWhen: 'Yukarıdaki koşullardan biri sağlanmazsa uygulanmaz. Yanlış yanıtı gerekçeyle düzeltmeyi isteyebilirsiniz; zorunlu yükümlülüklerde karar ikinci bir kişiye gider.',
+      effectiveFrom: rv.effective_from, effectiveTo: rv.effective_to,
+      // The rule model does not hold a responsible role yet: assignment is made by a manager per task. Stated, not invented.
+      responsibleRole: null,
+      checks: templates.map(t => ({ code: t.code, title: t.title, frequency: frequencyText(t.recurrence), evidence: evidenceLabels(t.evidence) })),
+    },
   };
 }
 

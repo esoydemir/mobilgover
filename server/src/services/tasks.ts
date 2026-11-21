@@ -1,6 +1,7 @@
 import type { Tx } from '../db/pool';
 import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { assessEvidence, evidenceRequirementSchema, limitSchema, selectLimit, withinLimit, type EvidenceRequirement } from '../domain/evidence';
+import { reasonLines } from '../domain/explain-text';
 import { can, onlyAssignedTasks, type Principal } from '../domain/permissions';
 import { localDay, occurrences, type Recurrence } from '../domain/schedule';
 import { ALLOWED_MIME } from '../storage/local';
@@ -140,7 +141,34 @@ async function taskContext(tx: Tx, companyId: string, t: any) {
   const services = (await tx.query(
     `SELECT sr.id, sr.title, sr.status, sr.created_at FROM service_requests sr LEFT JOIN nonconformities n ON n.id = sr.ncr_id
       WHERE sr.company_id = $1 AND (sr.task_id = $2 OR n.task_id = $2) ORDER BY sr.created_at DESC`, [companyId, t.id])).rows;
-  return { legalBasis, lastCompletedAt: last, nextDueAt: next, services, hazardType: t.hazard_type };
+  return { legalBasis, basis: await basisInfo(tx, t), why: await taskWhy(tx, t), lastCompletedAt: last, nextDueAt: next, services, hazardType: t.hazard_type };
+}
+
+/**
+ * The basis the task was created under stays readable for good: the rule version and the source versions it cited. If the rule has a
+ * newer version since, say so and show what the newer one cites, so a finished task is never silently re-read against new text.
+ */
+async function basisInfo(tx: Tx, t: any) {
+  const rv = (await tx.query(`SELECT rv.id, rv.version, rv.status, rv.effective_from, rv.retired_at FROM task_templates tt JOIN rule_versions rv ON rv.id = tt.rule_version_id WHERE tt.id = $1`, [t.template_id])).rows[0];
+  const newer = (await tx.query(
+    `SELECT rv.id, rv.version, rv.effective_from, rv.provision_ids FROM rule_versions rv
+      WHERE rv.rule_id = $1 AND rv.version > $2 AND rv.status = 'published' ORDER BY rv.version DESC LIMIT 1`, [t.rule_id, rv.version])).rows[0] ?? null;
+  const cites = async (ids: string[]) => (await tx.query(
+    `SELECT p.ref, sv.version_label, sv.effective_from, ls.title AS source_title FROM provisions p JOIN source_versions sv ON sv.id = p.source_version_id
+       JOIN legal_sources ls ON ls.id = sv.source_id WHERE p.id = ANY($1)`, [ids])).rows;
+  return {
+    ruleVersion: rv.version, ruleStatus: rv.status, effectiveFrom: rv.effective_from,
+    newerVersion: newer ? { version: newer.version, effectiveFrom: newer.effective_from, cites: await cites(newer.provision_ids) } : null,
+    note: newer ? `Bu iş kuralın ${rv.version}. sürümüne göre açıldı; sonradan ${newer.version}. sürüm yayımlandı. Bu kaydın dayanağı değişmez.` : null,
+  };
+}
+
+/** The reason, in the person's words, for the obligation this task came from (the decision it was created under, not today's). */
+async function taskWhy(tx: Tx, t: any) {
+  const o = (await tx.query(`SELECT id, decision, trace FROM obligations WHERE id = $1`, [t.obligation_id])).rows[0];
+  if (!o) return null;
+  const lines = reasonLines(o.decision, o.trace);
+  return { obligationId: o.id, decision: o.decision, text: lines.text, statements: lines.matched };
 }
 
 /** Service reports of the task's linked services, only for people who may read the business's documents at the task's site. */

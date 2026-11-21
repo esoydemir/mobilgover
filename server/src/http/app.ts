@@ -24,6 +24,7 @@ import { institutionView } from '../services/institution';
 import { auditReport, renderPdf } from '../services/auditpdf';
 import { suggestCategories } from '../domain/intent';
 import { caseServiceLinks, linkServiceToCase } from '../services/case-links';
+import { reasonLines } from '../domain/explain-text';
 import { MANUAL_HAZARDS, addAction, addActionEvidence, assessCause, createManual, decideSuggestion, equipmentHistory, getNonconformity, listNonconformities, reassignmentQueue, recordStep, reopen, setAssignment, updateAction, verify } from '../services/nonconformities';
 import { listNotifications, markProviderRead, markRead, providerNotifications } from '../services/notifications';
 import { currentObligations, explain, overrideNotApplicable, recomputeSite, revertOverride, reviewOverride, withdrawOverrideRequest } from '../services/obligations';
@@ -462,7 +463,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     if (!can(req.principal, 'obligation.read', { companyId, siteId: siteId ?? null }).ok) throw forbidden();
     const rows = await db.tenant(companyId, tx => currentObligations(tx, companyId, siteId));
     return rows.map(o => ({ id: o.id, siteId: o.site_id, rule: o.rule_code, version: o.rule_version, title: o.obligation_title, kind: o.kind,
-      isExample: o.is_example, decision: o.decision, reason: o.reason, missingFacts: o.missing_facts, decidedBy: o.decided_by, decidedAt: o.decided_at }));
+      isExample: o.is_example, decision: o.decision, reason: o.reason, reasonText: reasonLines(o.decision, o.trace).text, reviewPending: o.review_pending, missingFacts: o.missing_facts, decidedBy: o.decided_by, decidedAt: o.decided_at }));
   });
   app.get('/companies/:companyId/obligations/:id/explanation', async req => {
     const companyId = company(req);

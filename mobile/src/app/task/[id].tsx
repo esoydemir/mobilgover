@@ -331,6 +331,9 @@ function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
         <Eyebrow>NEDEN GEREKLİ</Eyebrow>
         <Text testID="task-why" style={type(13, 600, { lh: 1.4 })}>{t.rule.title ?? t.title}</Text>
         {t.rule.summary ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{t.rule.summary}</Text> : null}
+        {t.why?.text ? <Text testID="task-why-text" style={type(12.5, 500, { color: C.t1, lh: 1.5 })}>{t.why.text}</Text> : null}
+        {t.why?.obligationId && role !== 'staff' ? <GhostButton testID="task-why-open" label="Yanıtı ve kaynağı aç" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/obligation/${t.why!.obligationId}`)} /> : null}
+        {t.basis?.note ? <Text testID="task-basis-note" style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>{t.basis.note}</Text> : null}
         <Text testID="task-legal" style={type(11.5, 500, { color: t.legalBasis?.length ? C.t2 : C.warn, lh: 1.45 })}>
           {t.legalBasis?.length ? t.legalBasis.map(p => `${p.source_title}${p.issuer ? ` (${p.issuer})` : ''} · ${p.ref}${p.is_example ? ' · ÖRNEK KAYNAK' : ''}`).join(' · ')
             : 'Doğrulanmış yasal dayanak kaydı yok (örnek kural); bu görev yasal zorunluluk olarak sunulmaz.'}

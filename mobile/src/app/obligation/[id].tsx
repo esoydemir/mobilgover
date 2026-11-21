@@ -23,6 +23,9 @@ type Explanation = {
   provisions: { ref: string; excerpt: string; version_label: string; source_title: string; issuer: string; is_example: boolean }[];
   matchedFacts: Record<string, { value: unknown; source: string; verification: string; recordedAt: string } | null>;
   factOrigins?: Record<string, { sourceRef: string | null; note: string | null }>;
+  reasonText?: string;
+  reviewStatus?: { state: 'in_review' | 'needs_info' | 'none'; text: string | null };
+  definition?: { label: string; appliesWhen: string[]; notApplicableWhen: string; effectiveFrom: string; effectiveTo: string | null; responsibleRole: string | null; checks: { code: string; title: string; frequency: string; evidence: string[] }[] };
   history: { id: string; decision: string; decided_by: string; decided_at: string }[];
 };
 
@@ -72,6 +75,26 @@ export default function ObligationRoute() {
           <View style={{ borderWidth: 1, borderColor: e.rule.isExample ? tint.warn(0.3) : C.bd, borderRadius: 16, padding: 13 }}>
             <Text style={type(12.5, 600, { color: e.rule.isExample ? C.warn : C.t1 })}>{e.rule.label}</Text>
           </View>
+          {e.reviewStatus?.text ? (
+            <View testID="obligation-review-status" style={{ borderWidth: 1, borderColor: tint.warn(0.3), borderRadius: 16, padding: 13 }}>
+              <Text style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>{e.reviewStatus.text}</Text>
+            </View>
+          ) : null}
+          {e.reasonText ? (
+            <Card>
+              <Eyebrow>NEDEN BU KARAR</Eyebrow>
+              <Text testID="obligation-reason" style={type(13, 500, { color: C.t1, lh: 1.5 })}>{e.reasonText}</Text>
+            </Card>
+          ) : null}
+          {e.definition ? (
+            <Card>
+              <Eyebrow>KURALIN TANIMI</Eyebrow>
+              {e.definition.appliesWhen.map((c, i) => <Text key={i} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>• {c}</Text>)}
+              <Text style={type(12, 400, { color: C.t3, lh: 1.45 })}>{e.definition.notApplicableWhen}</Text>
+              {e.definition.checks.map(c => <Text key={c.code} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>{c.title} · {c.frequency}{c.evidence.length ? ` · kanıt: ${c.evidence.join(', ')}` : ''}</Text>)}
+              <Text style={type(11.5, 400, { color: C.t3 })}>Yürürlük: {e.definition.effectiveFrom}{e.definition.effectiveTo ? ` – ${e.definition.effectiveTo}` : ''} · Sorumlu rol kuralda tanımlı değil; görevi yönetici atar.</Text>
+            </Card>
+          ) : null}
           <Card>
             <Eyebrow>EŞLEŞEN İŞLETME BİLGİLERİ</Eyebrow>
             <View style={{ gap: 9, marginTop: 12 }}>

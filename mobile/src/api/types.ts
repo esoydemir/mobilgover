@@ -38,6 +38,8 @@ export type TaskDetail = {
   rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string; status?: string | null; statusReason?: string | null };
   legalBasis?: { ref: string; excerpt: string; version_label: string | null; source_title: string; issuer: string | null; is_example: boolean }[];
   lastCompletedAt?: string | null; nextDueAt?: string | null; hazardType?: string;
+  why?: { obligationId: string; decision: string; text: string; statements: string[] } | null;
+  basis?: { ruleVersion: number; ruleStatus: string; effectiveFrom: string; newerVersion: { version: number; effectiveFrom: string } | null; note: string | null };
   reportEvidence?: { accepted: boolean;
     links: { id: string; documentId: string; documentTitle: string; version: number; fileSha256: string | null; selectedBy: string; selectedAt: string;
       status: 'active' | 'replaced' | 'stale'; counts: boolean; completionBasis: boolean; reason: string | null;

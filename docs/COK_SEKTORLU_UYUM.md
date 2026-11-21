@@ -78,6 +78,26 @@ Hâlâ açık (GH-04):
 - Çevrimdışı eşitleme için mevcut `offline-sync.test.ts` (5 senaryo) ve yeni idempotency testi var; gerçek cihazda sınanmadı.
 - `backup-restore.test.ts` bu makinede `pg_dump` olmadığı için çalıştırılamadı (15 başarısız, hepsi `spawn pg_dump ENOENT` ve ilgili ortam hatası); yeni tablo yedek/geri yükleme kapsamında doğrulanmadı.
 
+## Beşinci dilim · GH-02 açıklanabilir yükümlülük (22 Kasım)
+
+Zaten vardı: `explain()` (kural, eşleşen yanıtlar, yanıtın kaynağı, karar geçmişi, dayanak hükümleri), kural sürümüne bağlı görev (eski dayanak görevde kalır), üç değerli karar (eksik yanıt asla "uygulanmaz" olmaz), zorunlu yükümlülükte gerekçeli "uygulanmaz" isteği ve ikinci kişi incelemesi, aynı dönem için tek görev.
+
+Eklenen (`domain/explain-text.ts`, `services/obligations.ts`, `services/tasks.ts`):
+- **Kullanıcı diliyle gerekçe:** `reasonText` — "Bu şubede soğukta saklanan ürün olduğunu belirttiniz." Motorun izinden (trace) üretilir, karar vermez. Eksik/onaysız yanıtta ne eksik olduğu ve "uygunluk verilmez" söylenir. Listede, açıklamada ve görev ayrıntısında (`why`) aynı metin.
+- **Kuralın tanımı (`definition`):** etiket (örnek / iyi uygulama ayrı), geçerlilik koşulları cümle olarak, uygulanmama koşulu ve düzeltme yolu, yürürlük başlangıç/bitiş, kontroller (sıklık, kanıt türleri).
+- **İnceleme durumu:** bekleyen "uygulanmaz" isteği varken `reviewStatus` "İnceleme sürüyor: yükümlülük geçerli, görevler devam ediyor" der; listede `reviewPending`.
+- **Kaynak sürümü değişince:** görevde `basis` — görevin açıldığı kural sürümü, sonradan yayımlanan sürüm ve notu; tamamlanan işin dayanağı ve gerekçesi değişmez.
+- Mobil: yükümlülük ekranında "Neden bu karar", "Kuralın tanımı", inceleme şeridi; görev ekranında gerekçe, "Yanıtı ve kaynağı aç", sürüm notu.
+- Test: `explainable-obligation.test.ts` 8/8 (kural v2 yayımlanır, tamamlanan işin v1 dayanağı yerinde; OCR onaysız değer çelişince karar "bilgi eksik").
+
+Hâlâ açık (GH-02):
+- **Sorumlu rol** kural modelinde yok (`responsibleRole: null`); görevi yönetici atar. Rol alanı eklemek kural şeması + inceleme akışı kararıdır.
+- **Coğrafya ve sektör** ayrı alan değil; yalnız koşul cümlelerinde (il, faaliyet) görünür. `scope` boş.
+- "Kaynak sürümü" burada **kural sürümü**; yasal kaynağın (Resmî Gazete) yeni sürümüyle eski hükmün karşılaştırması GH-03 masasında, göreve bağlanmadı. Test kuralları hükme bağlı olmadığı için yeni sürüm `cites: []`.
+- İşletmenin "uygulanır"a itirazı yalnız zorunlu yükümlülükte "uygulanmaz" isteği olarak var; "bilgi eksik" için ayrı bir düzeltme isteği ekranı yok (yanıtı doğrudan düzeltir).
+- Çelişki tanımı: doğrulanmamış OCR değeri onaylı yanıtın yerini alınca karar "bilgi eksik" olur. İki doğrulanmış kaynağın birbiriyle çelişmesi (şube/şirket) için ayrı kural yok; şube yanıtı şirketinkini geçer.
+- Ekranlar tarayıcıda görülmedi.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 ayrı iş.
