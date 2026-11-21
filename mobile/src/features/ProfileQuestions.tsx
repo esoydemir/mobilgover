@@ -10,7 +10,7 @@ type CatalogItem = { key: string; type: 'boolean' | 'number' | 'string' | 'strin
 type FactRecord = { value: unknown; source: string; verification: string; recordedAt: string };
 
 /** Keys the system fills itself; never asked. */
-const SYSTEM_KEYS = ['equipment.types'];
+const SYSTEM_KEYS = ['equipment.types', 'activity.nace_codes']; // faaliyet kodu kayıt adımında (ActivityPicker) sorulur
 
 /**
  * Business profile questions. "Bilmiyorum" is a real answer: nothing is

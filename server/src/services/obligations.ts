@@ -143,6 +143,11 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
     }),
     relatedTraining: await relatedCourses(tx, companyId, { ruleCode: rv.code }),
     matchedFacts: o.facts_snapshot,
+    // Where each matched answer came from (e.g. derived from the confirmed activity code), so the "why" can be traced to its source.
+    factOrigins: Object.fromEntries((await tx.query<{ key: string; source_ref: string | null; note: string | null }>(
+      `SELECT DISTINCT ON (key) key, source_ref, note FROM profile_facts
+        WHERE company_id = $1 AND (site_id IS NULL OR site_id = $2) AND key = ANY($3) AND verification <> 'rejected'
+        ORDER BY key, (site_id IS NULL), recorded_at DESC`, [companyId, o.site_id, Object.keys(o.facts_snapshot ?? {})])).rows.map(r => [r.key, { sourceRef: r.source_ref, note: r.note }])),
     trace: o.trace,
     history,
   };

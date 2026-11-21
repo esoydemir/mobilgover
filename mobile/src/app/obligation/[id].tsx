@@ -21,6 +21,7 @@ type Explanation = {
   rule: { code: string; version: number; status: string; kind: string; isExample: boolean; title: string; summary: string; effectiveFrom: string; ambiguityNote: string | null; label: string };
   provisions: { ref: string; excerpt: string; version_label: string; source_title: string; issuer: string; is_example: boolean }[];
   matchedFacts: Record<string, { value: unknown; source: string; verification: string; recordedAt: string } | null>;
+  factOrigins?: Record<string, { sourceRef: string | null; note: string | null }>;
   history: { id: string; decision: string; decided_by: string; decided_at: string }[];
 };
 
@@ -74,9 +75,12 @@ export default function ObligationRoute() {
             <Eyebrow>EŞLEŞEN İŞLETME BİLGİLERİ</Eyebrow>
             <View style={{ gap: 9, marginTop: 12 }}>
               {Object.entries(e.matchedFacts).map(([k, f]) => (
-                <View key={k} style={{ flexDirection: 'row', gap: 10 }}>
-                  <Text style={[type(12.5, 600), { flex: 1 }]}>{k}</Text>
-                  <Text style={type(12.5, 500, { color: f ? C.t1 : C.warn })}>{f ? `${fmt(f.value)} · ${f.verification === 'expert_verified' ? 'uzman doğruladı' : f.source === 'ocr' && f.verification === 'unverified' ? 'OCR, onaysız' : 'beyan'}` : 'bilinmiyor'}</Text>
+                <View key={k} style={{ gap: 3 }}>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <Text style={[type(12.5, 600), { flex: 1 }]}>{e.conditionFacts?.find(c => c.key === k)?.label ?? k}</Text>
+                    <Text style={type(12.5, 500, { color: f ? C.t1 : C.warn })}>{f ? `${fmt(f.value)} · ${f.verification === 'expert_verified' ? 'uzman doğruladı' : f.source === 'ocr' && f.verification === 'unverified' ? 'OCR, onaysız' : 'beyan'}` : 'bilinmiyor'}</Text>
+                  </View>
+                  {e.factOrigins?.[k]?.note ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{e.factOrigins[k]!.note}</Text> : null}
                 </View>
               ))}
             </View>

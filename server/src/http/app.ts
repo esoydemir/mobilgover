@@ -41,6 +41,8 @@ import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profil
 import { auditExport, indicators } from '../services/reporting';
 import { SAMPLE_PROFILES, approve, areaReview, confirmEffective, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
+import { NACE_SOURCE, NACE_VERSION, searchNace } from '../domain/nace';
+import { applyActivityToSite, confirmActivity } from '../services/activity';
 import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, selectServiceReportEvidence, taskDetail, topUpSite } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
 
@@ -285,6 +287,17 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
 
   /** Profile questions the rules can use, with labels for the app. */
   app.get('/fact-catalog', async () => Object.entries(FACTS).map(([key, d]) => ({ key, ...d })));
+
+  /** NACE classes for the registration screen: search by code or activity name. */
+  app.get('/nace', async req => {
+    const q = z.object({ q: z.string().max(80).default('') }).parse(req.query).q;
+    return { source: NACE_SOURCE, version: NACE_VERSION, partial: true, items: searchNace(q) };
+  });
+  app.post('/companies/:companyId/activity', async (req, reply) => {
+    const companyId = company(req);
+    const b = z.object({ naceCodes: z.array(z.string().max(12)).min(1).max(10), confirmed: z.boolean() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => confirmActivity(tx, req.principal, companyId, b), 201);
+  });
 
   // ── Profile ──
   app.get('/companies/:companyId/sites/:siteId/profile', async req => {
@@ -606,7 +619,12 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/sites', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ name: z.string().max(120) }).parse(req.body);
-    return mutate(req, reply, companyId, tx => addSite(tx, req.principal, companyId, b), 201);
+    return mutate(req, reply, companyId, async tx => {
+      const site = await addSite(tx, req.principal, companyId, b);
+      // A branch added later inherits what the owner already confirmed about the activity.
+      const a = await applyActivityToSite(tx, req.principal, companyId, site.id);
+      return { ...site, createdTasks: site.createdTasks + a.createdTasks };
+    }, 201);
   });
   app.get('/companies/:companyId/equipment/:id/history', async req => {
     const companyId = company(req);
