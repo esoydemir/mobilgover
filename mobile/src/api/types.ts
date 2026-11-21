@@ -35,7 +35,7 @@ export type TaskDetail = {
   id: string; siteId?: string; status: TaskRow['status']; outcome: TaskRow['outcome']; dueAt: string; reviewFlag: string | null;
   title: string; instructions: string; severity: TaskRow['severity'];
   equipment: { id: string; name: string; type: string } | null;
-  rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string };
+  rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string; status?: string | null; statusReason?: string | null };
   legalBasis?: { ref: string; excerpt: string; version_label: string | null; source_title: string; issuer: string | null; is_example: boolean }[];
   lastCompletedAt?: string | null; nextDueAt?: string | null; hazardType?: string;
   reportEvidence?: { accepted: boolean;

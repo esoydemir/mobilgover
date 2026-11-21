@@ -26,7 +26,7 @@ type Explanation = {
   history: { id: string; decision: string; decided_by: string; decided_at: string }[];
 };
 
-const RULE_STATUS: Record<string, string> = { draft: 'taslak', in_review: 'incelemede', approved: 'onaylı', published: 'yayında', retired: 'yürürlükten kalktı' };
+const RULE_STATUS: Record<string, string> = { draft: 'taslak', in_review: 'incelemede', approved: 'onaylı', published: 'yayında', retired: 'yürürlükten kalktı', rejected: 'reddedildi', withdrawn: 'geri çekildi' };
 const fmt = (v: unknown) => (v === true ? 'Evet' : v === false ? 'Hayır' : Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? '—' : String(v));
 
 /** "Why does this apply to me?" — matched facts, source provision, rule version. */

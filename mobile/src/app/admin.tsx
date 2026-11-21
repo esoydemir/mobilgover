@@ -12,7 +12,7 @@ import { AuditTrail, PlatformOverview, PlatformRoles } from '../features/Platfor
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
-type RuleVersion = { id: string; code: string; version: number; status: string; kind: string; is_example: boolean; obligation_title: string; required_review_areas: string[]; pendingAreaReviews: string[] };
+type RuleVersion = { id: string; code: string; version: number; status: string; kind: string; is_example: boolean; obligation_title: string; required_review_areas: string[]; pendingAreaReviews: string[]; status_reason?: string | null };
 type Queue = {
   verifications: { id: string; display_name: string; kind: string; credential_type: string | null; issuer: string; document_ref: string; valid_until: string | null }[];
   authorizations: { id: string; display_name: string; category_name: string; required_credentials: string[] }[];
@@ -23,7 +23,7 @@ export default function AdminRoute() {
   const { me, call } = useSession();
   const { showToast } = useUi();
   const roles = me?.platformRoles ?? [];
-  const [status, setStatus] = useState<'in_review' | 'approved' | 'published' | 'draft'>('in_review');
+  const [status, setStatus] = useState<'in_review' | 'approved' | 'published' | 'draft' | 'rejected' | 'withdrawn'>('in_review');
   const rules = useApi<RuleVersion[]>(roles.some(r => r.startsWith('rule_') || r === 'platform_admin') ? `/admin/rule-versions?status=${status}` : null);
   const queue = useApi<Queue>(roles.includes('marketplace_reviewer') ? '/admin/marketplace/queue' : null);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export default function AdminRoute() {
           <SectionLabel>KURAL SÜRÜMLERİ</SectionLabel>
           {roles.includes('rule_author') ? <PrimaryButton testID="rule-new" label="Yeni kural taslağı yaz" glow={false} height={42} size={12.5} onPress={() => router.push('/rule/new')} /> : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-            {(['in_review', 'approved', 'published', 'draft'] as const).map(s => <FilterChip key={s} label={{ in_review: 'İncelemede', approved: 'Onaylı', published: 'Yayında', draft: 'Taslak' }[s]} px={12} active={status === s} onPress={() => setStatus(s)} />)}
+            {(['in_review', 'approved', 'published', 'draft', 'rejected', 'withdrawn'] as const).map(s => <FilterChip key={s} label={{ in_review: 'İncelemede', approved: 'Onaylı', published: 'Yayında', draft: 'Taslak', rejected: 'Reddedilen', withdrawn: 'Geri çekilen' }[s]} px={12} active={status === s} onPress={() => setStatus(s)} />)}
           </View>
           {rules.error ? <ErrorBox message={rules.error} /> : null}
           {(rules.data ?? []).map(r => (
@@ -79,6 +79,23 @@ export default function AdminRoute() {
                     onPress={() => decide('Kuralı onaylamak', () => call('POST', `/admin/rule-versions/${r.id}/approve`, { reason: note.trim() }), 'Kural onaylandı')} />
                 </View>
               ) : null}
+              {r.status === 'in_review' || r.status === 'approved' ? (
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <GhostButton testID="rule-return" label="Taslağa iade et" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 10}
+                    onPress={() => decide('Taslağa iade', () => call('POST', `/admin/rule-versions/${r.id}/return`, { reason: note.trim() }), 'Yazara iade edildi; alan incelemeleri yeniden gerekir')} />
+                  <GhostButton testID="rule-reject" label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.warn} border={tint.warn(0.4)} disabled={note.trim().length < 10}
+                    onPress={() => decide('Reddetmek', () => call('POST', `/admin/rule-versions/${r.id}/reject`, { reason: note.trim() }), 'Sürüm reddedildi')} />
+                </View>
+              ) : null}
+              {r.status === 'in_review' || r.status === 'approved' ? <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>İade yazara geri verir; ret sürümü kapatır. İkisi için de gerekçe en az 10 karakter.</Text> : null}
+              {r.status === 'published' ? (
+                <View style={{ gap: 6 }}>
+                  <GhostButton testID="rule-withdraw" label="Yayımlanmış sürümü geri çek" height={38} size={12} color={C.warn} border={tint.warn(0.4)} disabled={note.trim().length < 10}
+                    onPress={() => decide('Geri çekmek', async () => { const x = await call<{ futureTasksStopped: number; dueTasksFlagged: number; notified: number }>('POST', `/admin/rule-versions/${r.id}/withdraw`, { reason: note.trim() }); showToast('Sürüm geri çekildi', `${x.futureTasksStopped} ileri tarihli iş durdu · ${x.dueTasksFlagged} iş incelemeye alındı · ${x.notified} bildirim`); }, 'Geri çekildi')} />
+                  <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>Geri çekince yeni iş açılmaz, ileri tarihli işler durur, vadesi gelenler incelemeye düşer, geçmiş kayıtlar korunur.</Text>
+                </View>
+              ) : null}
+              {r.status === 'rejected' || r.status === 'withdrawn' ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{r.status === 'rejected' ? 'Reddedildi' : 'Geri çekildi'}{r.status_reason ? `: ${r.status_reason}` : ''}</Text> : null}
               {r.status === 'approved' ? (
                 <PrimaryButton label="Yayınla" height={42} size={12.5} glow={false} onPress={() => decide('Kuralı yayımlamak', () => call('POST', `/admin/rule-versions/${r.id}/publish`, { reason: note.trim() }), 'Yayınlandı; işletmeler yeniden değerlendirildi')} />
               ) : null}

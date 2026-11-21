@@ -5,7 +5,7 @@ import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
-import { Empty, ErrorBox, ExampleBadge, Loading, SectionLabel } from '../components/states';
+import { Empty, ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../components/states';
 import { Card, FilterChip, PrimaryButton, Tap } from '../components/ui';
 import { fmtDateTime } from '../features/dates';
 import { dayTr, STATUS_TR } from '../features/legislation';
@@ -30,10 +30,15 @@ export default function LegislationRoute() {
   const { showToast } = useUi();
   const allowed = (me?.platformRoles ?? []).some(r => ['platform_admin', 'rule_author', 'rule_reviewer'].includes(r));
   const [status, setStatus] = useState<'open' | 'scheduled' | 'applied' | 'rejected'>('open');
+  // Masa süzgeçleri: kaynak, metin ve tarih durumu (sunucu tarafında uygulanır).
+  const [source, setSource] = useState<string | null>(null);
+  const [text, setText] = useState('');
+  const [unclearOnly, setUnclearOnly] = useState(false);
+  const filt = `${source ? `&source=${encodeURIComponent(source)}` : ''}${text.trim() ? `&q=${encodeURIComponent(text.trim())}` : ''}${unclearOnly ? '&dateStatus=unclear' : ''}`;
   const ov = useApi<Overview>(allowed ? '/admin/legislation/overview' : null);
-  const pending = useApi<Row[]>(allowed ? '/admin/legislation/changes?status=pending' : null);
-  const drafted = useApi<Row[]>(allowed ? '/admin/legislation/changes?status=drafted' : null);
-  const other = useApi<Row[]>(allowed && status !== 'open' ? `/admin/legislation/changes?status=${status}` : null);
+  const pending = useApi<Row[]>(allowed ? `/admin/legislation/changes?status=pending${filt}` : null);
+  const drafted = useApi<Row[]>(allowed ? `/admin/legislation/changes?status=drafted${filt}` : null);
+  const other = useApi<Row[]>(allowed && status !== 'open' ? `/admin/legislation/changes?status=${status}${filt}` : null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reloadAll = async () => { await Promise.all([ov.reload(), pending.reload(), drafted.reload(), other.reload()]); };
@@ -98,6 +103,12 @@ export default function LegislationRoute() {
       <SectionLabel>İNCELEME KUYRUĞU</SectionLabel>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
         {([['open', 'Açık'], ['scheduled', 'Yürürlük bekliyor'], ['applied', 'Uygulandı'], ['rejected', 'Reddedildi']] as const).map(([k, l]) => <FilterChip key={k} testID={`leg-filter-${k}`} label={l} px={12} active={status === k} onPress={() => setStatus(k)} />)}
+      </View>
+      <Field testID="leg-search" label="Ara (belge, madde, başlık)" value={text} onChangeText={setText} placeholder="ör. LPG, 5996, madde 12" />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+        <FilterChip testID="leg-src-all" label="Tüm kaynaklar" px={12} active={source === null} onPress={() => setSource(null)} />
+        {(ov.data?.sources ?? []).map(src => <FilterChip key={src.code} testID={`leg-src-${src.code}`} label={src.name ?? src.code} px={12} active={source === src.code} onPress={() => setSource(src.code)} />)}
+        <FilterChip testID="leg-unclear" label="Tarihi belirsiz" px={12} active={unclearOnly} onPress={() => setUnclearOnly(v => !v)} />
       </View>
       {rows.length === 0 && !pending.loading ? <Empty title="Kayıt yok" body="Tarama yeni bir yayın, madde değişikliği ya da yürürlükten kaldırma bulduğunda burada görünür. Hiçbir işletme, sen onaylayana kadar etkilenmez." /> : null}
       {rows.map(r => {

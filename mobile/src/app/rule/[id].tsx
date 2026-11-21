@@ -22,7 +22,7 @@ type Detail = { id: string; code: string; title: string; version: number; status
   templates: any[]; usedByTasks: number; sourceNote: string | null; canEdit: boolean; effectivePlaceholder?: boolean; effectiveConfirmation?: { at: string; basis: string } | null;
   samplePreview: { profile: string; label: string; decision: string; reason: string; missingFacts: string[]; tasks: { code: string; title: string; schedule: string; count: number; note: string }[] }[] };
 
-const STATUS: Record<string, string> = { draft: 'TASLAK', in_review: 'İNCELEMEDE', approved: 'ONAYLI', published: 'YAYINDA', retired: 'ESKİ SÜRÜM' };
+const STATUS: Record<string, string> = { draft: 'TASLAK', in_review: 'İNCELEMEDE', approved: 'ONAYLI', published: 'YAYINDA', retired: 'ESKİ SÜRÜM', rejected: 'REDDEDİLDİ', withdrawn: 'GERİ ÇEKİLDİ' };
 const DECISION: Record<string, [string, string]> = { applies: ['GÖREV OLUŞUR', C.lime], not_applicable: ['UYGULANMAZ', C.t3], needs_info: ['BİLGİ EKSİK', C.warn], needs_review: ['UZMAN İNCELEMESİ', C.warn], not_in_force: ['YÜRÜRLÜKTE DEĞİL', C.t3] };
 const AREAS: [string, string][] = [['food_safety', 'Gıda güvenliği'], ['gas_safety', 'Gaz güvenliği'], ['occupational_safety', 'İş güvenliği']];
 const EQ: [string, string][] = [['', 'Ekipmana bağlı değil'], ['refrigerator', 'Buzdolabı'], ['freezer', 'Dondurucu'], ['thermometer', 'Termometre']];

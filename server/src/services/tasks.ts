@@ -244,7 +244,8 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     id: t.id, siteId: t.site_id, status: t.status, outcome: t.outcome, dueAt: t.due_at, periodKey: t.period_key, reviewFlag: t.review_flag,
     title: t.title, instructions: t.instructions, severity: t.severity,
     equipment: t.equipment_id ? { id: t.equipment_id, name: t.equipment_name, type: t.equipment_type } : null,
-    rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example, title: t.obligation_title, summary: t.obligation_summary },
+    // A task keeps the rule version it was created under; if that version was later withdrawn, its status and reason travel with the record.
+    rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example, title: t.obligation_title, summary: t.obligation_summary, ...(await ruleVersionStatus(tx, t.obligation_id)) },
     ...(await taskContext(tx, companyId, t)),
     serviceReports,
     reportEvidence: canReadReports ? await reportEvidenceView(links, t, reqs, serviceReports as Awaited<ReturnType<typeof taskServiceReports>>) : null,
@@ -473,4 +474,10 @@ export async function completeTask(tx: Tx, p: Principal, companyId: string, task
     clientTime: clientCompletedAt ?? null, payload: { outcome, reasons: a.nonconforming, nonconformityId, reviewFlag,
       serviceReportBasis: basis.map(l => ({ documentId: l.document_id, versionId: l.document_version_id, version: l.version_number, sha256: l.file_sha256, relation: l.relation, caseId: l.case_id, serviceLinkId: l.service_link_id, basisNote: l.basis_note })) } });
   return { outcome, nonconformityId, reviewFlag, nonconformities: a.nonconforming };
+}
+
+async function ruleVersionStatus(tx: Tx, obligationId: string) {
+  const r = (await tx.query<{ status: string; status_reason: string | null; status_changed_at: string | null }>(
+    `SELECT rv.status, rv.status_reason, rv.status_changed_at FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id WHERE o.id = $1`, [obligationId])).rows[0];
+  return { status: r?.status ?? null, statusReason: r?.status_reason ?? null, statusChangedAt: r?.status_changed_at ?? null };
 }

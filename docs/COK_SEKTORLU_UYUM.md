@@ -41,6 +41,21 @@ Tüm kurallar **ÖRNEK**tir; hukuki dayanak doğrulanmış değildir.
 - **B-02:** Atama listesinde ad yoksa veya e-postadan türetilmişse e-posta da gösterilir.
 - Test: `multi-sector-flow.test.ts` 19/19.
 
+## Üçüncü dilim · GH-03 mevzuat masası ve B-13 (22 Kasım)
+
+Zaten vardı (yeniden yazılmadı; `docs/MEVZUAT_TAKIBI.md`): günlük zamanlanmış Resmî Gazete/Mevzuat alımı, ilk okuma = taban, aynı yayın tek kayıt, kaçırılan gün tamamlama, kaynak hatası ≠ "değişiklik yok", belirsiz yürürlüğün gerekçeyle çözülmesi, eski/yeni metin yan yana, etki önizlemesi, onaylı değişikliğin yürürlük gününde yalnız kapsamdaki şubelere uygulanması, yürürlükten kaldırma.
+
+Eksik olan ve bu dilimde eklenen:
+- **Üç ayrı karar (B-13), hem durum geçişinde hem ekranda** — migrasyon `030`, `rules.ts`:
+  - **İade** (`POST /admin/rule-versions/:id/return`): incelemedeki veya onaylı (yayımlanmamış) sürüm taslağa döner; önceki alan onayları sayılmaz, yeniden onay gerekir (`AREA_REVIEW_MISSING`). Yazar kendi kuralını iade edemez.
+  - **Ret** (`…/reject`): gerekçeli, terminal; reddedilen sürüm yayımlanamaz, yeniden gönderilemez, iade edilemez.
+  - **Geri çekme** (`…/withdraw`): yayımlanmış sürüm `withdrawn` olur. Etkilenen her şubeye gerekçeli yeni `needs_review` kararı eklenir (eskiler silinmez); ileri tarihli açık işler gerekçeyle iptal edilir; vadesi gelmiş açık işler `RULE_WITHDRAWN` ile incelemeye işaretlenir; tamamlanmış işler kaydını ve kural sürümünü korur, görev ayrıntısı kural durumunu ve gerekçeyi gösterir; yöneticilere şube/sürüm başına bir düzeltme bildirimi gider; yeni iş üretilmez.
+  - Üçünde de gerekçe zorunlu ve en az 10 karakter; yönetim ekranında düğmeler gerekçe yazılana kadar pasif, "Reddedilen" ve "Geri çekilen" sekmeleri var.
+- **Masa süzgeçleri:** kuyruk kaynağa, sektöre, duruma, metne (belge/madde/başlık), tarih durumuna, yürürlük aralığına ve kararı veren/taslağı hazırlayan kişiye göre süzülür (sunucuda); ekranda kaynak, arama ve "tarihi belirsiz" süzgeci var.
+- Testler: `rule-lifecycle-decisions.test.ts` (7), `legislation-watch.test.ts` (+1 süzgeç testi, 17/17).
+
+Hâlâ açık (GH-03): Resmî Gazete mükerrer sayı/ek ayrımı ayrı alan olarak tutulmuyor (yalnız `doc_ref` içinde sayı var); metin özeti/hash yalnız birleştirilmiş mevzuat belgelerinde (`legislation_documents`) saklanıyor; "geri çekmede işletmeye düzeltme bildirimi" yalnız yöneticilere gidiyor; masaüstü ekranı ayrı bir düzen değil, mevcut yönetim ekranı süzgeçle genişletildi ve tarayıcıda görülmedi; zamanlayıcı iş günlüğü kanıtı bu oturumda yeniden üretilmedi (mevcut test `legislationTick` ile sınıyor).
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 ayrı iş.

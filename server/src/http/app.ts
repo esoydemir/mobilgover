@@ -39,7 +39,7 @@ import * as net from '../services/network';
 import { approveRetention, listRetention, proposeRetention } from '../services/retention';
 import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profile';
 import { auditExport, indicators } from '../services/reporting';
-import { SAMPLE_PROFILES, approve, areaReview, confirmEffective, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
+import { SAMPLE_PROFILES, approve, areaReview, rejectVersion, returnToDraft, withdrawVersion, confirmEffective, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
 import { NACE_SOURCE, NACE_VERSION, lookupNace, questionKeysFor, searchNace } from '../domain/nace';
 import { applyActivityToSite, confirmActivity } from '../services/activity';
@@ -765,7 +765,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   const rvId = (req: FastifyRequest) => z.object({ id: uuid }).parse(req.params).id;
   app.get('/admin/rule-versions', async req => {
     platformGate(req);
-    const { status } = z.object({ status: z.enum(['draft', 'in_review', 'approved', 'published', 'retired']).optional() }).parse(req.query);
+    const { status } = z.object({ status: z.enum(['draft', 'in_review', 'approved', 'published', 'retired', 'rejected', 'withdrawn']).optional() }).parse(req.query);
     return db.system(tx => listRuleVersions(tx, req.principal, status));
   });
   app.post('/admin/rule-versions/:id/area-review', async req => {
@@ -796,6 +796,10 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/admin/rule-versions/:id/confirm-effective', async req => { platformGate(req); return db.system(tx => confirmEffective(tx, req.principal, rvId(req), (req.body ?? {}) as Record<string, unknown>)); });
   app.post('/admin/rule-versions/:id/submit', async req => { platformGate(req); await db.system(tx => submitForReview(tx, req.principal, rvId(req))); return { ok: true }; });
   app.post('/admin/rule-versions/:id/approve', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); await db.system(tx => approve(tx, req.principal, rvId(req), b.reason)); return { ok: true }; });
+  const decisionBody = z.object({ reason: z.string().max(1000).nullable().optional() });
+  app.post('/admin/rule-versions/:id/return', async req => { platformGate(req); const b = decisionBody.parse(req.body ?? {}); await db.system(tx => returnToDraft(tx, req.principal, rvId(req), b.reason)); return { ok: true }; });
+  app.post('/admin/rule-versions/:id/reject', async req => { platformGate(req); const b = decisionBody.parse(req.body ?? {}); await db.system(tx => rejectVersion(tx, req.principal, rvId(req), b.reason)); return { ok: true }; });
+  app.post('/admin/rule-versions/:id/withdraw', async req => { platformGate(req); const b = decisionBody.parse(req.body ?? {}); return db.system(tx => withdrawVersion(tx, req.principal, rvId(req), b.reason)); });
   app.get('/admin/rule-versions/:id/impact', async req => { platformGate(req); return db.system(tx => previewImpact(tx, req.principal, rvId(req))); });
   app.post('/admin/rule-versions/:id/publish', async req => { platformGate(req); const b = z.object({ reason: z.string().max(1000).nullable().optional() }).parse(req.body ?? {}); return db.system(tx => publish(tx, req.principal, rvId(req), { allowExampleRules: config.allowExampleRules, reason: b.reason })); });
 
@@ -805,8 +809,11 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.get('/admin/legislation/overview', async req => { platformGate(req); return db.system(tx => leg.adminOverview(tx, req.principal, legCfg())); });
   app.get('/admin/legislation/changes', async req => {
     platformGate(req);
-    const { status } = z.object({ status: z.enum(['pending', 'drafted', 'scheduled', 'applied', 'rejected']).optional() }).parse(req.query);
-    return db.system(tx => leg.listChanges(tx, req.principal, status));
+    const f = z.object({
+      status: z.enum(['pending', 'drafted', 'scheduled', 'applied', 'rejected']).optional(), source: z.string().max(60).optional(), area: z.string().max(60).optional(),
+      q: z.string().max(100).optional(), dateStatus: z.enum(['known', 'unclear']).optional(), effectiveFrom: z.iso.date().optional(), effectiveTo: z.iso.date().optional(), reviewer: uuid.optional(),
+    }).parse(req.query);
+    return db.system(tx => leg.listChanges(tx, req.principal, f));
   });
   app.get('/admin/legislation/changes/:id', async req => { platformGate(req); return db.system(tx => leg.getChange(tx, req.principal, rvId(req))); });
   app.post('/admin/legislation/scan', async req => {

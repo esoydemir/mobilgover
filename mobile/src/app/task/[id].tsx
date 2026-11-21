@@ -106,7 +106,9 @@ export default function TaskDetailRoute() {
           <Text testID="task-outcome" style={type(15, 700, { color: t.outcome === 'nonconforming' ? C.crit : C.lime })}>
             {t.outcome === 'nonconforming' ? 'Yapıldı · sonuç uygunsuz' : 'Yapıldı · sonuç uygun'}
           </Text>
-          {t.reviewFlag ? <Text style={[type(12, 400, { color: C.warn }), { marginTop: 6 }]}>İnceleme gerekiyor: kural sürümü değişti ({t.reviewFlag}).</Text> : null}
+          {t.reviewFlag ? <Text style={[type(12, 400, { color: C.warn, lh: 1.45 }), { marginTop: 6 }]}>{t.reviewFlag === 'RULE_WITHDRAWN'
+            ? `İnceleme gerekiyor: bu işin kural sürümü geri çekildi${t.rule.statusReason ? ` — ${t.rule.statusReason}` : ''}. Yeni iş açılmayacak; bu işi tamamlamak veya bırakmak için yöneticinle karar ver.`
+            : 'İnceleme gerekiyor: kural sürümü değişti.'}</Text> : null}
           {t.nonconformity ? <PrimaryButton testID="open-ncr" label="Uygunsuzluğu aç" height={44} size={13.5} style={{ marginTop: 12 }} onPress={() => router.push(`/ncr/${t.nonconformity!.id}`)} /> : null}
         </Card>
       )}

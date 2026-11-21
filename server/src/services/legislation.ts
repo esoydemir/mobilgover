@@ -189,13 +189,27 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
   };
 }
 
-export async function listChanges(tx: Tx, p: Principal, status?: string) {
+export type ChangeFilter = { status?: string; source?: string; area?: string; q?: string; dateStatus?: 'known' | 'unclear'; effectiveFrom?: string; effectiveTo?: string; reviewer?: string };
+
+/** Review queue with the filters the desk needs: source, sector, status, effective-date window, free text and the person who drafted or decided. */
+export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string = {}) {
   if (!canView(p)) throw forbidden();
-  return (await tx.query(
-    `SELECT c.id, c.source_code, c.change_type, c.doc_ref, c.doc_title, c.article_ref, c.published_on, c.effective_from, c.date_status, c.status, c.is_example, c.apply_on, c.detected_at,
-            c.rule_version_id, (c.proposal IS NOT NULL) AS has_proposal
-       FROM legislation_changes c WHERE ($1::text IS NULL OR c.status = $1) ORDER BY c.detected_at DESC, c.id LIMIT 200`, [status ?? null])).rows
-    .map(r => ({ ...r, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] }));
+  const q: ChangeFilter = typeof f === 'string' ? { status: f } : f;
+  const rows = (await tx.query(
+    `SELECT c.id, c.source_code, c.change_type, c.scope_area, c.doc_ref, c.doc_title, c.article_ref, c.published_on, c.effective_from, c.date_status, c.status, c.is_example, c.apply_on, c.detected_at,
+            c.rule_version_id, (c.proposal IS NOT NULL) AS has_proposal, c.drafted_by, c.approved_by, c.rejected_by
+       FROM legislation_changes c
+      WHERE ($1::text IS NULL OR c.status = $1)
+        AND ($2::text IS NULL OR c.source_code = $2)
+        AND ($3::text IS NULL OR c.scope_area = $3)
+        AND ($4::text IS NULL OR c.doc_ref ILIKE '%' || $4 || '%' OR c.doc_title ILIKE '%' || $4 || '%' OR COALESCE(c.article_ref, '') ILIKE '%' || $4 || '%')
+        AND ($5::text IS NULL OR c.date_status = $5)
+        AND ($6::date IS NULL OR c.effective_from >= $6)
+        AND ($7::date IS NULL OR c.effective_from <= $7)
+        AND ($8::uuid IS NULL OR c.drafted_by = $8 OR c.approved_by = $8 OR c.rejected_by = $8)
+      ORDER BY c.detected_at DESC, c.id LIMIT 200`,
+    [q.status ?? null, q.source ?? null, q.area ?? null, q.q?.trim() || null, q.dateStatus ?? null, q.effectiveFrom ?? null, q.effectiveTo ?? null, q.reviewer ?? null])).rows;
+  return rows.map(r => ({ ...r, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] }));
 }
 
 // ───────────── Impact preview ─────────────
