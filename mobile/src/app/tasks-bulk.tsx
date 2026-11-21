@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { personLabel } from '../features/AssignCard';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
@@ -66,7 +67,7 @@ export default function BulkAssign() {
         {people.error ? <ErrorBox message={people.error} onRetry={people.reload} /> : null}
         {!people.data && !people.error ? <Loading label="Ekip yükleniyor…" /> : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-          {(people.data ?? []).map(p => <FilterChip key={p.id} testID={`bulk-person-${p.id}`} label={`${p.display_name} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={pick === p.id} onPress={() => { setPick(p.id); reset(); }} />)}
+          {(people.data ?? []).map(p => <FilterChip key={p.id} testID={`bulk-person-${p.id}`} label={`${personLabel(p)} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={pick === p.id} onPress={() => { setPick(p.id); reset(); }} />)}
         </View>
         {sites.length > 1 ? (
           <>

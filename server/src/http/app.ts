@@ -41,7 +41,7 @@ import { currentFacts, recordFact, syncEquipmentTypes } from '../services/profil
 import { auditExport, indicators } from '../services/reporting';
 import { SAMPLE_PROFILES, approve, areaReview, confirmEffective, createDraft, draftSchema, listProvisions, listRuleVersions, previewImpact, publish, ruleVersionDetail, submitForReview, updateDraft } from '../services/rules';
 import { FACTS } from '../domain/facts';
-import { NACE_SOURCE, NACE_VERSION, searchNace } from '../domain/nace';
+import { NACE_SOURCE, NACE_VERSION, lookupNace, questionKeysFor, searchNace } from '../domain/nace';
 import { applyActivityToSite, confirmActivity } from '../services/activity';
 import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, selectServiceReportEvidence, taskDetail, topUpSite } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
@@ -297,6 +297,28 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const companyId = company(req);
     const b = z.object({ naceCodes: z.array(z.string().max(12)).min(1).max(10), confirmed: z.boolean() }).parse(req.body);
     return mutate(req, reply, companyId, tx => confirmActivity(tx, req.principal, companyId, b), 201);
+  });
+
+  /** Confirmed activity of the business. `missing` = no class recorded yet (older customers): the app asks for it without touching existing tasks. */
+  app.get('/companies/:companyId/activity', async req => {
+    const companyId = company(req);
+    if (!can(req.principal, 'profile.read', { companyId }).ok) throw forbidden();
+    return db.tenant(companyId, async tx => {
+      const r = (await tx.query(`SELECT value FROM profile_facts WHERE company_id = $1 AND key = 'activity.nace_codes' AND site_id IS NULL AND verification <> 'rejected' ORDER BY recorded_at DESC LIMIT 1`, [companyId])).rows[0];
+      const codes: string[] = Array.isArray(r?.value) ? r.value : [];
+      return { missing: codes.length === 0, codes, classes: codes.map(c => ({ code: c, title: lookupNace(c)?.title ?? null, known: !!lookupNace(c) })), catalogue: NACE_VERSION };
+    });
+  });
+  /** Questions that matter for this business: general ones plus the groups its confirmed activity opens. */
+  app.get('/companies/:companyId/profile-questions', async req => {
+    const companyId = company(req);
+    if (!can(req.principal, 'profile.read', { companyId }).ok) throw forbidden();
+    const codes = await db.tenant(companyId, async tx => {
+      const r = (await tx.query(`SELECT value FROM profile_facts WHERE company_id = $1 AND key = 'activity.nace_codes' AND site_id IS NULL AND verification <> 'rejected' ORDER BY recorded_at DESC LIMIT 1`, [companyId])).rows[0];
+      return Array.isArray(r?.value) ? r.value as string[] : [];
+    });
+    const keys = new Set(questionKeysFor(codes));
+    return Object.entries(FACTS).filter(([k]) => keys.has(k)).map(([key, d]) => ({ key, ...d }));
   });
 
   // ── Profile ──

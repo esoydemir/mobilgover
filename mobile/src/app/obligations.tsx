@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { factLabels } from '../features/factLabels';
 import { Text, View } from 'react-native';
 import { useSession } from '../api/session';
 import type { Obligation } from '../api/types';
@@ -35,7 +36,7 @@ export default function ObligationsRoute() {
             <Text style={[type(14, 600, { ls: -0.01 }), { flex: 1 }]}>{o.title}</Text>
             <Chevron />
           </View>
-          <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{o.rule} · sürüm {o.version}{o.missingFacts.length ? ` · eksik: ${o.missingFacts.join(', ')}` : ''}</Text>
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{o.rule} · sürüm {o.version}{o.missingFacts.length ? ` · eksik: ${factLabels(o.missingFacts)}` : ''}</Text>
         </Tap>
       ))}
     </Screen>

@@ -67,7 +67,7 @@ export function AssignCard({ t, siteId, onChanged }: { t: TaskDetail; siteId: st
             <>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
                 {people.data.map(p => (
-                  <FilterChip key={p.id} label={`${p.display_name} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={pick === p.id} onPress={() => setPick(p.id)} />
+                  <FilterChip key={p.id} label={`${personLabel(p)} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={pick === p.id} onPress={() => setPick(p.id)} />
                 ))}
                 <FilterChip label="Kimse" px={12} active={pick === null} onPress={() => setPick(null)} />
               </View>
@@ -88,4 +88,10 @@ export function AssignCard({ t, siteId, onChanged }: { t: TaskDetail; siteId: st
       )}
     </Card>
   );
+}
+
+/** B-02: görünen ad yoksa ya da e-postanın baş kısmından türetilmişse (eski hesap), e-postayı da göster ki kişiler ayırt edilsin. */
+export function personLabel(p: { display_name: string; email?: string | null }) {
+  const local = p.email?.split('@')[0];
+  return p.email && (!p.display_name?.trim() || p.display_name === local) ? `${p.display_name || local} (${p.email})` : p.display_name;
 }

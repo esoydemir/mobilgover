@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedPlatform } from '../../src/seed/demo';
+import { ensureSectorRules, seedPlatform } from '../../src/seed/demo';
 import { createSession } from '../../src/services/principal';
 import { client, fakeJpeg, freshEnv, type Env } from '../support/env';
 
@@ -33,6 +33,7 @@ const newUser = async (name: string) => {
 beforeAll(async () => {
   env = await freshEnv();
   await seedPlatform(env.db);
+  await ensureSectorRules(env.db);
   const o = await newUser('Sahip Kafe');
   ownerToken = o.token;
 });
@@ -201,5 +202,77 @@ describe('başka sektör: emlak ofisi soğuk ürün görevi üretmez', () => {
     expect(await coldTasks(s.body.id)).toBe(0);
     const obs = (await owner().get(`${C()}/obligations?siteId=${s.body.id}`)).body as any[];
     expect(obs.find(o => o.rule === COLD)?.decision).toBe('needs_info');
+  });
+});
+
+describe('soru grupları: işletme yalnız kendi faaliyetine ait soruları görür', () => {
+  const keys = (b: any[]) => b.map(q => q.key);
+  it('faaliyeti henüz kayıtlı olmayan eski müşteri: "eksik" döner, hiçbir görev/karar bozulmaz; tüm sorular açık kalır', async () => {
+    const u = await newUser('Eski Musteri');
+    const c = client(env, u.token);
+    const r = await c.post('/companies', { name: 'Eski Lokanta', siteName: 'Merkez' });
+    const id = r.body.companyId, site = r.body.siteId;
+    const before = (await c.get(`/companies/${id}/obligations?siteId=${site}`)).body;
+    const a = (await c.get(`/companies/${id}/activity`)).body;
+    expect(a).toMatchObject({ missing: true, codes: [] });
+    expect(keys((await c.get(`/companies/${id}/profile-questions`)).body)).toEqual(expect.arrayContaining(['storage.cold', 'activity.onsite_installation']));
+    expect((await c.get(`/companies/${id}/obligations?siteId=${site}`)).body).toEqual(before);
+  });
+
+  it('emlak ofisi: gıda ve montaj soruları sorulmaz; yalnız genel sorular', async () => {
+    const q = (await client(env, estateToken).get(`/companies/${estateCompany}/profile-questions`)).body;
+    expect(keys(q).sort()).toEqual(['site.district', 'site.province', 'staff.count']);
+  });
+
+  let shop: string, shopSite: string, shopToken: string;
+  const shopC = () => client(env, shopToken);
+  const installTasks = async () => (await env.ownerDb.query(
+    `SELECT count(*)::int AS n FROM tasks t JOIN rules r ON r.id = t.rule_id WHERE t.site_id = $1 AND r.code = 'EX-ELEC-INSTALL' AND t.status <> 'cancelled'`, [shopSite])).rows[0].n as number;
+  it('elektrik dükkânı satışla başlar: montaj sorusu sorulur, ama montaj görevi doğmaz; gıda kontrolü yoktur', async () => {
+    const u = await newUser('Elektrik Dukkani'); shopToken = u.token;
+    const r = await shopC().post('/companies', { name: 'Volt Elektrik', siteName: 'Çarşı' });
+    shop = r.body.companyId; shopSite = r.body.siteId;
+    expect((await shopC().post(`/companies/${shop}/activity`, { naceCodes: ['47.59'], confirmed: true })).status).toBe(201);
+    const q = keys((await shopC().get(`/companies/${shop}/profile-questions`)).body);
+    expect(q).toContain('activity.onsite_installation');
+    expect(q).not.toContain('storage.cold');
+    await shopC().post(`/companies/${shop}/profile/facts`, { siteId: shopSite, key: 'activity.onsite_installation', value: false, source: 'user_declared', verification: 'user_confirmed' });
+    expect(await installTasks()).toBe(0);
+    const obs = (await shopC().get(`/companies/${shop}/obligations?siteId=${shopSite}`)).body as any[];
+    expect(obs.find(o => o.rule === 'EX-ELEC-INSTALL')?.decision).toBe('not_applicable');
+    expect(obs.find(o => o.rule === COLD)?.decision).toBe('not_applicable');
+  });
+  it('sahada montajı sonradan ekleyince yalnız montaj görevi başlar; eski kayıtlar ve karar geçmişi korunur; tekrar kayıt mükerrer üretmez', async () => {
+    const histBefore = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM obligations WHERE site_id = $1`, [shopSite])).rows[0].n as number;
+    const res = await shopC().post(`/companies/${shop}/profile/facts`, { siteId: shopSite, key: 'activity.onsite_installation', value: true, source: 'user_declared', verification: 'user_confirmed' });
+    expect(res.status).toBe(201);
+    const n = await installTasks();
+    expect(n).toBeGreaterThanOrEqual(1);
+    const histAfter = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM obligations WHERE site_id = $1`, [shopSite])).rows[0].n as number;
+    expect(histAfter).toBeGreaterThan(histBefore); // yeni karar eklendi, eskisi silinmedi
+    await shopC().post(`/companies/${shop}/profile/facts`, { siteId: shopSite, key: 'activity.onsite_installation', value: true, source: 'user_declared', verification: 'user_confirmed' });
+    expect(await installTasks()).toBe(n);
+    expect(await coldTasks(shopSite)).toBe(0);
+  });
+});
+
+describe("iki şubeli zincir: A'da üretim açık, B sonradan değişir", () => {
+  it("B'ye soğuk depo sonradan eklenince yalnız B'de yeni görev başlar; A'nın görevleri ve geçmişi aynı kalır", async () => {
+    const aBefore = await coldTasks(siteA);
+    const bObsBefore = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM obligations WHERE site_id = $1`, [siteB])).rows[0].n as number;
+    expect(await coldTasks(siteB)).toBe(0);
+    await owner().post(`${C()}/profile/facts`, { siteId: siteB, key: 'storage.cold', value: true, source: 'user_declared', verification: 'user_confirmed' });
+    expect(await coldTasks(siteB)).toBeGreaterThanOrEqual(1);
+    expect(await coldTasks(siteA)).toBe(aBefore);
+    const bObsAfter = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM obligations WHERE site_id = $1`, [siteB])).rows[0].n as number;
+    expect(bObsAfter).toBeGreaterThan(bObsBefore);
+    // Fark açıklanır: karar geçmişinde "uygulanmaz → uygulanır" görünür.
+    const o = ((await owner().get(`${C()}/obligations?siteId=${siteB}`)).body as any[]).find(x => x.rule === COLD);
+    const why = (await owner().get(`${C()}/obligations/${o.id}/explanation`)).body;
+    expect(why.history.map((h: any) => h.decision)).toEqual(expect.arrayContaining(['not_applicable', 'applies']));
+    // Aynı cevabı tekrar işlemek mükerrer görev üretmez.
+    const n = await coldTasks(siteB);
+    await owner().post(`${C()}/profile/facts`, { siteId: siteB, key: 'storage.cold', value: true, source: 'user_declared', verification: 'user_confirmed' });
+    expect(await coldTasks(siteB)).toBe(n);
   });
 });

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { personLabel } from '../AssignCard';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../../api/client';
@@ -81,7 +82,7 @@ export function PersonChips({ siteId, value, onChange }: { siteId: string; value
   if (!people.data.length) return <Text style={type(12.5, 400, { color: C.t2 })}>Bu şubede iş verilebilecek etkin kimse yok.</Text>;
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
-      {people.data.map(p => <FilterChip key={p.id} testID={`person-${p.id}`} label={`${p.display_name} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={value === p.id} onPress={() => onChange(p.id)} />)}
+      {people.data.map(p => <FilterChip key={p.id} testID={`person-${p.id}`} label={`${personLabel(p)} · ${ROLE_LABEL[p.role] ?? p.role}`} px={12} active={value === p.id} onPress={() => onChange(p.id)} />)}
     </View>
   );
 }

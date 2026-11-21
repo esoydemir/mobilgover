@@ -283,7 +283,7 @@ async function seriesResponsible(tx: Tx, companyId: string, siteId: string, temp
 export async function assignableMembers(tx: Tx, p: Principal, companyId: string, siteId: string) {
   if (!can(p, 'task.assign', { companyId, siteId }).ok) throw forbidden();
   return (await tx.query(
-    `SELECT DISTINCT ON (u.id) u.id, u.display_name, m.role
+    `SELECT DISTINCT ON (u.id) u.id, u.display_name, u.email, m.role
        FROM memberships m JOIN users u ON u.id = m.user_id
       WHERE m.company_id = $1 AND m.status = 'active' AND (m.site_id IS NULL OR m.site_id = $2)
       ORDER BY u.id, m.role`, [companyId, siteId])).rows

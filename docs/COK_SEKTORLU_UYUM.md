@@ -31,11 +31,24 @@ Tüm kurallar **ÖRNEK**tir; hukuki dayanak doğrulanmış değildir.
 - Bilinmeyen kod (99.99): kod saklanır, inceleme istenir, yükümlülük `not_applicable` olmaz.
 - Kanıtsız tamamlama reddedilir; kanıtlı tamamlama sonrası kayıt çalışanı, kanıtı, ölçümü ve kural sürümünü gösterir.
 
+## İkinci dilim (22 Kasım)
+
+- **Soru grupları (GH-01):** Katalogdaki her sınıf bir soru grubu açar (`food`, `installation`); `GET /companies/:id/profile-questions` genel sorulara o grupların sorularını ekler. Emlak ofisi yalnız il/ilçe/çalışan sorusunu görür; elektrik dükkânı montaj sorusunu görür, soğuk depo sorusunu görmez. Tanınmayan kod hiçbir şeyi gizlemez (tüm sorular açık).
+- **Elektrik dükkânı senaryosu:** yeni ÖRNEK kural `EX-ELEC-INSTALL` (iyi uygulama, `activity.onsite_installation`), `ensureSectorRules` ile yayımlanır. Satışla başlayınca görev yok; montaj sonradan "Evet" olunca yalnız montaj görevi başlar, eski karar kayıtları silinmez, tekrar kayıt mükerrer üretmez. Kural ölçüm değil kontrol listesi + fotoğraf ister: motor, limit tanımlamayan ölçümü reddediyor ve limit uydurmadım.
+- **İki şubeli zincir:** B'ye sonradan soğuk depo eklenince yalnız B'de görev başlar, A aynı kalır, karar geçmişinde "uygulanmaz → uygulanır" görünür.
+- **Eski müşteri:** `GET /companies/:id/activity` faaliyet yoksa `missing: true` döner; profil ekranı kartı bunu görevlere dokunmadan ister.
+- **B-16:** Ekran alt başlıkları (İngilizce) kaldırıldı; "eksik bilgi" satırlarında teknik anahtar yerine Türkçe etiket (`mobile/src/features/factLabels.ts`).
+- **B-02:** Atama listesinde ad yoksa veya e-postadan türetilmişse e-posta da gösterilir.
+- Test: `multi-sector-flow.test.ts` 19/19.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
-- NACE kataloğu 10 sınıflık başlangıç alt kümesi; tam TÜİK listesi ve her sınıfın hangi yükümlülüğe bağlandığı ürün/hukuk kararıdır.
+- Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 ayrı iş.
+- B-12 (320 px) ve B-16'nın EK-267 sayfa taraması tarayıcıda doğrulanmadı.
+
+- NACE kataloğu 12 sınıflık başlangıç alt kümesi; tam TÜİK listesi ve her sınıfın hangi yükümlülüğe bağlandığı ürün/hukuk kararıdır.
 - Katalog dışı kod için "inceleme" şu an denetim kaydı + "bilgi eksik" ile sınırlı; bir inceleme kuyruğu ekranı yok.
-- Tek kural (EX-COLD-CHAIN, ÖRNEK) bu akışla ölçüldü; diğer sektör kuralları yazılmadı.
+- İki ÖRNEK sektör kuralı ölçüldü (EX-COLD-CHAIN, EX-ELEC-INSTALL); diğer sektör kuralları yazılmadı.
 - Fotoğraf yükleme ekran kanıtında tarayıcı dosya seçicisi sürülemediği için API ile yapıldı; ölçüm, atama ve tamamlama ekrandan yapıldı.
 - Kayıt ekranında ikinci şube eklemek için ayrı bir ekran akışı denenmedi; B şubesi API ile eklendi (`POST /companies/:id/sites`).
 - `npm run migrate` Windows'ta sessizce hiçbir şey yapmıyor (`import.meta.url === file://${argv[1]}` karşılaştırması `file:///C:/…` ile eşleşmez); testler `migrate()` fonksiyonunu doğrudan çağırdığı için etkilenmez.

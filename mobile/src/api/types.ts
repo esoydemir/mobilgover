@@ -64,7 +64,7 @@ export type TaskDetail = {
   canAssign: boolean;
 };
 
-export type Assignee = { id: string; display_name: string; role: 'owner' | 'hq_manager' | 'site_manager' | 'staff' };
+export type Assignee = { id: string; display_name: string; email?: string | null; role: 'owner' | 'hq_manager' | 'site_manager' | 'staff' };
 
 export type Obligation = {
   id: string; siteId: string; rule: string; version: number; title: string; kind: string; isExample: boolean;

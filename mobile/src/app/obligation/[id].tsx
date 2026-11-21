@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { factLabels } from '../../features/factLabels';
 import { useState } from 'react';
 import { errorText } from '../../api/client';
 import { Text, View } from 'react-native';
@@ -84,7 +85,7 @@ export default function ObligationRoute() {
                 </View>
               ))}
             </View>
-            {e.obligation.missingFacts.length ? <Text style={[type(12, 500, { color: C.warn }), { marginTop: 10 }]}>Eksik bilgi: {e.obligation.missingFacts.join(', ')}. Eksik bilgi "uygulanmaz" sayılmaz.</Text> : null}
+            {e.obligation.missingFacts.length ? <Text style={[type(12, 500, { color: C.warn }), { marginTop: 10 }]}>Eksik bilgi: {factLabels(e.obligation.missingFacts)}. Eksik bilgi "uygulanmaz" sayılmaz.</Text> : null}
           </Card>
           <Card>
             <Eyebrow>KAYNAK HÜKÜM</Eyebrow>

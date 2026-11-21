@@ -144,7 +144,7 @@ function SubHeader({ title, titleEn, siteId }: { title: string; titleEn?: string
       </Tap>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={type(16, 700, { ls: -0.015 })}>{title}</Text>
-        {titleEn ? <Text style={[type(10.5, 400, { color: C.t3 }), { marginTop: 1 }]}>{titleEn}</Text> : null}
+        {/* B-16: Türkçe ekranda İngilizce alt başlık gösterilmez (titleEn yalnızca geriye uyumluluk için kabul edilir). */}
         {where ? <Text testID="subheader-context" numberOfLines={2} style={[type(11, 600, { color: C.t2, lh: 1.3 }), { marginTop: 2 }]}>{where}</Text> : null}
       </View>
       <EnvBadge />

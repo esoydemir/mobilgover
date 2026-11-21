@@ -103,6 +103,43 @@ export const EXAMPLE_REPORT_RULES: Omit<DraftInput, 'provisionIds'>[] = [
   },
 ];
 
+/** Sector example rules (installation work). Kept apart so existing demo databases receive them once, through ensureSectorRules. */
+export const EXAMPLE_SECTOR_RULES: Omit<DraftInput, 'provisionIds'>[] = [
+  {
+    code: 'EX-ELEC-INSTALL', title: 'Montaj sonrası topraklama ölçüm kaydı (örnek iyi uygulama)', kind: 'good_practice', isExample: true, ambiguityNote: null,
+    condition: { fact: 'activity.onsite_installation', op: 'eq', value: true },
+    obligationTitle: 'Sahada yaptığın montajın topraklama ölçümünü kaydet',
+    obligationSummary: 'Örnek iyi uygulama; mevzuat hükmü olarak sunulmaz. Müşteri yerinde montaj yapan işletmeler montaj sonrası ölçümü kayda geçirir.',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    templates: [{
+      code: 'install_earthing', title: 'Montaj sonrası topraklama ölçümü', instructions: 'Yaptığın montajın topraklama ölçümünü yap, listeyi doldur ve ölçüm cihazı ekranının fotoğrafını ekle. (Kabul limiti tanımlı değil; sonuç değerlendirmesi yetkili kişiye aittir.)',
+      recurrence: { freq: 'monthly', day: 1, at: '14:00' },
+      evidence: [{ kind: 'checklist', items: [{ id: 'earth_measured', label: 'Topraklama ölçümü yapıldı ve değer müşteriye bildirildi', critical: true }, { id: 'panel_closed', label: 'Pano kapağı kapatıldı', critical: false }] }, { kind: 'photo', min: 1 }],
+      limits: [], severity: 'major', hazardType: 'electrical_safety',
+    }],
+  },
+];
+
+/** Publishes the sector example rules once on a database that already holds the platform people. */
+export async function ensureSectorRules(db: Db) {
+  return db.system(async tx => {
+    const who = async (role: string, not?: string) => (await tx.query<{ user_id: string }>(
+      `SELECT user_id FROM platform_roles WHERE role = $1 AND ($2::uuid IS NULL OR user_id <> $2) ORDER BY user_id LIMIT 1`, [role, not ?? null])).rows[0]?.user_id;
+    const author = await who('rule_author'), reviewer = author ? await who('rule_reviewer', author) : undefined, admin = await who('platform_admin');
+    if (!author || !reviewer || !admin) return 0;
+    let added = 0;
+    for (const r of EXAMPLE_SECTOR_RULES) {
+      if ((await tx.query(`SELECT 1 FROM rules WHERE code = $1`, [r.code])).rowCount) continue;
+      const d = await createDraft(tx, principal(author, { platformRoles: ['rule_author'] }), { ...r, provisionIds: [] });
+      await submitForReview(tx, principal(author, { platformRoles: ['rule_author'] }), d.id);
+      await approve(tx, principal(reviewer, { platformRoles: ['rule_reviewer'] }), d.id, 'Örnek veri: seed sırasında onaylandı.');
+      await publish(tx, principal(admin, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true, reason: 'Örnek veri: seed sırasında yayımlandı.' });
+      added++;
+    }
+    return added;
+  });
+}
+
 /** Publishes the GM-30 devamı example rules once on a database that already holds the platform people (demo deployments only). */
 export async function ensureReportRules(db: Db) {
   return db.system(async tx => {

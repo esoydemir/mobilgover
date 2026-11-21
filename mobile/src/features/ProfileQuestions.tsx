@@ -29,7 +29,7 @@ export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet' }: { onSaved?
     (async () => {
       try {
         const [cat, cur] = await Promise.all([
-          call<CatalogItem[]>('GET', '/fact-catalog'),
+          call<CatalogItem[]>('GET', `/companies/${company.id}/profile-questions`),
           call<Record<string, FactRecord>>('GET', `/companies/${company.id}/sites/${siteId}/profile`),
         ]);
         setCatalog(cat.filter(c => !SYSTEM_KEYS.includes(c.key)));

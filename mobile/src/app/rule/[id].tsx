@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { factLabels } from '../../features/factLabels';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../../api/client';
@@ -238,7 +239,7 @@ export default function RuleEditorRoute() {
                   <Text style={type(12.5, 600)}>{sp.label}</Text>
                   <Text style={type(10.5, 700, { ls: 0.06, color })}>{label}</Text>
                   {sp.tasks.map(t => <Text key={t.code} style={type(12, 400, { color: C.t2, lh: 1.4 })}>• {t.title} · {t.schedule} · {t.count ? `${t.count} görev dizisi` : 'görev yok'} · {t.note}</Text>)}
-                  {sp.missingFacts.length ? <Text style={type(11.5, 400, { color: C.warn })}>Eksik bilgi: {sp.missingFacts.join(', ')}</Text> : null}
+                  {sp.missingFacts.length ? <Text style={type(11.5, 400, { color: C.warn })}>Eksik bilgi: {factLabels(sp.missingFacts)}</Text> : null}
                 </View>
               );
             })}
