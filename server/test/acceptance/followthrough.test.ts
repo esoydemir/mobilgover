@@ -45,6 +45,8 @@ describe('one look at a case', () => {
     expect(['high', 'critical']).toContain(d.risk_level);
     expect(d.firstAction.items.map((i: any) => i.key)).toEqual(['containment', 'assignment']);
     expect(d.firstAction.note).toContain('ilk işlemlerden sonra');
+    // An example limit never reads as a legal one: the case title says so.
+    expect(d.title).toContain('ÖRNEK limit, doğrulanmadı');
     expect(d.next).toMatchObject({ stage: 'containment', mine: true });
     expect(d.progress.total).toBe(d.flow.stages.length);
     expect(d.closureMissing.length).toBe(d.progress.total - d.progress.done);
