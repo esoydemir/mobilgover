@@ -26,6 +26,7 @@ const ACTION_TR: Record<string, string> = { correction: 'düzeltme', corrective_
 const clip = (x: unknown, n = 150) => { const t = String(x ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 /** One readable line per audit event of a closed case; null for events that add nothing to the sequence. */
 type LineCtx = { action: (id: unknown) => string | null; effect: (ncrId: string, iteration: unknown) => any };
+const SVC_TR: Record<string, string> = { open: 'teklif bekliyor', awarded: 'teklif kabul edildi', scheduled: 'iş planlandı', checked_in: 'uzman sahada, rapor henüz yok', report_submitted: 'rapor teslim edildi, işletme kabulü bekliyor', revision_requested: 'rapor revizyonu istendi', accepted: 'servis teslimi işletmece kabul edildi', disputed: 'uyuşmazlık', completed: 'tamamlandı', cancelled: 'iptal' };
 const num = (v: unknown) => String(v).replace('.', ',');
 function caseLine(type: string, pl: any, ref = '', ctx?: LineCtx): string | null {
   switch (type) {
@@ -133,7 +134,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
       critical: critical.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), risk: RISK_TR[n.risk_level], status: n.status === 'awaiting_verification' ? 'Doğrulama bekliyor' : 'Açık',
         ref: n.id.slice(0, 8), equipment: n.equipment ?? null, due: n.due_at ? tr(n.due_at) : null, reopened: n.reopened_count as number,
         containment: (critEvents.filter(e => e.ref === n.id && e.event_type === 'nonconformity.step_done' && e.payload?.step === 'containment').at(-1)?.payload?.notes as string | undefined) ?? null,
-        service: critSvc.filter(x => x.ncr_id === n.id).map(x => `${x.job_status ?? x.status}`),
+        service: critSvc.filter(x => x.ncr_id === n.id).map(x => { const k = String(x.job_status ?? x.status); return SVC_TR[k] ?? k; }),
         actions: critActs.find(x => x.ncr_id === n.id) ?? { total: 0, declared: 0 },
         history: critEvents.filter(e => e.ref === n.id && ['nonconformity.closed', 'nonconformity.reopened', 'nonconformity.verification_failed'].includes(e.event_type))
           .map(e => `${tr(e.occurred_at)} · ${e.actor ?? '—'} · ${caseLine(e.event_type, e.payload)}`),
