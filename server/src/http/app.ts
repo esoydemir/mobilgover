@@ -243,7 +243,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
 
   // Demo deployments only: read the sign-in mail that the dev outbox kept. Never available in pilot.
   app.get('/dev/outbox/latest', async req => {
-    if (!config.demoMode) throw notFound('Sayfa');
+    if (!config.demoMode || mailer.kind !== 'dev_outbox') throw notFound('Sayfa');
     const { email } = z.object({ email: z.string() }).parse(req.query);
     const r = await db.system(tx => tx.query(`SELECT subject, body, created_at FROM dev_mail_outbox WHERE to_email = $1 ORDER BY id DESC LIMIT 1`, [email.trim().toLowerCase()]));
     if (!r.rows[0]) throw notFound('Posta');

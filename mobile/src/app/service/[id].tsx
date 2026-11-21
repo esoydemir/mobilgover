@@ -107,6 +107,9 @@ export default function ServiceDetailRoute() {
           {d.job.status === 'report_submitted' ? (
             <View style={{ marginTop: 12, gap: 10 }}>
               <Field testID="job-note" value={note} onChangeText={setNote} multiline placeholder="Raporu okudun mu, işi kontrol ettin mi? Revizyon istiyorsan neyin eksik olduğunu yaz." />
+              {note.trim().length < 5 ? (
+                <Text testID="job-accept-hint" style={type(11.5, 600, { color: C.warn, lh: 1.45 })}>Teslim kabul etmek için en az 5 karakterlik bir not yaz ({note.trim().length}/5). Not kabul kaydına eklenir.</Text>
+              ) : null}
               <PrimaryButton testID="job-accept" label="Teslim kabul et" disabled={note.trim().length < 5} height={46} size={13.5}
                 onPress={() => act(() => call('POST', `/companies/${company!.id}/jobs/${d.job!.id}/acceptance`, { accept: true, note: note.trim() }), 'Teslim kabul edildi')} />
               <GhostButton testID="job-revision" label="Gerekçeyle revizyon iste" disabled={note.trim().length < 10} color={C.warn} border={tint.warn(0.35)}

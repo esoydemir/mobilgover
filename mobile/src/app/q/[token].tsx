@@ -15,7 +15,11 @@ export default function QrLinkRoute() {
     if (!token || !t) return;
     call<{ companyId: string; route: string }>('GET', `/qr/resolve?token=${encodeURIComponent(t)}`)
       .then(r => { if (company?.id !== r.companyId) selectCompany(r.companyId); router.replace(r.route as Href); })
-      .catch(e => setError(errorText(e)));
+      .catch(e => {
+        const m = errorText(e);
+        // Bozuk bicimli kod ile pasif/bilinmeyen kod ayni anlasilir dille anlatilir; kayit ayrintisi verilmez.
+        setError(/geçersiz/i.test(m) ? 'Bu kod okunamadı ya da bozuk. Kodu yeniden okutun; sorun sürerse kodu üreten kişiden yeni kod isteyin.' : m);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, t]);
   return (

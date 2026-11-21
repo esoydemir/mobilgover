@@ -68,7 +68,7 @@ export default function LoginRoute() {
                 const r = await verifyLogin(email, code);
                 if (r.mfaTicket) { setTicket(r.mfaTicket); setCode(''); setStep('mfa'); }
               })} />
-            {env?.mode === 'demo' && (
+            {env?.mode === 'demo' && env.mailTransport === 'dev_outbox' && (
               <View style={{ borderWidth: 1, borderColor: tint.warn(0.3), backgroundColor: tint.warn(0.06), borderRadius: 16, padding: 14, gap: 10 }}>
                 <Text style={type(12, 400, { lh: 1.5, color: C.t2 })}>Demo ortamında e-posta gönderilmez; kod sunucunun geliştirme kutusunda tutulur. Bu düğme pilot ortamında yoktur.</Text>
                 <GhostButton label="Demo kutusundan kodu getir" height={40} size={12.5} color={C.warn} border={tint.warn(0.4)}
