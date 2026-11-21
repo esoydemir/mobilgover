@@ -114,6 +114,17 @@ export default function TaskDetailRoute() {
       )}
       {t.status === 'cancelled' || t.status === 'missed' ? <ErrorBox message={t.status === 'cancelled' ? `Bu görev iptal edildi${t.statusReason ? `: ${t.statusReason}` : '.'}` : 'Bu görevin süresi geçti.'} /> : null}
 
+      {t.assignmentHistory.length ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+          <Eyebrow>SORUMLU GEÇMİŞİ</Eyebrow>
+          {[...t.assignmentHistory].reverse().map((h, i) => (
+            <Text key={i} testID={`task-assign-history-${i}`} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>
+              {`${fmtDateTime(h.at)} · ${h.previous?.name ?? 'atanmamıştı'} → ${h.current?.name ?? 'atama kaldırıldı'} · ${h.changedBy.name ?? 'yönetici'}${h.source === 'bulk' ? ' (toplu)' : h.source === 'series' ? ' (seri)' : ''}${h.reason ? ` · ${h.reason}` : ''}`}
+            </Text>
+          ))}
+        </Card>
+      ) : null}
+
       {role !== 'staff' && siteId ? <AssignCard key={`${t.assignee?.id}-${t.seriesResponsible?.id}`} t={t} siteId={siteId} onChanged={q.reload} /> : null}
 
       {t.emergencyInstruction && (open || t.outcome === 'nonconforming') ? (

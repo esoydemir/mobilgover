@@ -8,6 +8,8 @@ import { documentsForTask } from './documents';
 import { taskServiceReports } from './marketplace';
 import { appendAudit } from './audit';
 import { relatedCourses } from './training';
+import { randomUUID } from 'node:crypto';
+import { assignmentHistory, recordAssignments } from './task-assignment';
 import { createFromTask } from './nonconformities';
 import { currentObligations, recomputeSite } from './obligations';
 
@@ -88,7 +90,13 @@ async function loadTask(tx: Tx, p: Principal, companyId: string, taskId: string,
   return t;
 }
 
-export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { siteId?: string; from?: string; to?: string; status?: string }) {
+/**
+ * Open work split four ways for the task screens: overdue (deadline passed), today (still due today, Istanbul day), upcoming (later days),
+ * unassigned (nobody responsible, any date). A task appears in exactly one of overdue/today/upcoming; unassigned cuts across them.
+ */
+export type TaskBucket = 'today' | 'upcoming' | 'overdue' | 'unassigned';
+
+export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { siteId?: string; from?: string; to?: string; status?: string; bucket?: TaskBucket }) {
   const assignedOnly = onlyAssignedTasks(p, companyId);
   const r = await tx.query(
     `SELECT t.id, t.site_id, t.status, t.outcome, t.due_at, t.period_key, t.review_flag, t.assignee_id, t.equipment_id,
@@ -100,8 +108,13 @@ export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { si
       WHERE t.company_id = $1 AND ($2::uuid IS NULL OR t.site_id = $2)
         AND ($3::timestamptz IS NULL OR t.due_at >= $3) AND ($4::timestamptz IS NULL OR t.due_at < $4)
         AND ($5::text IS NULL OR t.status = $5) AND (NOT $6 OR t.assignee_id = $7)
+        AND ($8::text IS NULL OR (t.status = 'open' AND CASE $8
+              WHEN 'overdue'    THEN t.due_at < now()
+              WHEN 'today'      THEN t.due_at >= now() AND (t.due_at AT TIME ZONE 'Europe/Istanbul')::date = (now() AT TIME ZONE 'Europe/Istanbul')::date
+              WHEN 'upcoming'   THEN (t.due_at AT TIME ZONE 'Europe/Istanbul')::date > (now() AT TIME ZONE 'Europe/Istanbul')::date
+              WHEN 'unassigned' THEN t.assignee_id IS NULL END))
       ORDER BY t.due_at, tt.title`,
-    [companyId, q.siteId ?? null, q.from ?? null, q.to ?? null, q.status ?? null, assignedOnly, p.userId]);
+    [companyId, q.siteId ?? null, q.from ?? null, q.to ?? null, q.status ?? null, assignedOnly, p.userId, q.bucket ?? null]);
   return r.rows.filter(t => can(p, 'task.read', { companyId, siteId: t.site_id, assigneeId: t.assignee_id }).ok);
 }
 
@@ -259,6 +272,7 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     measurements: c.measurements, evidence: c.evidence, nonconformity: ncr,
     completedBy: t.completed_by, completedAt: t.completed_at, statusReason: t.status_reason,
     assignee: t.assignee_id ? { id: t.assignee_id, name: await userName(tx, t.assignee_id) } : null,
+    assignmentHistory: await assignmentHistory(tx, companyId, taskId),
     // Who is responsible for this recurring check from now on (null = nobody set).
     seriesResponsible: await seriesResponsible(tx, companyId, t.site_id, t.template_code, t.equipment_id),
     canAssign: can(p, 'task.assign', { companyId, siteId: t.site_id }).ok,
@@ -307,9 +321,20 @@ export async function assignTask(tx: Tx, p: Principal, companyId: string, taskId
       [b.userId, companyId, t.site_id])).rowCount;
     if (!ok) throw invalid('Bu kişi bu şubede görev alamaz (etkin üye değil ya da başka şubede).');
   }
-  await tx.query(`UPDATE tasks SET assignee_id = $3, assigned_by = $4, assigned_at = now() WHERE id = $1 AND company_id = $2`,
-    [taskId, companyId, b.userId, p.userId]);
+  const batchKey = randomUUID();
+  const before: { id: string; site_id: string; assignee_id: string | null }[] = [{ id: t.id, site_id: t.site_id, assignee_id: t.assignee_id ?? null }];
+  // Unchanged = no new history row, no second announcement.
+  if ((t.assignee_id ?? null) !== b.userId) {
+    await tx.query(`UPDATE tasks SET assignee_id = $3, assigned_by = $4, assigned_at = now() WHERE id = $1 AND company_id = $2`, [taskId, companyId, b.userId, p.userId]);
+  }
   let alsoAssigned = 0;
+  if (b.applyToFuture) {
+    before.push(...(await tx.query<{ id: string; site_id: string; assignee_id: string | null }>(
+      `SELECT id, site_id, assignee_id FROM tasks
+        WHERE company_id = $1 AND site_id = $2 AND template_code = $3 AND equipment_id IS NOT DISTINCT FROM $4::uuid
+          AND status = 'open' AND due_at >= now() AND id <> $5 AND assignee_id IS DISTINCT FROM $6::uuid`,
+      [companyId, t.site_id, t.template_code, t.equipment_id, taskId, b.userId])).rows);
+  }
   if (b.applyToFuture) {
     await tx.query(`DELETE FROM task_assignment_defaults WHERE company_id = $1 AND site_id = $2 AND template_code = $3 AND equipment_id IS NOT DISTINCT FROM $4::uuid`,
       [companyId, t.site_id, t.template_code, t.equipment_id]);
@@ -323,8 +348,9 @@ export async function assignTask(tx: Tx, p: Principal, companyId: string, taskId
           AND status = 'open' AND due_at >= now() AND id <> $7 AND assignee_id IS DISTINCT FROM $5`,
       [companyId, t.site_id, t.template_code, t.equipment_id, b.userId, p.userId, taskId])).rowCount ?? 0;
   }
+  await recordAssignments(tx, { companyId, actorId: p.userId, newId: b.userId, before, source: b.applyToFuture ? 'series' : 'single', batchKey });
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'task.assigned', entityType: 'task', entityId: taskId,
-    payload: { assigneeId: b.userId, applyToFuture: b.applyToFuture, alsoAssigned } });
+    payload: { assigneeId: b.userId, previousAssigneeId: t.assignee_id ?? null, applyToFuture: b.applyToFuture, alsoAssigned } });
   return { assigneeId: b.userId, alsoAssigned, seriesResponsible: b.applyToFuture ? (b.userId ? { id: b.userId, name: await userName(tx, b.userId) } : null) : undefined };
 }
 

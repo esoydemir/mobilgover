@@ -56,6 +56,28 @@ Eksik olan ve bu dilimde eklenen:
 
 Hâlâ açık (GH-03): Resmî Gazete mükerrer sayı/ek ayrımı ayrı alan olarak tutulmuyor (yalnız `doc_ref` içinde sayı var); metin özeti/hash yalnız birleştirilmiş mevzuat belgelerinde (`legislation_documents`) saklanıyor; "geri çekmede işletmeye düzeltme bildirimi" yalnız yöneticilere gidiyor; masaüstü ekranı ayrı bir düzen değil, mevcut yönetim ekranı süzgeçle genişletildi ve tarayıcıda görülmedi; zamanlayıcı iş günlüğü kanıtı bu oturumda yeniden üretilmedi (mevcut test `legislationTick` ile sınıyor).
 
+## Dördüncü dilim · GH-04 görev ve bildirim (22 Kasım)
+
+Zaten vardı: yalnız atanmışı gören çalışan, şube kapsamlı yönetici, tekil/toplu atama + önizleme (sayı onayı), seri sorumlusu, yeniden atama listesi (pasif üyenin açık işleri), geciken iş bildirimi, aynı olay için tekrar bildirim üretmeyen `dedupe_key`.
+
+Eksik olan ve eklenen (migrasyon `031`, `services/task-assignment.ts`):
+- **Atama bildirimi yoktu.** Artık atanan kişi tek bildirim alır; gövde sabit sırayla **Ne değişti? / Hangi şubemi etkiliyor? / Ne zamana kadar ne yapmalıyım?** (+ gerekli kanıt) cevaplar, `meta` içinde kayıt bağlantısı (`link`) taşır. **Duyuru anı (`announcedAt`) ile görevin başlangıç günü (`startsAt`) ayrı alandır.** Görevi kaybeden kişi de bilgilendirilir. Toplu atamada şube başına tek özet bildirim.
+- **Aynı sürüm tekrar gönderilmez:** durum değişmediyse (aynı kişiye aynı atama) ne geçmiş satırı ne bildirim üretilir.
+- **Atama geçmişi:** `task_assignment_log` (önceki, yeni, değiştiren, tekil/seri/toplu, gerekçe); `GET tasks/:id` → `assignmentHistory`; görev ekranında "Sorumlu geçmişi". Denetim kaydına `previousAssigneeId` eklendi.
+- **Listeler:** `GET /companies/:id/tasks?bucket=today|upcoming|overdue|unassigned` (sunucuda, İstanbul günü). Bugün/yaklaşan/geciken ayrık; atanmamış açık işler tarihten bağımsız ayrı liste. Uygulamada "Atanmamış" süzgeci eklendi.
+- **Toplu önizleme:** şube başına en erken/en geç son tarih ve gerekli kanıt türleri (kişi ve şube adı zaten vardı).
+- **Teslim ve yeniden deneme:** `notifications.delivered_at / delivery_attempts / next_attempt_at`; `deliverPending(db, channel)` başarısız gönderimi artan bekleme ile yeniden dener (en çok 5), başarıdan sonra bir daha göndermez, vazgeçince hata kayıtta kalır. Gelen kutusu teslimden bağımsızdır.
+- **Okundu ≠ tamamlandı:** okumak görevi tamamlamaz, tamamlamak okunmamış bildirimi okundu yapmaz (testle).
+- Test: `task-notifications.test.ts` 12/12 (kabul: yönetici atar → çalışan bildirimden gider, kanıtla tamamlar → yönetici sonucu görür; başka şubeye bildirim gitmez; çevrimdışı tekrar gönderimde tek tamamlama; atama değişince önceki/yeni kişi).
+
+Hâlâ açık (GH-04):
+- **Gerçek bir dış kanal (push / e-posta / SMS) yok.** `deliverPending` bir kanal arayüzü ve yeniden deneme mantığıdır, testte sahte kanalla sınandı; hiçbir yere bağlı değil ve zamanlayıcıdan çağrılmıyor. Kanal seçimi ürün/altyapı kararıdır.
+- Teslim "en az bir kez": gönderim ile kayıt arasında süreç çökerse aynı bildirim bir kez daha gidebilir.
+- Seri sorumlusu (`applyToFuture`) ve yeni üretilen görevlerin varsayılan atanması bildirim/geçmiş satırı üretmez; yalnız ilk atama olayı bildirilir.
+- "Bugün/yaklaşan/geciken" mobilde hâlâ istemci tarafı gruplanıyor (aynı tanım, `features/work.ts`); sunucu süzgeci API'de var ama ekran onu kullanmıyor. Ekranlar tarayıcıda görülmedi.
+- Çevrimdışı eşitleme için mevcut `offline-sync.test.ts` (5 senaryo) ve yeni idempotency testi var; gerçek cihazda sınanmadı.
+- `backup-restore.test.ts` bu makinede `pg_dump` olmadığı için çalıştırılamadı (15 başarısız, hepsi `spawn pg_dump ENOENT` ve ilgili ortam hatası); yeni tablo yedek/geri yükleme kapsamında doğrulanmadı.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 ayrı iş.

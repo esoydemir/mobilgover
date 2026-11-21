@@ -61,6 +61,8 @@ export type TaskDetail = {
   statusReason: string | null;
   assignee: { id: string; name: string | null } | null;
   seriesResponsible: { id: string; name: string } | null;
+  /** Every change of the responsible person, oldest first (GH-04). */
+  assignmentHistory: { at: string; source: 'single' | 'series' | 'bulk'; reason: string | null; previous: { id: string; name: string | null } | null; current: { id: string; name: string | null } | null; changedBy: { id: string; name: string | null } }[];
   canAssign: boolean;
 };
 

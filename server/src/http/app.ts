@@ -514,7 +514,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.get('/companies/:companyId/tasks', async req => {
     const companyId = company(req);
     const q = z.object({ siteId: uuid.optional(), from: z.iso.datetime({ offset: true }).optional(), to: z.iso.datetime({ offset: true }).optional(),
-      status: z.enum(['open', 'done', 'missed', 'cancelled']).optional() }).parse(req.query);
+      status: z.enum(['open', 'done', 'missed', 'cancelled']).optional(), bucket: z.enum(['today', 'upcoming', 'overdue', 'unassigned']).optional() }).parse(req.query);
     return db.tenant(companyId, tx => listTasks(tx, req.principal, companyId, q));
   });
   // Bulk assignment: preview names the affected sites and people; apply needs the preview's count.
@@ -523,7 +523,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/tasks/bulk-assign/preview', async req => {
     const companyId = company(req);
     const b = bulkScope.parse(req.body);
-    return db.tenant(companyId, async tx => { const { taskIds: _t, ...v } = await bulkAssignPreview(tx, req.principal, companyId, b); return v; });
+    return db.tenant(companyId, async tx => { const { taskIds: _t, prior: _p, ...v } = await bulkAssignPreview(tx, req.principal, companyId, b); return v; });
   });
   app.post('/companies/:companyId/tasks/bulk-assign', async (req, reply) => {
     const companyId = company(req);

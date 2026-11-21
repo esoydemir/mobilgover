@@ -18,7 +18,7 @@ const TONE: Record<string, string> = {
   action_declared: C.lime, action_rejected: C.crit, action_verified: C.info, doc_expired: C.crit, doc_expiring: C.warn, doc_review_needed: C.lime,
   doc_rejected: C.crit, doc_verified: C.info, quote_received: C.info, service_report_delivered: C.lime,
   legislation_change: C.warn, task_overdue: C.crit, tasks_overdue: C.warn, verifier_invited: C.lime,
-  training_assigned: C.info, training_completed: C.lime, training_field_verified: C.info, training_review_requested: C.warn,
+  task_assigned: C.lime, task_unassigned: C.info, training_assigned: C.info, training_completed: C.lime, training_field_verified: C.info, training_review_requested: C.warn,
 };
 
 /** In-app notifications for this business: only what the person can still open. */
@@ -34,7 +34,7 @@ export default function NotificationsRoute() {
     else if (n.entity_type === 'training_assignment') router.push(`/training/a/${n.entity_id}`);
     else if (n.entity_type === 'training_course') router.push(`/training/${n.entity_id}`);
     else if (n.entity_type === 'task') router.push(`/task/${n.entity_id}`);
-    else if (n.entity_type === 'site_tasks') router.push('/tasks');
+    else if (n.entity_type === 'site_tasks' || n.entity_type === 'task_batch') router.push('/tasks');
     else if (n.entity_type === 'access_grant') router.push('/verify-queue');
     else if (n.entity_type === 'document') router.push(`/documents/${n.entity_id}`);
     else if (n.entity_type === 'legislation_change') router.push(`/change/${n.entity_id}`);
