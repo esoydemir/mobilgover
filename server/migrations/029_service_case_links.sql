@@ -28,10 +28,15 @@ ALTER TABLE task_report_evidence ADD COLUMN service_link_id uuid REFERENCES serv
 -- so the follow-up task cannot belong to another case. linked: another case's service, linked to a case of this equipment.
 -- declared: chosen on free-text grounds before links existed. legacy: chosen before the relation was recorded and not provable from record ids.
 UPDATE task_report_evidence SET relation = 'declared' WHERE relation = 'equipment';
-UPDATE task_report_evidence l SET relation = 'legacy',
-       case_id = (SELECT sr.ncr_id FROM service_requests sr JOIN service_jobs j ON j.request_id = sr.id JOIN documents d ON d.service_job_id = j.id WHERE d.id = l.document_id)
- WHERE l.relation = 'direct' AND NOT EXISTS (
-   SELECT 1 FROM service_requests sr JOIN service_jobs j ON j.request_id = sr.id JOIN documents d ON d.service_job_id = j.id
-     LEFT JOIN nonconformities n ON n.id = sr.ncr_id
-    WHERE d.id = l.document_id AND (sr.task_id = l.task_id OR n.task_id = l.task_id));
+-- Rows labelled direct by migration 028 that record ids cannot prove: sole when the report's case was the only case of that equipment in the 90 days before the
+-- choice (then no other case could have been meant), otherwise legacy. The source case is kept as a fact of the request; the choice itself is not rewritten.
+UPDATE task_report_evidence l SET relation = CASE WHEN x.sole THEN 'sole' ELSE 'legacy' END, case_id = x.src
+  FROM (SELECT l2.id, sr.ncr_id AS src,
+               (sr.ncr_id IS NOT NULL AND n.equipment_id IS NOT NULL AND NOT EXISTS (
+                  SELECT 1 FROM nonconformities n2 WHERE n2.company_id = n.company_id AND n2.site_id = n.site_id AND n2.equipment_id = n.equipment_id AND n2.id <> n.id
+                     AND n2.detected_at BETWEEN l2.selected_at - interval '90 days' AND l2.selected_at)) AS sole
+          FROM task_report_evidence l2 JOIN documents d ON d.id = l2.document_id JOIN service_jobs j ON j.id = d.service_job_id JOIN service_requests sr ON sr.id = j.request_id
+          LEFT JOIN nonconformities n ON n.id = sr.ncr_id
+         WHERE l2.relation = 'direct' AND sr.task_id IS DISTINCT FROM l2.task_id AND n.task_id IS DISTINCT FROM l2.task_id) x
+ WHERE l.id = x.id;
 ALTER TABLE task_report_evidence ADD CONSTRAINT task_report_evidence_relation_check CHECK (relation IN ('direct','sole','linked','declared','legacy'));
