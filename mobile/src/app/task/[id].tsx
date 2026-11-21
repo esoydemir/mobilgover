@@ -233,7 +233,7 @@ Bu rapor başka bir vakanın servisine ait (${l.caseTitle ?? 'vaka'}); göreve b
         )) : <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görev kendi yüklenen belgesiyle kapandı; servis raporuna dayanmadı.</Text>
       ) : (
         <>
-          <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görevin kuralı belge kanıtı yerine incelenmiş servis raporunu kabul eder. Yalnız aynı şubenin, bu göreve bağlı servisin, olumlu incelenmiş güncel rapor sürümü seçilebilir; dosyayı yeniden yüklemen gerekmez.</Text>
+          <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu görevin kuralı belge kanıtı yerine incelenmiş servis raporunu kabul eder. Yalnız aynı şubenin, olumlu incelenmiş güncel rapor sürümü seçilebilir; dosyayı yeniden yüklemen gerekmez. Başka vakanın servisi için görevle ilişkisini yazman gerekir.</Text>
           {re.options.length === 0 ? <Text testID="task-report-none" style={type(12, 500, { color: C.t3, lh: 1.45 })}>Bu göreve bağlı servis raporu yok. Servis talebini görevden aç ya da belgeyi kendin yükle.</Text> : null}
           {re.options.map(o => (
             <View key={o.documentId} testID={`task-report-option-${o.documentId}`} style={{ gap: 4 }}>
