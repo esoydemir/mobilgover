@@ -32,7 +32,7 @@ function caseLine(type: string, pl: any, ref = '', ctx?: LineCtx): string | null
   switch (type) {
     case 'nonconformity.opened': return `Vaka açıldı: ${(pl.reasons ?? []).join('; ') || 'elle bildirildi'} · risk ${RISK_TR[pl.riskLevel] ?? pl.riskLevel ?? '—'}`;
     case 'nonconformity.step_done': return pl.step === 'containment' ? `İlk müdahale: ${clip(pl.notes)}`
-      : pl.step === 'effectiveness_check' ? `Etkinlik kontrolü: ${clip(pl.notes)}${(() => { const m = ctx?.effect(ref, pl.iteration)?.measurement ?? pl.measurement; return m ? ` (yeni ölçüm ${num(m.value)}${m.unit ? ' ' + m.unit : ' · birim kaydedilmemiş'}${m.limitMin != null || m.limitMax != null ? ` · limit ${m.limitMin ?? '—'}…${m.limitMax ?? '—'}` : ' · limit kaydedilmemiş'}${m.within === true ? ' · limit içinde' : m.within === false ? ' · LİMİT DIŞI' : ''})` : ' (ölçüm kaydı yok)'; })()}` : null;
+      : pl.step === 'effectiveness_check' ? `Etkinlik kontrolü: ${clip(pl.notes)}${(() => { const m = ctx?.effect(ref, pl.iteration)?.measurement ?? pl.measurement; const ex = (ctx?.effect(ref, pl.iteration) as any)?.example ? ' (ÖRNEK limit, doğrulanmamış)' : ''; return m ? ` (yeni ölçüm ${num(m.value)}${m.unit ? ' ' + m.unit : ' · birim kaydedilmemiş'}${m.limitMin != null || m.limitMax != null ? ` · limit ${m.limitMin ?? '—'}…${m.limitMax ?? '—'}` : ' · limit kaydedilmemiş'}${m.within === true ? ' · limit içinde' : m.within === false ? ' · LİMİT DIŞI' : ''}${ex})` : ' (ölçüm kaydı yok)'; })()}` : null;
     case 'nonconformity.assigned': return 'Sorumlu ve termin atandı';
     case 'nonconformity.cause_assessed': return `Neden ${pl.stage === 'verified' ? 'doğrulandı' : 'değerlendirildi'} (${(pl.categories ?? []).map((c: string) => CAUSE_TR[c] ?? c).join(', ')}): ${clip(pl.notes)}`;
     case 'nonconformity.action_added': return `Aksiyon eklendi (${ACTION_TR[pl.kind] ?? pl.kind}): ${clip(pl.description)}`;
@@ -108,7 +108,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
        (SELECT v.verification_mode FROM ncr_verifications v WHERE v.ncr_id = n.id ORDER BY v.verified_at DESC LIMIT 1) AS mode
      FROM nonconformities n LEFT JOIN users u ON u.id = n.closed_by WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status = 'closed' AND n.closed_at >= $3 AND n.closed_at < $4
      ORDER BY n.closed_at DESC LIMIT 200`, [companyId, siteIds, q.from, q.to])).rows.filter(n => can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id }).ok);
-  const taskMeas = closedTasks.length ? (await tx.query(`SELECT task_id, value, unit, within_limit, measured_at FROM measurements WHERE task_id = ANY($1) ORDER BY measured_at`, [closedTasks.map(t => t.id)])).rows : [];
+  const taskMeas = closedTasks.length ? (await tx.query(`SELECT task_id, value, unit, within_limit, measured_at, limit_source->>'basis' AS basis FROM measurements WHERE task_id = ANY($1) ORDER BY measured_at`, [closedTasks.map(t => t.id)])).rows : [];
   // Case sequence (6D): what happened in which order, from the audit trail of the case and of the service work linked to it.
   const caseIds = closedCases.map(n => n.id);
   const caseEvents = caseIds.length ? (await tx.query(
@@ -117,9 +117,9 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
          OR (e.event_type IN ('service.requested','service.quote_accepted','service.report_submitted','service.revision_requested','service.accepted')
              AND (e.entity_id IN (SELECT id::text FROM service_requests WHERE ncr_id = ANY($2::uuid[])) OR e.entity_id IN (SELECT j.id::text FROM service_jobs j JOIN service_requests r ON r.id = j.request_id WHERE r.ncr_id = ANY($2::uuid[])))))
       ORDER BY e.occurred_at`, [companyId, caseIds])).rows : [];
-  const steps = caseIds.length ? (await tx.query(`SELECT ncr_id, iteration, data FROM ncr_steps WHERE ncr_id = ANY($1) AND step = 'effectiveness_check' ORDER BY done_at`, [caseIds])).rows : [];
+  const steps = caseIds.length ? (await tx.query(`SELECT s.ncr_id, s.iteration, s.data, (SELECT m.limit_source->>'basis' FROM nonconformities n JOIN measurements m ON m.id = n.measurement_id WHERE n.id = s.ncr_id) AS basis FROM ncr_steps s WHERE s.ncr_id = ANY($1) AND s.step = 'effectiveness_check' ORDER BY s.done_at`, [caseIds])).rows : [];
   const actionText = new Map<string, string>(); for (const e of caseEvents) if (e.event_type === 'nonconformity.action_added') actionText.set(String(e.payload?.actionId), clip(e.payload?.description, 70));
-  const ctx: LineCtx = { action: id => actionText.get(String(id)) ?? null, effect: (ncr, it) => steps.filter(x => x.ncr_id === ncr && String(x.iteration) === String(it)).at(-1)?.data ?? null };
+  const ctx: LineCtx = { action: id => actionText.get(String(id)) ?? null, effect: (ncr, it) => { const x = steps.filter(y => y.ncr_id === ncr && String(y.iteration) === String(it)).at(-1); return x?.data ? { ...x.data, example: x.basis === 'example' } : null; } };
   const caseLink = caseIds.length ? (await tx.query(`SELECT r.ncr_id, r.id AS request_id, j.id AS job_id FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.ncr_id = ANY($1)`, [caseIds])).rows : [];
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
@@ -144,7 +144,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
       awaiting: awaiting.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), what: n.status === 'awaiting_verification' ? 'Kapanış doğrulaması' : `${n.declared} aksiyon beyanı` })),
       closures: {
         tasks: closedTasks.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), closed: tr(t.completed_at), by: t.by ?? '—', outcome: t.outcome ?? null,
-          measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, at: tr(m.measured_at) })),
+          measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', at: tr(m.measured_at) })),
           basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
             relation: b.relation as string, sourceCase: b.case_title ?? null, linkedCase: b.linked_case_title ?? null, linkedBy: b.linked_by ?? null, linkedAt: b.linked_at ?? null, linkBasis: b.link_basis ?? null, basisNote: b.basis_note ?? null })) })),
         cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
@@ -220,7 +220,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     if (!r.sections.closures.tasks.length && !r.sections.closures.cases.length) none();
     for (const t of r.sections.closures.tasks) {
       p(`${t.title} · ${t.site} · kapanış ${t.closed} · ${t.by}`, { bold: true });
-      for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'} · ${m.at}`, { color: '#555' });
+      for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'}${m.example ? ' (ÖRNEK limit, doğrulanmamış)' : ''} · ${m.at}`, { color: '#555' });
       for (const b of t.basis) {
         p(`   Dayanak: ${b.title} · sürüm ${b.version} · ${b.review}${b.sha256 ? ` · özet ${b.sha256.slice(0, 12)}…` : ''}`, { color: '#555' });
         if (b.relation === 'linked') p(`   Rapor başka bir vakanın servisine ait (${b.sourceCase ?? '—'}); servis ${b.linkedCase ?? '—'} vakasıyla ${b.linkedBy ?? '—'} tarafından ilişkilendirildi; dayanak: ${b.linkBasis ?? '—'}`, { color: '#555' });
