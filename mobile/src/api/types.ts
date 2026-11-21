@@ -41,11 +41,13 @@ export type TaskDetail = {
   reportEvidence?: { accepted: boolean;
     links: { id: string; documentId: string; documentTitle: string; version: number; fileSha256: string | null; selectedBy: string; selectedAt: string;
       status: 'active' | 'replaced' | 'stale'; counts: boolean; completionBasis: boolean; reason: string | null;
-      relation?: 'direct' | 'equipment'; caseId?: string | null; caseTitle?: string | null; basisNote?: string | null }[];
+      relation?: 'direct' | 'sole' | 'linked' | 'declared' | 'legacy'; caseId?: string | null; caseTitle?: string | null; basisNote?: string | null;
+      linkBasis?: string | null; linkedAt?: string | null; linkedBy?: string | null; linkedCaseTitle?: string | null }[];
     options: { documentId: string; requestId: string; requestTitle: string; siteName: string; versionId: string; version: number; reason: string | null; selected: boolean;
-      relation?: 'direct' | 'equipment'; caseId?: string | null; caseTitle?: string | null; caseDetectedAt?: string | null; caseStatus?: string | null; requestCreatedAt?: string | null; providerName?: string | null }[] } | null;
+      relation?: 'direct' | 'sole' | 'linked' | 'equipment'; caseId?: string | null; caseTitle?: string | null; caseDetectedAt?: string | null; equipmentName?: string | null; serviceDate?: string | null;
+      linkedCaseTitle?: string | null; linkBasis?: string | null; linkedBy?: string | null; linkedAt?: string | null; caseStatus?: string | null; requestCreatedAt?: string | null; providerName?: string | null }[] } | null;
   serviceReports?: { blocked: boolean; reason: string | null; reports: {
-    requestId: string; requestTitle: string; relation?: 'direct' | 'equipment'; caseTitle?: string | null; jobStatus: string; providerName: string; documentId: string; documentTitle: string; siteName: string;
+    requestId: string; requestTitle: string; relation?: 'direct' | 'sole' | 'linked' | 'equipment'; caseTitle?: string | null; jobStatus: string; providerName: string; documentId: string; documentTitle: string; siteName: string;
     latest: { version: number; reviewStatus: 'unreviewed' | 'verified' | 'rejected' };
     versions: { version: number; reportVersion: number | null; reviewStatus: 'unreviewed' | 'verified' | 'rejected'; reviewNotes: string | null; reviewedBy: string | null; uploadedAt: string; fileStatus: string | null; isLatest: boolean }[] }[] };
   services?: { id: string; title: string; status: string; created_at: string }[];

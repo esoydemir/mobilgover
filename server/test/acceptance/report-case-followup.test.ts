@@ -63,8 +63,7 @@ describe('report of a case request → follow-up measurement task', () => {
     const rep = await caseReport(demo.fridgeId, 'Buzdolabı vakası');
     const opt = (await detail(measTask)).reportEvidence.options.find((o: any) => o.documentId === rep.documentId);
     expect(opt).toMatchObject({ reason: null, version: 1 });
-    expect((await owner().post(`${C()}/tasks/${measTask}/report-evidence`, { documentId: rep.documentId, versionId: rep.versionId })).status).toBe(422);
-    expect((await owner().post(`${C()}/tasks/${measTask}/report-evidence`, { documentId: rep.documentId, versionId: rep.versionId, basisNote: 'Vaka servisinden sonraki ilk ölçüm bu görevde yapılıyor.' })).status).toBe(200);
+    expect((await owner().post(`${C()}/tasks/${measTask}/report-evidence`, { documentId: rep.documentId, versionId: rep.versionId })).status).toBe(200);
     const d = await detail(measTask);
     expect(d.progress.missing).toEqual(['Ölçüm: sıcaklık (°C)']);
     const early = await owner().post(`${C()}/tasks/${measTask}/complete`, {});

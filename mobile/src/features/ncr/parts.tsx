@@ -201,6 +201,49 @@ export function CauseCard({ n, base, reload }: { n: NcrDetail; base: string; rel
 }
 
 /** Suggestions only lead somewhere; nothing is ordered or closed without the user. */
+/**
+ * A service already done for another case of the same equipment may also cover this case. A manager links it with a stated basis; only then can that
+ * report be the required service evidence of a task. Without the link it stays visible as supporting material.
+ */
+export function ServiceLinkCard({ n, base, reload }: { n: NcrDetail; base: string; reload: () => void }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [basis, setBasis] = useState('');
+  const { busy, error, run, post } = useRun(() => { setOpen(null); setBasis(''); reload(); });
+  const sl = n.serviceLinks;
+  if (!sl || (sl.linked.length === 0 && sl.linkable.length === 0)) return null;
+  return (
+    <View testID="ncr-service-links"><Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+      <Eyebrow color={C.info}>BAŞKA VAKANIN SERVİSİ</Eyebrow>
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Aynı ekipmanın başka bir vakası için yapılmış servis bu vakanın arızasını da kapsadıysa, bunu burada dayanağıyla kaydet. Kaydedilmeyen servis raporu yalnız destekleyici ek olarak görünür; görevin zorunlu servis kanıtını karşılamaz.</Text>
+      {sl.linked.map(l => (
+        <View key={l.id} testID={`ncr-service-linked-${l.job_id}`} style={{ gap: 3, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
+          <Text style={type(12.5, 600)}>{l.request_title} · rapor sürümü {l.version_number}</Text>
+          <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Kaynak vaka: {l.source_case_title ?? '—'} · ilişkilendiren: {l.linked_by} · {fmtDateTime(l.linked_at)}</Text>
+          <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Dayanak: {l.basis}</Text>
+        </View>
+      ))}
+      {sl.linkable.map(s => (
+        <View key={s.job_id} testID={`ncr-service-linkable-${s.job_id}`} style={{ gap: 4, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
+          <Text style={type(12.5, 600)}>{s.request_title} · rapor sürümü {s.version}</Text>
+          <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Kaynak vaka: {s.source_case_title ?? '—'} · talep {fmtDateTime(s.request_created_at)} · rapor {fmtDateTime(s.uploaded_at)}</Text>
+          {open === s.job_id ? (
+            <View style={{ gap: 7 }}>
+              <Field label="Dayanak (zorunlu, en az 15 karakter)" testID="ncr-service-link-basis" value={basis} onChangeText={setBasis} multiline placeholder="Servis bu vakanın arızasını da kapsıyor mu, nasıl biliniyor? (ör. rapor 2. sayfa madde 4)" />
+              {error ? <ErrorBox message={error} /> : null}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <PrimaryButton testID="ncr-service-link-save" label={busy ? 'Kaydediliyor…' : 'Bu servis bu vakayı da kapsıyor'} glow={false} height={38} size={12} style={{ flex: 1 }}
+                  disabled={busy || basis.trim().length < 15} onPress={() => run(() => post(`${base}/service-links`, { jobId: s.job_id, basis: basis.trim() }), 'Servis vakayla ilişkilendirildi', 'Kayıt geçmişe yazıldı.')} />
+                <GhostButton label="Vazgeç" height={38} size={12} onPress={() => { setOpen(null); setBasis(''); }} />
+              </View>
+              {basis.trim().length < 15 ? <Text style={type(11.5, 500, { color: C.t3 })}>Düğme, dayanak en az 15 karakter olunca açılır.</Text> : null}
+            </View>
+          ) : <GhostButton testID={`ncr-service-link-open-${s.job_id}`} label="Bu servisi bu vakayla ilişkilendir" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => setOpen(s.job_id)} />}
+        </View>
+      ))}
+    </Card></View>
+  );
+}
+
 export function SupportCard({ n, base, reload, onFollowUp, onAssign }: { n: NcrDetail; base: string; reload: () => void; onFollowUp: () => void; onAssign: () => void }) {
   const [deciding, setDeciding] = useState<string | null>(null);
   const [reason, setReason] = useState('');
