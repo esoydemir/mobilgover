@@ -123,9 +123,28 @@ Hâlâ açık (GH-05):
 - Sorumlu kişi kaydediliyor ama ona ayrıca bildirim gitmiyor (yalnız muhatap).
 - Ekranlar tarayıcıda görülmedi.
 
+## Yedinci dilim — GH-06 GoverUp: ihtiyaçtan hizmet
+
+- **Öneri motoru** (`GET /companies/:id/service-suggestions?siteId=`): yalnız okur; talep açmaz, işletme verisi paylaşmaz, ücrete göre sıralamaz. Her öneri okunur bir gerekçe taşır ve dayanağı türüyle gösterilir: profil (soğukta saklama + soğutucu → soğutma servisi; LPG → gaz tesisatı kontrolü), kayıt (açık soğuk zincir / gaz uygunsuzluğu → "açık kayıt var", aciliyet yükselir), belge (kayıtlı soğutucuya ait incelenmiş ve geçerli bakım raporu yok), konum (il / ilçe). Yetki: `service.request` (personel soramaz, 403).
+- **Eşleşme:** onaylı ve süresi dolmamış yetkisi olan uzmanlar; her satırda onayın bitiş tarihi ve kalan gün. Onay süresi dolan uzman eşleştirilmez, **kaç uzmanın bu nedenle dışarıda kaldığı** söylenir (`leftOutExpiredApproval`).
+- **Eşleşen yoksa:** `noMatch` + `openRequest` — yalnız konum ve kategoriyle açık talep önerisi; işletme adının teklif kabulüne kadar paylaşılmadığı yazılı. Talep mevcut `POST service-requests` ile açılıyor (testle, 201).
+- **Şikâyet (iki taraf)** — yeni tablo `service_complaints` (033): işletme `POST companies/:id/jobs/:jobId/complaints`, uzman `POST pro/jobs/:jobId/complaints`; iş başına taraf başına bir açık şikâyet (ikincisi 409); karşı taraf bildirim alır ve `…/respond` ile yanıtlar (açan kendi şikâyetine yanıt veremez, 403); karar yalnız pazar yeri değerlendiricisinde (`POST admin/marketplace/complaints/:id/resolve`, gerekçeli, ikinci karar 409). Şikâyet **iş durumunu, rapor belgesinin incelemesini ve uygunsuzluğu değiştirmez** (testle: iş `scheduled`, `accepted_at` boş, uygunsuzluk durumu aynı). Açma, yanıt ve karar denetim zincirine yazılır (3 olay). Başka uzman veya yetkisiz personel 404.
+- **Randevu / revizyon (iki taraf):** mevcut market-depth ve followthrough testleriyle kapsanıyor (öneren onaylayamaz, karşı taraf onaylar; iptal gerekçeli; revizyon sürümlü). Bu dilimde değişmedi.
+- **Operasyon listeleri** (`GET admin/marketplace/operations`, yalnız pazar yeri değerlendiricisi): açık talepler, geciken randevular, revizyon bekleyen raporlar, biten/bitmek üzere (30 gün) onaylar, açık şikâyetler. Her satır **bekleyen kişi/taraf, bekleme günü, sıradaki adım ve kayda bağlantı** taşır (testle, tüm satırlarda dolu).
+- Mobil: hizmet talepleri ekranında "İhtiyacına göre öneriler"; iş ayrıntısında (işletme) ve uzman işinde "Şikâyet" kartı; yönetim ekranında "Çalışma listeleri" ve şikâyeti karara bağlama.
+- Test: `gh06-goverup.test.ts` 9/9. Tam sunucu paketi: 503 geçti, 33 atlandı, 1 paket ortam nedeniyle çalışmadı (`backup-restore`: geri yükleme veritabanı değişkenleri ve `pg_dump` yok).
+- Elle yapılan tek veritabanı değişikliği (zaman kaydırma, test içinde yazılı): bir uzmanın onay bitişi dünün tarihine, bir randevunun başlangıcı geçmişe çekildi. Talep, teklif, kabul, bildirim, şikâyet ve rapor akışı genel API ile yürüdü.
+
+Hâlâ açık (GH-06):
+- **Öneri sinyalleri dar:** yalnız iki kategori (soğutma, gaz) haritalı. Elektrik vb. "destek kategorisi" için hangi profil/kayıt sinyalinin hangi kategoriyi önerdiği ürün kararı; eklenmedi.
+- **Onay yenileme süreci** yok: biten onay için uzman yeniden başvurur, sistemde ayrı "yenileme isteği" akışı veya otomatik hatırlatma yok; liste yalnız gösterir.
+- **Şikâyet** için kanıt eki, süre sınırı (yanıt gecikirse otomatik yükseltme) ve karar sonucunda uzman onayını askıya alma bağlantısı yok; karar metin olarak kalır, onay işlemi ayrı karardır.
+- Operasyon listelerinden kayda tek dokunuşla geçiş yok (kayıt türü + kimlik veriliyor, ekran bağlantısı yok).
+- Mobil ekranlar tarayıcıda/cihazda görülmedi; yalnız `tsc` derlemesi geçti.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
-- Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 ayrı iş.
+- Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 yalnız soğutma ve gaz kategorilerini haritaladı.
 - B-12 (320 px) ve B-16'nın EK-267 sayfa taraması tarayıcıda doğrulanmadı.
 
 - NACE kataloğu 12 sınıflık başlangıç alt kümesi; tam TÜİK listesi ve her sınıfın hangi yükümlülüğe bağlandığı ürün/hukuk kararıdır.

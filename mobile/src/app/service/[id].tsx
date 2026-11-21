@@ -8,7 +8,7 @@ import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
 import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
-import { AppointmentCard, MessageThread } from '../../features/ServiceExtras';
+import { AppointmentCard, ComplaintCard, MessageThread } from '../../features/ServiceExtras';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
 import { REQ_STATUS } from '../services';
@@ -131,6 +131,7 @@ export default function ServiceDetailRoute() {
       ) : null}
 
       {d.job && d.job.status !== 'cancelled' ? <AppointmentCard jobId={d.job.id} editable={d.job.status === 'scheduled'} /> : null}
+      {d.job ? <ComplaintCard jobId={d.job.id} /> : null}
 
       <Eyebrow>TEKLİFLER ({d.quotes.length})</Eyebrow>
       {d.quotes.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz teklif gelmedi. Yalnızca bu kategoride onaylı uzmanlar teklif verebilir.</Text> : null}

@@ -9,7 +9,7 @@ import { ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../compone
 import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../components/ui';
 import { addDays, fmtDate, fmtDateTime } from '../features/dates';
 import { Invitations } from '../features/Invitations';
-import { AppointmentCard, MessageThread } from '../features/ServiceExtras';
+import { AppointmentCard, ComplaintCard, MessageThread } from '../features/ServiceExtras';
 import { goRoot } from '../state/app';
 import { TYPE_LABEL, fileMeta, fmtSize, pickFile, uploadReportBytes, type Picked } from '../features/files';
 import { QUOTE_STATUS, RISK_LABEL, credentialLabel } from '../features/labels';
@@ -320,6 +320,7 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
   return (
     <View testID={`pro-job-${j.id}`}><Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
       {j.status === 'scheduled' ? <AppointmentCard provider jobId={j.id} editable /> : null}
+      <ComplaintCard provider jobId={j.id} />
       <Text style={type(14.5, 600)}>{j.title}</Text>
       <Text style={type(12, 400, { color: C.t2 })}>{j.company_name} · {j.site_name}</Text>
       <Text testID="pro-job-status" style={type(12, 600, { color: j.status === 'accepted' ? C.lime : C.warn })}>{({ scheduled: 'Planlandı', checked_in: 'Giriş yapıldı', report_submitted: 'Rapor gönderildi, teslim kabulü bekleniyor', accepted: 'İşletme teslim kabul etti', disputed: 'İşletme itiraz etti', revision_requested: 'İşletme revizyon istedi: yeni rapor gönder', cancelled: 'İşletme işi iptal etti' } as Record<string, string>)[j.status] ?? j.status}</Text>

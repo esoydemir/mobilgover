@@ -33,6 +33,7 @@ import { acceptInvitation, addMember, createCompany, listMyCompanies, listMyInvi
 import type { Mailer } from '../services/mail';
 import { loadPrincipal } from '../services/principal';
 import * as mk from '../services/marketplace';
+import * as sops from '../services/service-ops';
 import * as docs from '../services/documents';
 import * as verifiers from '../services/verifiers';
 import * as training from '../services/training';
@@ -957,6 +958,45 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
       minCredentials: z.coerce.number().int().min(0).max(10).optional(), reviewedOnly: z.enum(['true', 'false']).optional() }).parse(req.query);
     return db.system(tx => mk.providersFor(tx, q.category, { ...q, reviewedOnly: q.reviewedOnly === 'true' }));
   });
+  // ── GH-06: need-based suggestions, complaints (both sides), operations lists ──
+  app.get('/companies/:companyId/service-suggestions', async req => {
+    const companyId = company(req);
+    const { siteId } = z.object({ siteId: uuid }).parse(req.query);
+    return db.tenant(companyId, tx => sops.suggestServices(tx, req.principal, companyId, siteId));
+  });
+  const complaintBody = z.object({ reason: z.string().max(2000) });
+  const responseBody = z.object({ response: z.string().max(2000) });
+  app.get('/companies/:companyId/jobs/:jobId/complaints', async req => {
+    const companyId = company(req);
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return db.tenant(companyId, tx => sops.jobComplaints(tx, req.principal, 'business', jobId, companyId));
+  });
+  app.post('/companies/:companyId/jobs/:jobId/complaints', async (req, reply) => {
+    const companyId = company(req);
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, tx => sops.openComplaint(tx, req.principal, 'business', jobId, complaintBody.parse(req.body).reason, companyId), 201);
+  });
+  app.post('/companies/:companyId/complaints/:id/respond', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return mutate(req, reply, companyId, tx => sops.respondComplaint(tx, req.principal, 'business', id, responseBody.parse(req.body).response, companyId));
+  });
+  app.get('/pro/jobs/:jobId/complaints', async req => db.system(tx => sops.jobComplaints(tx, req.principal, 'provider', z.object({ jobId: uuid }).parse(req.params).jobId)));
+  app.post('/pro/jobs/:jobId/complaints', async (req, reply) => {
+    const { jobId } = z.object({ jobId: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => sops.openComplaint(tx, req.principal, 'provider', jobId, complaintBody.parse(req.body).reason), 201);
+  });
+  app.post('/pro/complaints/:id/respond', async (req, reply) => {
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    return userMutate(req, reply, tx => sops.respondComplaint(tx, req.principal, 'provider', id, responseBody.parse(req.body).response));
+  });
+  app.post('/admin/marketplace/complaints/:id/resolve', async req => {
+    platformGate(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ resolution: z.string().max(2000) }).parse(req.body);
+    return db.system(tx => sops.resolveComplaint(tx, req.principal, id, b.resolution));
+  });
+  app.get('/admin/marketplace/operations', async req => { platformGate(req); return db.system(tx => sops.operations(tx, req.principal)); });
   app.post('/companies/:companyId/service-requests', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().trim().min(3).max(200), description: z.string().trim().min(5).max(4000),

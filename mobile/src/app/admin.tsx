@@ -8,6 +8,7 @@ import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, SectionLabel } from '../components/states';
 import { Card, FilterChip, GhostButton, PrimaryButton } from '../components/ui';
 import { credentialLabel } from '../features/labels';
+import { MarketOps } from '../features/ServiceExtras';
 import { AuditTrail, PlatformOverview, PlatformRoles } from '../features/PlatformAdmin';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
@@ -106,6 +107,8 @@ export default function AdminRoute() {
 
       {queue.data || queue.error ? (
         <>
+          <SectionLabel>PAZAR YERİ · ÇALIŞMA LİSTELERİ</SectionLabel>
+          <MarketOps />
           <SectionLabel>PAZAR YERİ · BEKLEYEN BELGELER</SectionLabel>
           {queue.error ? <ErrorBox message={queue.error} /> : null}
           {queue.data?.verifications.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Bekleyen belge yok.</Text> : null}
