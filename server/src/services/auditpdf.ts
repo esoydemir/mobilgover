@@ -25,16 +25,21 @@ const CAUSE_TR: Record<string, string> = { knowledge: 'bilgi', equipment: 'ekipm
 const ACTION_TR: Record<string, string> = { correction: 'düzeltme', corrective_action: 'düzeltici faaliyet', follow_up: 'takip' };
 const clip = (x: unknown, n = 150) => { const t = String(x ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 /** One readable line per audit event of a closed case; null for events that add nothing to the sequence. */
-function caseLine(type: string, pl: any): string | null {
+type LineCtx = { action: (id: unknown) => string | null; effect: (ncrId: string, iteration: unknown) => any };
+const SVC_TR: Record<string, string> = { open: 'teklif bekliyor', awarded: 'teklif kabul edildi', scheduled: 'iş planlandı', checked_in: 'uzman sahada, rapor henüz yok', report_submitted: 'rapor teslim edildi, işletme kabulü bekliyor', revision_requested: 'rapor revizyonu istendi', accepted: 'servis teslimi işletmece kabul edildi', disputed: 'uyuşmazlık', completed: 'tamamlandı', cancelled: 'iptal' };
+const num = (v: unknown) => String(v).replace('.', ',');
+function caseLine(type: string, pl: any, ref = '', ctx?: LineCtx): string | null {
   switch (type) {
     case 'nonconformity.opened': return `Vaka açıldı: ${(pl.reasons ?? []).join('; ') || 'elle bildirildi'} · risk ${RISK_TR[pl.riskLevel] ?? pl.riskLevel ?? '—'}`;
     case 'nonconformity.step_done': return pl.step === 'containment' ? `İlk müdahale: ${clip(pl.notes)}`
-      : pl.step === 'effectiveness_check' ? `Etkinlik kontrolü: ${clip(pl.notes)}${pl.measurement ? ` (ölçüm ${String(pl.measurement.value).replace('.', ',')} ${pl.measurement.unit ?? ''})` : ''}` : null;
+      : pl.step === 'effectiveness_check' ? `Etkinlik kontrolü: ${clip(pl.notes)}${(() => { const m = ctx?.effect(ref, pl.iteration)?.measurement ?? pl.measurement; const ex = (ctx?.effect(ref, pl.iteration) as any)?.example ? ' (ÖRNEK limit, doğrulanmamış)' : ''; return m ? ` (yeni ölçüm ${num(m.value)}${m.unit ? ' ' + m.unit : ' · birim kaydedilmemiş'}${m.limitMin != null || m.limitMax != null ? ` · limit ${m.limitMin ?? '—'}…${m.limitMax ?? '—'}` : ' · limit kaydedilmemiş'}${m.within === true ? ' · limit içinde' : m.within === false ? ' · LİMİT DIŞI' : ''}${ex})` : ' (ölçüm kaydı yok)'; })()}` : null;
     case 'nonconformity.assigned': return 'Sorumlu ve termin atandı';
     case 'nonconformity.cause_assessed': return `Neden ${pl.stage === 'verified' ? 'doğrulandı' : 'değerlendirildi'} (${(pl.categories ?? []).map((c: string) => CAUSE_TR[c] ?? c).join(', ')}): ${clip(pl.notes)}`;
     case 'nonconformity.action_added': return `Aksiyon eklendi (${ACTION_TR[pl.kind] ?? pl.kind}): ${clip(pl.description)}`;
-    case 'nonconformity.action_done': return `Aksiyon yapıldı beyanı: ${clip(pl.notes)}`;
-    case 'nonconformity.action_verified': return `Aksiyon ${pl.mode === 'independent' ? 'bağımsız ' : pl.mode === 'self' ? 'öz ' : ''}doğrulandı: ${clip(pl.notes)}`;
+    case 'nonconformity.action_done': return `Aksiyon yapıldı beyanı${ctx?.action(pl.actionId) ? ` [${ctx.action(pl.actionId)}]` : ''}: ${clip(pl.notes)}`;
+    case 'nonconformity.action_verified': return `Aksiyon ${pl.mode === 'independent' ? 'bağımsız ' : pl.mode === 'self' ? 'öz ' : ''}doğrulandı${ctx?.action(pl.actionId) ? ` [${ctx.action(pl.actionId)}]` : ''}: ${clip(pl.notes)}`;
+    case 'nonconformity.verification_failed': return `Etkinlik doğrulanamadı (tur ${pl.iteration ?? '—'}): ${clip(pl.notes)}`;
+    case 'nonconformity.reopened': return `YENİDEN AÇILDI (tur ${pl.iteration ?? '—'}): ${clip(pl.reason, 220)}`;
     case 'nonconformity.closed': return `Vaka kapandı (${pl.mode === 'independent' ? 'bağımsız doğrulama' : pl.mode === 'self' ? 'öz doğrulama' : 'doğrulama'}): ${clip(pl.notes)}`;
     case 'service.requested': return 'Uzman hizmeti talep edildi';
     case 'service.quote_accepted': return 'Teklif kabul edildi';
@@ -59,10 +64,15 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
   const siteName = (id: string | null) => (id ? allSites.find(s => s.id === id)?.name ?? '—' : 'Tüm işletme');
   const role = p.memberships.filter(m => m.companyId === companyId).map(m => ROLE_TR[m.role]).join(', ') || (p.grants.some(g => g.companyId === companyId) ? 'Davetli dış kullanıcı' : '—');
 
-  const critical = (await tx.query(`SELECT n.id, n.site_id, n.title, n.risk_level, n.status, n.detected_at, n.due_at, u.display_name AS owner FROM nonconformities n
-     LEFT JOIN users u ON u.id = n.owner_id WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status <> 'closed' AND n.risk_level IN ('high','critical')
+  const critical = (await tx.query(`SELECT n.id, n.site_id, n.title, n.risk_level, n.status, n.detected_at, n.due_at, n.reopened_count, n.iteration, u.display_name AS owner, eq.name AS equipment FROM nonconformities n
+     LEFT JOIN users u ON u.id = n.owner_id LEFT JOIN equipment eq ON eq.id = n.equipment_id WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status <> 'closed' AND n.risk_level IN ('high','critical')
        AND n.detected_at < $3 ORDER BY CASE n.risk_level WHEN 'critical' THEN 0 WHEN 'high' THEN 1 ELSE 2 END, n.detected_at`, [companyId, siteIds, q.to])).rows
     .filter(n => can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id }).ok);
+  const critIds = critical.map(n => n.id);
+  const critEvents = critIds.length ? (await tx.query(`SELECT e.occurred_at, e.event_type, e.payload, u.display_name AS actor, e.entity_id AS ref FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
+     WHERE e.company_id = $1 AND e.entity_id = ANY($2::text[]) AND e.event_type IN ('nonconformity.step_done','nonconformity.closed','nonconformity.reopened','nonconformity.verification_failed') ORDER BY e.occurred_at`, [companyId, critIds])).rows : [];
+  const critSvc = critIds.length ? (await tx.query(`SELECT r.ncr_id, r.status, j.status AS job_status FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.ncr_id = ANY($1) ORDER BY r.created_at`, [critIds])).rows : [];
+  const critActs = critIds.length ? (await tx.query(`SELECT ncr_id, count(*)::int AS total, count(*) FILTER (WHERE verification_status IN ('declared','legacy') AND status = 'done')::int AS declared FROM ncr_actions WHERE ncr_id = ANY($1) AND status <> 'cancelled' GROUP BY ncr_id`, [critIds])).rows : [];
   const overdue = (await tx.query(`SELECT t.id, t.site_id, tt.title, t.due_at, u.display_name AS assignee FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
      LEFT JOIN users u ON u.id = t.assignee_id WHERE t.company_id = $1 AND t.site_id = ANY($2) AND t.status IN ('open','missed') AND t.due_at < now()
        AND t.due_at >= $3 AND t.due_at < $4 ORDER BY t.due_at`, [companyId, siteIds, q.from, q.to])).rows
@@ -98,7 +108,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
        (SELECT v.verification_mode FROM ncr_verifications v WHERE v.ncr_id = n.id ORDER BY v.verified_at DESC LIMIT 1) AS mode
      FROM nonconformities n LEFT JOIN users u ON u.id = n.closed_by WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status = 'closed' AND n.closed_at >= $3 AND n.closed_at < $4
      ORDER BY n.closed_at DESC LIMIT 200`, [companyId, siteIds, q.from, q.to])).rows.filter(n => can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id }).ok);
-  const taskMeas = closedTasks.length ? (await tx.query(`SELECT task_id, value, unit, within_limit, measured_at FROM measurements WHERE task_id = ANY($1) ORDER BY measured_at`, [closedTasks.map(t => t.id)])).rows : [];
+  const taskMeas = closedTasks.length ? (await tx.query(`SELECT task_id, value, unit, within_limit, measured_at, limit_source->>'basis' AS basis FROM measurements WHERE task_id = ANY($1) ORDER BY measured_at`, [closedTasks.map(t => t.id)])).rows : [];
   // Case sequence (6D): what happened in which order, from the audit trail of the case and of the service work linked to it.
   const caseIds = closedCases.map(n => n.id);
   const caseEvents = caseIds.length ? (await tx.query(
@@ -107,6 +117,9 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
          OR (e.event_type IN ('service.requested','service.quote_accepted','service.report_submitted','service.revision_requested','service.accepted')
              AND (e.entity_id IN (SELECT id::text FROM service_requests WHERE ncr_id = ANY($2::uuid[])) OR e.entity_id IN (SELECT j.id::text FROM service_jobs j JOIN service_requests r ON r.id = j.request_id WHERE r.ncr_id = ANY($2::uuid[])))))
       ORDER BY e.occurred_at`, [companyId, caseIds])).rows : [];
+  const steps = caseIds.length ? (await tx.query(`SELECT s.ncr_id, s.iteration, s.data, (SELECT m.limit_source->>'basis' FROM nonconformities n JOIN measurements m ON m.id = n.measurement_id WHERE n.id = s.ncr_id) AS basis FROM ncr_steps s WHERE s.ncr_id = ANY($1) AND s.step = 'effectiveness_check' ORDER BY s.done_at`, [caseIds])).rows : [];
+  const actionText = new Map<string, string>(); for (const e of caseEvents) if (e.event_type === 'nonconformity.action_added') actionText.set(String(e.payload?.actionId), clip(e.payload?.description, 70));
+  const ctx: LineCtx = { action: id => actionText.get(String(id)) ?? null, effect: (ncr, it) => { const x = steps.filter(y => y.ncr_id === ncr && String(y.iteration) === String(it)).at(-1); return x?.data ? { ...x.data, example: x.basis === 'example' } : null; } };
   const caseLink = caseIds.length ? (await tx.query(`SELECT r.ncr_id, r.id AS request_id, j.id AS job_id FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.ncr_id = ANY($1)`, [caseIds])).rows : [];
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
@@ -119,18 +132,24 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
     disclaimer: 'Bu dosya GoverHub kayıtlarının dökümüdür; resmî denetim sonucu ya da hukuki uygunluk beyanı değildir. Yalnız dosyayı alan kişinin erişebildiği kayıtlar ve ekler yer alır.',
     sections: {
       critical: critical.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), risk: RISK_TR[n.risk_level], status: n.status === 'awaiting_verification' ? 'Doğrulama bekliyor' : 'Açık',
+        ref: n.id.slice(0, 8), equipment: n.equipment ?? null, due: n.due_at ? tr(n.due_at) : null, reopened: n.reopened_count as number,
+        containment: (critEvents.filter(e => e.ref === n.id && e.event_type === 'nonconformity.step_done' && e.payload?.step === 'containment').at(-1)?.payload?.notes as string | undefined) ?? null,
+        service: critSvc.filter(x => x.ncr_id === n.id).map(x => { const k = String(x.job_status ?? x.status); return SVC_TR[k] ?? k; }),
+        actions: critActs.find(x => x.ncr_id === n.id) ?? { total: 0, declared: 0 },
+        history: critEvents.filter(e => e.ref === n.id && ['nonconformity.closed', 'nonconformity.reopened', 'nonconformity.verification_failed'].includes(e.event_type))
+          .map(e => `${tr(e.occurred_at)} · ${e.actor ?? '—'} · ${caseLine(e.event_type, e.payload)}`),
         detected: tr(n.detected_at), owner: n.owner ?? '—' })),
       overdue: overdue.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), due: tr(t.due_at), assignee: t.assignee ?? 'atanmamış' })),
       documents: docRows,
       awaiting: awaiting.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), what: n.status === 'awaiting_verification' ? 'Kapanış doğrulaması' : `${n.declared} aksiyon beyanı` })),
       closures: {
         tasks: closedTasks.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), closed: tr(t.completed_at), by: t.by ?? '—', outcome: t.outcome ?? null,
-          measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, at: tr(m.measured_at) })),
+          measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', at: tr(m.measured_at) })),
           basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
             relation: b.relation as string, sourceCase: b.case_title ?? null, linkedCase: b.linked_case_title ?? null, linkedBy: b.linked_by ?? null, linkedAt: b.linked_at ?? null, linkBasis: b.link_basis ?? null, basisNote: b.basis_note ?? null })) })),
-        cases: closedCases.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
+        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
           sequence: caseEvents.filter(e => e.ref === n.id || caseLink.some(l => l.ncr_id === n.id && (l.request_id === e.ref || l.job_id === e.ref)))
-            .map(e => ({ at: tr(e.occurred_at), who: e.actor ?? '—', text: caseLine(e.event_type, e.payload) })).filter(x => x.text) })),
+            .map(e => ({ at: tr(e.occurred_at), who: e.actor ?? '—', text: caseLine(e.event_type, e.payload, e.ref, ctx) })).filter(x => x.text) })),
       },
       sources: sources.map(s => ({ site: siteName(s.site_id), rule: `${s.code} v${s.version}`, title: s.obligation_title, kind: s.kind === 'legal_requirement' ? 'Mevzuat' : 'İyi uygulama',
         example: s.is_example, source: s.source ?? 'Kaynak hükmü bağlı değil', decision: s.decision })),
@@ -167,7 +186,13 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
 
     h1(`1. Açık kritik ve yüksek riskli kayıtlar (${r.sections.critical.length})`);
     if (!r.sections.critical.length) none();
-    for (const n of r.sections.critical) { p(`${n.risk} · ${n.title}`, { bold: true }); p(`${n.site} · ${n.status} · tespit ${n.detected} · sorumlu ${n.owner}`, { color: '#555' }); doc.moveDown(0.2); }
+    for (const n of r.sections.critical) {
+      p(`${n.risk} · ${n.title} · kayıt no ${n.ref}${n.reopened ? ` · ${n.reopened} kez yeniden açıldı` : ''}`, { bold: true });
+      p(`${n.site}${n.equipment ? ` · ekipman: ${n.equipment}` : ''} · ${n.status} · tespit ${n.detected} · sorumlu ${n.owner === '—' ? 'ATANMAMIŞ' : n.owner} · termin ${n.due ?? 'belirlenmemiş'}`, { color: '#555' });
+      p(`   İlk müdahale: ${n.containment ? clip(n.containment, 160) : 'kayıtlı değil'} · aksiyon: ${n.actions.total} (${n.actions.declared} beyan doğrulanmadı) · servis: ${n.service.length ? n.service.join(', ') : 'talep yok'}`, { color: '#555', size: 8.5 });
+      for (const h of n.history) p(`   ${h}`, { color: '#555', size: 8.5 });
+      doc.moveDown(0.2);
+    }
 
     h1(`2. Geciken kontroller (${r.sections.overdue.length})`);
     if (!r.sections.overdue.length) none();
@@ -182,7 +207,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
 
     h1(`4. Doğrulama bekleyen işlemler (${r.sections.awaiting.length})`);
     if (!r.sections.awaiting.length) none();
-    for (const n of r.sections.awaiting) p(`${n.title} · ${n.site} · ${n.what}`);
+    for (const n of r.sections.awaiting) p(`${n.title} · kayıt no ${n.id.slice(0, 8)} · ${n.site} · ${n.what}`);
 
     h1(`5. Kaynak ve kural sürümleri (${r.sections.sources.length})`);
     if (!r.sections.sources.length) none();
@@ -195,7 +220,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     if (!r.sections.closures.tasks.length && !r.sections.closures.cases.length) none();
     for (const t of r.sections.closures.tasks) {
       p(`${t.title} · ${t.site} · kapanış ${t.closed} · ${t.by}`, { bold: true });
-      for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'} · ${m.at}`, { color: '#555' });
+      for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'}${m.example ? ' (ÖRNEK limit, doğrulanmamış)' : ''} · ${m.at}`, { color: '#555' });
       for (const b of t.basis) {
         p(`   Dayanak: ${b.title} · sürüm ${b.version} · ${b.review}${b.sha256 ? ` · özet ${b.sha256.slice(0, 12)}…` : ''}`, { color: '#555' });
         if (b.relation === 'linked') p(`   Rapor başka bir vakanın servisine ait (${b.sourceCase ?? '—'}); servis ${b.linkedCase ?? '—'} vakasıyla ${b.linkedBy ?? '—'} tarafından ilişkilendirildi; dayanak: ${b.linkBasis ?? '—'}`, { color: '#555' });
@@ -205,7 +230,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
       }
     }
     for (const n of r.sections.closures.cases) {
-      p(`Kayıt kapandı: ${n.title} · ${n.site} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
+      p(`Kayıt kapandı: ${n.title} · kayıt no ${n.ref} · ${n.site} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
       for (const e of n.sequence) p(`   ${e.at} · ${e.who} · ${e.text}`, { color: '#555', size: 8.5 });
       doc.moveDown(0.2);
     }

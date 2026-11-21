@@ -35,7 +35,7 @@ export async function createFromTask(tx: Tx, p: Principal, companyId: string, ta
   const recurrence = await recurrenceOf(tx, companyId, task.hazard_type, task.equipment_id);
   const risk = assessRisk(task.severity as Severity, recurrence);
   const title = measurement
-    ? `${task.title}: ${measurement.value} ${measurement.unit} (limit ${measurement.limit_min ?? '—'}…${measurement.limit_max ?? '—'} ${measurement.unit})`
+    ? `${task.title}: ${measurement.value} ${measurement.unit} (limit ${measurement.limit_min ?? '—'}…${measurement.limit_max ?? '—'} ${measurement.unit}${measurement.limit_source?.basis === 'example' ? ' · ÖRNEK limit, doğrulanmadı' : ''})`
     : `${task.title}: uygunsuz sonuç`;
   const r = await tx.query<{ id: string }>(
     `INSERT INTO nonconformities (company_id, site_id, task_id, measurement_id, equipment_id, hazard_type, title, description,
