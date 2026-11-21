@@ -1342,13 +1342,15 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   const isoDate = z.iso.date().nullable();
   app.get('/companies/:companyId/documents', async req => {
     const companyId = company(req);
-    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional(), filter: z.enum(['expiring', 'expired', 'pending_review', 'rejected', 'no_file']).optional() }).parse(req.query);
+    const q = z.object({ siteId: uuid.optional(), equipmentId: uuid.optional(), filter: z.enum(['expiring', 'expired', 'pending_review', 'rejected', 'no_file', 'info_needed']).optional() }).parse(req.query);
     return db.tenant(companyId, tx => docs.listDocuments(tx, req.principal, companyId, q));
   });
   app.post('/companies/:companyId/documents', async (req, reply) => {
     const companyId = company(req);
     const b = z.object({ docType: z.enum(docs.DOC_TYPES), title: z.string().max(200), siteId: uuid.nullable().default(null), equipmentId: uuid.nullable().default(null),
-      issuer: z.string().max(200).nullable().default(null), documentNo: z.string().max(100).nullable().default(null) }).parse(req.body);
+      issuer: z.string().max(200).nullable().default(null), documentNo: z.string().max(100).nullable().default(null),
+      keepPurpose: z.string().max(300).nullable().optional(), responsibleId: uuid.nullable().optional(), remindDays: z.number().int().min(1).max(365).nullable().optional(),
+      remindUserId: uuid.nullable().optional(), reviewOn: isoDate.optional() }).parse(req.body);
     return mutate(req, reply, companyId, tx => docs.createDocument(tx, req.principal, companyId, b), 201);
   });
   app.get('/companies/:companyId/documents/:id/use-choices', async req => {
@@ -1387,7 +1389,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/documents/:id/versions', async (req, reply) => {
     const companyId = company(req);
     const { id } = z.object({ id: uuid }).parse(req.params);
-    const b = z.object({ validFrom: isoDate.default(null), validUntil: isoDate.default(null), notes: z.string().max(2000).nullable().default(null),
+    const b = z.object({ validFrom: isoDate.default(null), validUntil: isoDate.default(null), endKind: z.enum(['none', 'unknown']).optional(), notes: z.string().max(2000).nullable().default(null),
       file: z.object({ mime: z.string(), sha256: z.string(), sizeBytes: z.number().int().positive().max(config.maxUploadBytes) }) }).parse(req.body);
     return mutate(req, reply, companyId, tx => docs.addVersion(tx, req.principal, companyId, id, b), 201);
   });
@@ -1406,8 +1408,22 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/documents/:id/versions/:versionId/review', async (req, reply) => {
     const companyId = company(req);
     const { id, versionId } = z.object({ id: uuid, versionId: uuid }).parse(req.params);
-    const b = z.object({ decision: z.enum(['verified', 'rejected']), notes: z.string().max(2000), validFrom: isoDate.optional(), validUntil: isoDate.optional() }).parse(req.body);
+    const b = z.object({ decision: z.enum(['verified', 'rejected']), notes: z.string().max(2000), validFrom: isoDate.optional(), validUntil: isoDate.optional(), endKind: z.enum(['none', 'unknown']).optional() }).parse(req.body);
     return mutate(req, reply, companyId, tx => docs.reviewVersion(tx, req.principal, companyId, id, versionId, b));
+  });
+
+  app.post('/companies/:companyId/documents/:id/settings', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ keepPurpose: z.string().max(300).nullable().optional(), responsibleId: uuid.nullable().optional(), remindDays: z.number().int().min(1).max(365).nullable().optional(),
+      remindUserId: uuid.nullable().optional(), reviewOn: isoDate.optional() }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.updateDocumentSettings(tx, req.principal, companyId, id, b));
+  });
+  app.post('/companies/:companyId/documents/:id/archive', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ reason: z.string().max(500) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => docs.archiveDocument(tx, req.principal, companyId, id, b.reason));
   });
 
   // ── Retention matrix ──

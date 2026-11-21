@@ -98,6 +98,31 @@ Hâlâ açık (GH-02):
 - Çelişki tanımı: doğrulanmamış OCR değeri onaylı yanıtın yerini alınca karar "bilgi eksik" olur. İki doğrulanmış kaynağın birbiriyle çelişmesi (şube/şirket) için ayrı kural yok; şube yanıtı şirketinkini geçer.
 - Ekranlar tarayıcıda görülmedi.
 
+## Altıncı dilim · GH-05 evrak kasası (22 Kasım)
+
+Zaten vardı: belge + sürüm + dosya, yükleyenden farklı kişi incelemesi ("yükleme geçerlilik değildir"), kurum içi inceleme ≠ düzenleyen doğrulaması, şirket belgesinin şubelere kopyasız paylaşımı (`document_shares`), kullanım bağlantıları (`document_links`: görev/ekipman/yükümlülük), bitişte tek uyarı, yenileme bekleyen sürüm geçerli saymaz, OCR önerisi + teyit, QR ve dosya erişiminin belge okuma hakkına bağlı olması.
+
+Eklenen (migrasyon `032`, `services/documents.ts`):
+- **Yeni türler:** `pest_report` (pest hizmet raporu), `signature_circular` (imza sirküleri); serbest tür `other`.
+- **Saklanma amacı ≠ yükümlülüğü karşılama:** belgede `keepPurpose`; hangi yükümlülüğü karşıladığı ayrı (`satisfiesObligations`, kullanım bağlantılarından). Biri diğerini değiştirmez.
+- **Üç tarih durumu:** sürümde `end_kind` = `dated` (bitişi var) / `none` (bitiş tarihi yok) / `unknown` (tarih henüz bilinmiyor). Ad veya türden süre türetilmez (testle: adında "1 yıl geçerli" yazan poliçe `unknown` kalır). Veritabanı tetikleyicisi bitiş tarihi varsa `dated` yapar; eski satırlar buna göre dolduruldu.
+- **Bilgi tamamlama listesi:** `GET documents?filter=info_needed`; inceleyen tarihi yazınca veya "bitişi yok" deyince çıkar.
+- **Gözden geçirme tarihi** (`review_on`) bitişten ayrı, isteğe bağlı.
+- **Hatırlatma aralığı ve muhatap:** belge başına `remindDays` (1–365, varsayılan 30) ve `remindUserId`; yalnız etkin ve kapsamı kapsayan üye seçilebilir; muhatap seçiliyse uyarı yalnız ona gider, yoksa belgeyi tutanlara. Eşikte ve bitişte birer uyarı (sürüm+tarih anahtarı), tekrar taramada yenisi çıkmaz.
+- **Yenileme kabulünde eski uyarı:** yeni sürüm doğrulanınca gelen kutusundaki eski uyarı "belge yenilendi" diye eski işaretlenir, yenisi için uyarı çıkmaz (testle).
+- **Bitişsiz belge:** süre aşımı uyarısı üretmez (10 yıl ilerisi taramada); `POST documents/:id/archive` (gerekçeli) listeden ve hatırlatmalardan çıkarır, sürümler ve dosyalar silinmez.
+- **Reddedilen son sürüm:** `latestRejection` (gerekçe görünür) ve `stillValid` (önceki doğrulanmış sürüm, kalan gün) ile `satisfiesObligations` ayrı gösterilir.
+- **Yetki kalkınca:** paylaşım geri alınınca veya üyelik pasifleşince liste, ayrıntı, dosya ve QR aynı anda kapanır (testle, dördü birlikte).
+- Mobil: yeni tür etiketleri, "Bilgi tamamlama" süzgeci, "Süresiz / Tarih bilinmiyor" rozetleri, ret gerekçesi, kalan geçerlilik, saklanma amacı.
+- Test: `document-vault-dates.test.ts` 9/9; mevcut belge ve QR testleri değişmeden geçti.
+
+Hâlâ açık (GH-05):
+- **Yenileme görevi** görev sistemine bağlı bir iş olarak açılmıyor; yenileme bugün uyarı + süzgeçle ("yakında bitecek / doldu") yürüyor. Görev motoru kural sürümüne bağlı olduğu için belge kaynaklı görev şema kararıdır.
+- **Özel evrak:** ayrı bir "yalnız şu kişiler" listesi yok; erişim rol/şube kapsamı ve şirket belgesi paylaşımıyla sınırlı. Kişi bazlı izin listesi eklemedik.
+- Belgeye ait ayarlar (amaç, sorumlu, hatırlatma, gözden geçirme) API'de (`POST documents/:id/settings`) ve oluşturmada var; mobilde bunları **düzenleyen ekran yok**, yalnız gösteriliyor.
+- Sorumlu kişi kaydediliyor ama ona ayrıca bildirim gitmiyor (yalnız muhatap).
+- Ekranlar tarayıcıda görülmedi.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 ayrı iş.
