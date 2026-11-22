@@ -224,7 +224,7 @@ async function retryInfo(tx: Tx, cfg?: LegislationConfig) {
   if (okToday) return null;
   const a = (await tx.query<{ n: number; last: Date | null; res: any }>(`SELECT count(*)::int AS n, max(started_at) AS last, (array_agg(results ORDER BY started_at DESC))[1] AS res FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule'`, [today])).rows[0]!;
   if (!a.n) return null;
-  const plan = retryPlan(a.n, a.last, new Date());
+  const plan = retryPlan(a.n, a.last ? new Date(a.last) : null, new Date());
   const errs = (Array.isArray(a.res) ? a.res : []).flatMap((r: any) => [...(r.errors ?? []), ...(r.error ? [r.error] : [])]).slice(0, 3);
   return { attempts: a.n, maxAttempts: RETRY_MAX_ATTEMPTS, nextAttemptAt: plan.nextAttemptAt, exhausted: plan.exhausted, lastErrors: errs };
 }

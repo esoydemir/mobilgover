@@ -170,5 +170,16 @@ describe('GH-17 okunamayan yayın: yeniden deneme aralığı', () => {
       await legislationTick(e2.db, cfg, t('23:00')); expect(await q()).toBe(2);                 // tekrar kuyruğa girmez
     } finally { await e2.close(); }
   });
+  it('yönetici ekranı: bugünkü başarısız planlı tarama için deneme sayısı, son hata ve sonraki deneme zamanı görünür', async () => {
+    const day = istanbulDay(); const s3 = new SyntheticSource(); const id = `${day.replaceAll('-', '')}-55`;
+    const e3 = await freshEnv({ legislation: s3.config({ enabled: true, scanHour: 0 }) });
+    try {
+      const p3 = await seedPlatform(e3.db);
+      s3.publish(day, { id, category: 'YÖNETMELİKLER', title: 'Sentetik Taşınmaz Aracılık Teminat Yönetmeliği (ÖRNEK)', sayi: 99355, articles: ['Metin okunamayacak.'] }); s3.unreadable.add(id);
+      await legislationTick(e3.db, s3.config({ enabled: true, scanHour: 0 }), new Date());
+      const ov = (await client(e3, p3.admin.token).get('/admin/legislation/overview')).body.schedule;
+      expect(ov.retry).toMatchObject({ attempts: 1, maxAttempts: 5, exhausted: false }); expect(typeof ov.retry.nextAttemptAt).toBe('string'); expect(ov.retry.lastErrors.join(' ')).toMatch(/okunamadı|boş|yanıt/i);
+    } finally { await e3.close(); }
+  });
 });
 async function seedPlatformAdminToken(e: Env) { const id = (await e.ownerDb.query(`SELECT user_id AS id FROM platform_roles WHERE role = 'platform_admin' LIMIT 1`)).rows[0].id as string; return e.db.system(tx => createSession(tx, id, 24)); }
