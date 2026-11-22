@@ -21,7 +21,7 @@ export function ActivityStatus({ onChanged }: { onChanged?: () => void }) {
   const load = () => { if (company) call<Activity>('GET', `/companies/${company.id}/activity`).then(setA).catch(e => setError(errorText(e))); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [company?.id]);
-  if (error) return <ErrorBox message={error} />;
+  if (error) return <ErrorBox message={error} onRetry={() => { setError(null); load(); }} />;
   if (!a) return null;
   return (
     <View style={{ borderWidth: 1, borderColor: a.missing ? tint.warn(0.35) : C.bd, backgroundColor: a.missing ? tint.warn(0.06) : C.card, borderRadius: 20, padding: 15, gap: 10 }}>

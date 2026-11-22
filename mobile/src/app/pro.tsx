@@ -143,6 +143,9 @@ function MyProfessionalArea() {
   };
   if (me.loading && me.data === null && !me.error) return <Screen title="Uzman alanı" titleEn="Professional"><Loading /></Screen>;
 
+  // B-08: a failed load is not "no profile": show the error with a retry instead of the create form.
+  if (me.error && me.data === null) return <Screen title="Uzman alanı" titleEn="Professional"><ErrorBox message={me.error} onRetry={() => { void me.reload(); }} /></Screen>;
+
   if (!me.data) {
     return (
       <Screen title="Uzman alanı" titleEn="Professional">

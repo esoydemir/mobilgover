@@ -1,0 +1,22 @@
+[
+ {
+  "id": "B-14",
+  "pass": true,
+  "note": "GoverHub kodu gibi görünmüyor ya da bozuk. Kodu yeniden okut; olmazsa etiketteki bağlantıyı aşağıya yapıştır. | Yeniden: 0"
+ },
+ {
+  "id": "B-03",
+  "pass": false,
+  "note": "4 karakter: \"(yok)\" | 5 karakter: \"(yok)\""
+ },
+ {
+  "id": "B-12 (yatay)",
+  "pass": true,
+  "note": "{\"tumu\":{\"l\":246,\"r\":298,\"w\":52},\"bell\":{\"l\":254,\"r\":298,\"w\":44},\"ctx\":{\"l\":77,\"r\":188,\"w\":111},\"vw\":320,\"hscroll\":false}"
+ },
+ {
+  "id": "B-12 (alt menü)",
+  "pass": true,
+  "note": "{\"scroller\":true,\"lastBottom\":481,\"tabTop\":528}"
+ }
+]

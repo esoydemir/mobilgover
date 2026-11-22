@@ -558,7 +558,8 @@ export async function equipmentGaps(tx: Tx, companyId: string, siteIds: string[]
     const site = (await tx.query<{ name: string }>(`SELECT name FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
     if (!site) continue;
     const facts = await currentFacts(tx, companyId, siteId);
-    for (const o of await currentObligations(tx, companyId, siteId)) {
+    // legal requirements are named before good practices when several obligations need the same thing
+    for (const o of (await currentObligations(tx, companyId, siteId)).sort((x, y) => Number(y.kind === 'legal_requirement') - Number(x.kind === 'legal_requirement'))) {
       const meta = (await tx.query(`SELECT obligation_title, (SELECT code FROM rules WHERE id = rule_id) AS code FROM rule_versions WHERE id = $1`, [o.rule_version_id])).rows[0];
       if (o.decision === 'needs_info') {
         for (const key of (o.missing_facts as string[]) ?? []) {

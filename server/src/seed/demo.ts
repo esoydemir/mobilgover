@@ -169,7 +169,7 @@ export async function ensureReportRules(db: Db) {
 const FOOD_SCOPE = { all: [{ fact: 'activity.food_business', op: 'eq', value: true }, { fact: 'storage.cold', op: 'eq', value: true }] };
 export const EXAMPLE_RULE_REVISIONS: { code: string; reason: string; apply: (v1: Omit<DraftInput, 'provisionIds'>) => Omit<DraftInput, 'provisionIds'> }[] = ['EX-COLD-CHAIN', 'EX-REPORT-DOC', 'EX-REPORT-MEAS'].map(code => ({
   code, reason: 'Kapsam düzeltmesi: yalnız yemek hazırlayanlar değil, soğukta ürün saklayan gıda işletmeleri (ör. soğuk ürün satan market) de kapsanır.',
-  apply: v1 => ({ ...v1, condition: FOOD_SCOPE, changeReason: 'Kapsam düzeltmesi (v2): gıda faaliyeti + soğukta saklama; yemek hazırlama şartı kalktı. ÖRNEK kural.' }),
+  apply: v1 => ({ ...v1, condition: FOOD_SCOPE, obligationSummary: code === 'EX-COLD-CHAIN' ? 'Soğukta ürün saklayan gıda işletmeleri (yemek hazırlayanlar ve soğuk ürün satanlar) ünite sıcaklıklarını düzenli ölçüp kaydeder. ÖRNEK kural.' : v1.obligationSummary, changeReason: 'Kapsam düzeltmesi (v2): gıda faaliyeti + soğukta saklama; yemek hazırlama şartı kalktı. ÖRNEK kural.' }),
 }));
 
 /** Moves the example cold-chain checks from v1 to the scope revision through the normal review and publish flow, once. */

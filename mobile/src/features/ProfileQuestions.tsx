@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
 import { useSession } from '../api/session';
@@ -23,9 +24,11 @@ export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet' }: { onSaved?
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!company || !siteId) return;
+    setError(null);
     (async () => {
       try {
         const [cat, cur] = await Promise.all([
@@ -36,10 +39,18 @@ export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet' }: { onSaved?
         setCurrent(cur);
       } catch (e) { setError(errorText(e)); }
     })();
-  }, [company, siteId, call]);
+  }, [company, siteId, call, attempt]);
 
   const changed = useMemo(() => Object.entries(answers).filter(([k, v]) => v !== undefined && JSON.stringify(v) !== JSON.stringify(current[k]?.value)), [answers, current]);
 
+  // B-08: an account without a business (an expert, for example) has no profile; say so instead of loading forever.
+  if (!company || !siteId) return (
+    <View style={{ gap: 10 }}>
+      <Text testID="profile-no-business" style={type(13.5, 400, { color: C.t2, lh: 1.5 })}>Bu sayfa işletme profili içindir. Bu hesapta bağlı bir işletme veya şube yok. Uzman profilin ayrı bir yerde: orada profilini görür, yoksa açabilirsin.</Text>
+      <PrimaryButton testID="profile-open-pro" label="Uzman alanını aç" glow={false} height={44} size={13} onPress={() => router.push('/pro')} />
+    </View>
+  );
+  if (error && !catalog) return <ErrorBox message={error} onRetry={() => setAttempt(a => a + 1)} />;
   if (error) return <ErrorBox message={error} />;
   if (!catalog) return <Loading />;
 
