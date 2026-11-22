@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
 import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
@@ -16,11 +16,11 @@ type Source = { code: string; name: string; base_url: string; is_example: boolea
   last_error_kind?: string | null; last_docs_read?: number | null; last_items_seen?: number | null; queue_total?: number; queue_open?: number };
 type Overview = {
   sources: Source[]; lastSuccessfulScan: { finished_at: string; trigger: string } | null; lastRun: { status: string; started_at: string; trigger: string; results?: { source: string; seen: number; selected?: number; uncertain?: number; skipped?: { title: string; why: string }[]; docsRead: number; created: number }[] } | null;
-  recentSkipped?: { title: string; why: string; firstDay: string; lastDay: string; scans: number }[];
+  recentSkipped?: { key: string; url: string | null; status: 'out_of_scope' | 'unreadable'; title: string; why: string; firstDay: string; lastDay: string; scans: number }[];
   pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number; nextRunAt?: string | null; missedDays?: string[] }; baselineNote?: string; canScan: boolean; exampleNote: string;
 };
 type Row = { id: string; source_code: string; change_type: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null;
-  date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null; match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null; body_sectors?: string[] | null };
+  date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null; match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null; body_sectors?: string[] | null; waiting_reason?: string | null; source_pub_id?: string | null; source_url?: string | null };
 const SECTOR_TR: Record<string, string> = { food: 'Gıda', electrical: 'Elektrik', estate: 'Emlak' };
 
 const ERROR_KIND_TR: Record<string, string> = { timeout: 'Zaman aşımı', blocked: 'Erişim engeli', not_found: 'Sayfa yok', http_error: 'Sunucu hatası', network: 'Bağlantı hatası', empty: 'Boş yanıt', unexpected_format: 'Beklenmeyen biçim (HTML değil / sayfa yapısı değişmiş)', corrupt: 'Bozuk/eksik metin', refused_link: 'Resmî olmayan bağlantı reddedildi', unknown: 'Sınıflanmamış hata' };
@@ -110,7 +110,14 @@ export default function LegislationRoute() {
             <Text style={type(14, 700)}>Kapsam dışı sayılan yayınlar · son 14 gün ({o.recentSkipped?.length ?? 0})</Text>
             <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Bunlar kuyruğa GİRMEZ ve bir işletmeyi etkilemez. Bir yayının atlanmış olabileceğini düşünüyorsan buradan bul; sınıflandırma yalnız başlığa ve metindeki iş kolu ifadelerine dayanır.</Text>
             {(o.recentSkipped ?? []).length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Atlanan yayın yok.</Text> : null}
-            {(o.recentSkipped ?? []).map((k, i) => <Text key={i} testID={`leg-skipped-${i}`} style={type(12, 400, { color: C.t2, lh: 1.45 })}>{k.title} — {k.why} ({k.firstDay === k.lastDay ? k.firstDay : `${k.firstDay} → ${k.lastDay}`} · {k.scans} taramada)</Text>)}
+            {(o.recentSkipped ?? []).map((k, i) => (
+              <View key={k.key} testID={`leg-skipped-${i}`} style={{ borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 6, gap: 2 }}>
+                <Text style={type(12.5, 600)}>{k.title}</Text>
+                <Text testID={`leg-skipped-status-${i}`} style={type(10.5, 700, { ls: 0.06, color: k.status === 'unreadable' ? C.warn : C.t3 })}>{k.status === 'unreadable' ? 'METNİ OKUNAMADI · SINIFLANDIRILAMADI' : 'KAPSAM DIŞI'} · yayın kimliği {k.key}</Text>
+                <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{k.why} ({k.firstDay === k.lastDay ? k.firstDay : `${k.firstDay} → ${k.lastDay}`} · {k.scans} taramada)</Text>
+                {k.url ? <Tap testID={`leg-skipped-link-${i}`} onPress={() => { void Linking.openURL(k.url!); }}><Text style={type(11.5, 600, { color: C.info })}>Kaynak yayını aç: {k.url}</Text></Tap> : null}
+              </View>
+            ))}
           </Card>
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{o.exampleNote}</Text>
         </>
@@ -142,6 +149,7 @@ export default function LegislationRoute() {
               </View>
               <Text style={type(14, 600, { lh: 1.35 })}>{r.doc_title}{r.article_ref ? ` · md. ${r.article_ref}` : ''}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>{r.typeLabel} · {SOURCE_TR[r.source_code] ?? r.source_code} · {r.doc_ref} · yayın {dayTr(r.published_on)} · yürürlük {r.effective_from ? dayTr(r.effective_from) : 'belirsiz'}</Text>
+              {r.waiting_reason ? <Text testID={`leg-waiting-${r.id}`} style={type(11.5, 600, { color: C.warn, lh: 1.4 })}>Kuyrukta bekliyor: {r.waiting_reason}</Text> : null}
             </Card>
           </Tap>
         );

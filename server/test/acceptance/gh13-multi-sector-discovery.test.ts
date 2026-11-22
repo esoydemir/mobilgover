@@ -34,6 +34,8 @@ describe('GH-13 çok sektörlü mevzuat keşfi', () => {
     expect(sectorRelevance(T.out)).toMatchObject({ level: 'out' }); expect(sectorRelevance(T.out).why).toMatch(/hiçbirine/);
     expect(sectorRelevance('Üniversitesi Elektrik Uygulama ve Araştırma Merkezi Yönetmeliği').level).toBe('out');
     expect(sectorRelevance('Panorama Sergi Yönetmeliği').level).toBe('out'); // "pano" sözcük içinde eşleşmez
+    expect(sectorRelevance('Kafe ve Restoran İşletmeleri Yönetmeliği')).toMatchObject({ level: 'clear', sectors: ['food'] }); // "kafe" kelime sınırı eşleşir
+    expect(sectorRelevance('Kafeterya Eğitim Yönetmeliği').level).toBe('out');
   });
 
   it('aşamalar ayrı ölçülür: görülen 4 → aday 2 + belirsiz 1 → kapsam dışı 1 → kuyruğa 3; onaydan önce işletme etkisi sıfır', async () => {

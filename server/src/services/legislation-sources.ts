@@ -148,8 +148,8 @@ export function parseEffective(clauses: string[], publishedOn: string | null): E
 export type Sector = 'food' | 'electrical' | 'estate';
 export const SECTOR_TR: Record<Sector, string> = { food: 'gıda güvenliği', electrical: 'Elektrik tesisatı', estate: 'Emlak ofisi' };
 const SECTOR_TERMS: Record<Sector, RegExp> = {
-  food: /gıda|hijyen|lokanta|restoran|kafe|yiyecek|i[çc]ecek|alerjen|soğuk zincir|bozulabilir|umumi hıfzıssıhha|yeme[\s-]*i[çc]me|tüketime sunulan|gıda i[şs]letme/i,
-  electrical: /elektrik|topraklama|kuvvetli akım|zayıf akım|yıldırım|paratoner|a[şs]ırı akım|elektrik tesis|[iİ]ç tesisat|ayd[ıi]nlatma tesis|pano|kaçak akım/i,
+  food: /gıda|hijyen|lokanta|restoran|kafe\b|yiyecek|i[çc]ecek|alerjen|soğuk zincir|bozulabilir|umumi hıfzıssıhha|yeme[\s-]*i[çc]me|tüketime sunulan|gıda i[şs]letme/i,
+  electrical: /elektrik|topraklama|kuvvetli akım|zayıf akım|yıldırım|paratoner|a[şs]ırı akım|elektrik tesis|[iİ]ç tesisat|ayd[ıi]nlatma tesis|pano\b|kaçak akım/i,
   estate: /emlak|gayrimenkul|ta[şs][ıi]nmaz|konut sat|kira(?:lama|c[ıi])|tapu|komisyoncu|aracılık hizmet|yetki belgesi|ta[şs][ıi]nmaz ticaret/i,
 };
 // General words only count at the START of a word ("yapı" must not match "yapılmasına", the verb in "Değişiklik Yapılmasına Dair").
@@ -161,6 +161,8 @@ export function sectorsInText(text: string): { sector: Sector; word: string }[] 
 }
 const NOT_FOOD = /üniversite|yüksekokul|uygulama ve araştırma merkezi|araştırma ve uygulama merkezi|enstitü/i;
 export type SectorMatch = { level: 'clear' | 'uncertain' | 'out'; sectors: Sector[]; why: string };
+/** The start of the first article, so two publications with the same title show different reasons. */
+function bodyExcerpt(text: string) { const t = text.replace(/\s+/g, ' '); const i = t.search(/MADDE\s*1/i); return t.slice(i < 0 ? 0 : i, (i < 0 ? 0 : i) + 110).trim(); }
 export function sectorRelevance(title: string): SectorMatch {
   if (NOT_FOOD.test(title)) return { level: 'out', sectors: [], why: 'Üniversite/merkez düzenlemesi: kapsam dışı.' };
   const hits = (Object.keys(SECTOR_TERMS) as Sector[]).flatMap(k => { const m = SECTOR_TERMS[k].exec(title); return m ? [{ k, w: m[0] }] : []; });
@@ -232,7 +234,7 @@ export function parseGazetteDocument(html: string, fallback: { title: string; pu
 }
 
 /** `docsRead`: documents (gazette items / watched consolidated texts) read and parsed in this scan, separate from `seen` (items or articles). */
-export type ScanOutcome = { seen: number; /** items matching a supported sector (clear) */ selected: number; /** items a person must classify */ uncertain: number; /** items outside every supported sector, with the reason */ skipped: { title: string; why: string }[]; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
+export type ScanOutcome = { seen: number; /** items matching a supported sector (clear) */ selected: number; /** items a person must classify */ uncertain: number; /** items outside every supported sector, with the reason */ skipped: { key: string; url: string; title: string; why: string }[]; /** items whose text could not be read: shown as such, retried by the next scan */ unreadable: { key: string; url: string; title: string; error: string }[]; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
 
 /**
  * The effective-date parts of a gazette instrument, kept in SEPARATE fields: the general entry-into-force clause, the
@@ -272,7 +274,7 @@ export function daysBack(today: string, n: number): string[] {
 }
 
 export async function scanGazette(o: { baseUrl: string; today: string; lookbackDays: number; fetcher: Fetcher; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
-  const out: ScanOutcome = { seen: 0, selected: 0, uncertain: 0, skipped: [], docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
+  const out: ScanOutcome = { seen: 0, selected: 0, uncertain: 0, skipped: [], unreadable: [], docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
   const base = o.baseUrl.replace(/\/+$/, '');
   for (const day of daysBack(o.today, o.lookbackDays)) {
     let items: GazetteItem[];
@@ -285,9 +287,10 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
     } catch (e) { out.errors.push(`${day}: ${(e as Error).message}`); continue; }
     out.seen += items.length;
     for (const it of items) {
+      const itemUrl = new URL(it.url, base + '/').toString(); const itemKey = `rg:${itemUrl.split('/').pop()!.replace(/\.html?$/i, '')}`;
       let rel: SectorMatch & { bodySectors?: Sector[] } = sectorRelevance(it.title);
       const mustRead = rel.level !== 'out' || AMENDMENT_TITLE.test(it.title); // an amendment title may hide its sector: read the text before deciding
-      if (!mustRead) { out.skipped.push({ title: it.title.slice(0, 160), why: rel.why }); continue; }
+      if (!mustRead) { out.skipped.push({ key: itemKey, url: itemUrl, title: it.title.slice(0, 160), why: rel.why }); continue; }
       try {
         const url = new URL(it.url, base + '/').toString();
         // Links inside the day list are followed only when they stay on the configured source host.
@@ -296,7 +299,7 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
         out.docsRead += 1;
         if (rel.level === 'out') {
           const hits = sectorsInText(doc.text);
-          if (!hits.length) { out.skipped.push({ title: it.title.slice(0, 160), why: 'Başlık değişiklik/kaldırma biçiminde; başlıkta da metinde de desteklenen iş kollarından (gıda, elektrik, emlak) ifade yok.' }); continue; }
+          if (!hits.length) { out.skipped.push({ key: itemKey, url: itemUrl, title: it.title.slice(0, 160), why: 'Başlık değişiklik/kaldırma biçiminde; başlıkta da metinde de desteklenen iş kollarından (gıda, elektrik, emlak) ifade yok. Okunan metin: «' + bodyExcerpt(doc.text) + '».' }); continue; }
           rel = { level: 'uncertain', sectors: [], bodySectors: [...new Set(hits.map(h => h.sector))],
             why: `Başlık hangi iş koluna ait olduğunu söylemiyor (yalnız "değişiklik/kaldırma"); metinde ${hits.map(h => `"${h.word}" (${SECTOR_TR[h.sector]})`).join(', ')} geçiyor. İnsan incelemesi gerekir.` };
         }
@@ -319,7 +322,7 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
             hint: type === 'article_amendment' ? 'Değişiklik metni var; değişen maddenin eski metni için ilgili mevzuatın birleştirilmiş metnine bakın.' : type === 'repeal' ? 'Yürürlükten kaldırma: ilgili kural sürümü için bitiş tarihi önerilir.' : 'Yeni düzenleme: kural koşulunu ve görevleri uzman yazmalı.',
             ...compareTexts(null, newText) },
         });
-      } catch (e) { out.errors.push(`${it.title.slice(0, 80)}: ${(e as Error).message}`); }
+      } catch (e) { out.errors.push(`${it.title.slice(0, 80)}: ${(e as Error).message}`); out.unreadable.push({ key: itemKey, url: itemUrl, title: it.title.slice(0, 160), error: (e as Error).message.slice(0, 200) }); }
     }
   }
   return out;
@@ -370,7 +373,7 @@ export function parseConsolidated(html: string): { title: string; articles: Reco
 }
 
 export async function scanConsolidated(o: { baseUrl: string; watch: WatchDoc[]; previous: Map<string, Record<string, string>>; fetcher: Fetcher; today: string; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
-  const out: ScanOutcome = { seen: 0, selected: 0, uncertain: 0, skipped: [], docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
+  const out: ScanOutcome = { seen: 0, selected: 0, uncertain: 0, skipped: [], unreadable: [], docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
   const base = o.baseUrl.replace(/\/+$/, '');
   for (const w of o.watch) {
     const url = `${base}/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=${w.tur}&MevzuatNo=${w.no}&MevzuatTertip=${w.tertip}`;

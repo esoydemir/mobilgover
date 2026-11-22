@@ -59,4 +59,4 @@ export function describeCondition(c: any): string[] {
 }
 
 const FREQ: Record<string, string> = { daily: 'Her gün', weekly: 'Haftalık', monthly: 'Aylık', yearly: 'Yıllık', hourly: 'Saatlik' };
-export const frequencyText = (r: any) => (r ? `${FREQ[r.freq] ?? String(r.freq)}${r.at ? ` · ${r.at}` : ''}` : '—');
+export const frequencyText = (r: any) => (r ? (r.freq === 'unset' ? 'Sıklık belirlenmedi' : r.freq === 'once' ? `Tek seferlik · ${r.on}${r.at ? ` ${r.at}` : ''}` : `${FREQ[r.freq] ?? String(r.freq)}${r.at ? ` · ${r.at}` : ''}`) : '—');

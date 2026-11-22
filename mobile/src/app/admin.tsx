@@ -13,7 +13,7 @@ import { AuditTrail, PlatformOverview, PlatformRoles } from '../features/Platfor
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
 
-type RuleVersion = { id: string; code: string; version: number; status: string; kind: string; is_example: boolean; obligation_title: string; required_review_areas: string[]; pendingAreaReviews: string[]; status_reason?: string | null };
+type RuleVersion = { id: string; code: string; version: number; status: string; kind: string; is_example: boolean; obligation_title: string; required_review_areas: string[]; pendingAreaReviews: string[]; pendingAreaAccess?: { area: string; canReview: boolean; reviewers: string[]; waiting: string | null; note: string }[]; status_reason?: string | null };
 type Queue = {
   verifications: { id: string; display_name: string; kind: string; credential_type: string | null; issuer: string; document_ref: string; valid_until: string | null }[];
   authorizations: { id: string; display_name: string; category_name: string; required_credentials: string[] }[];
@@ -72,10 +72,19 @@ export default function AdminRoute() {
               <Text style={type(11.5, 400, { color: C.t3 })}>Gerekli alan incelemesi: {r.required_review_areas.join(', ') || 'yok'}{r.pendingAreaReviews.length ? ` · bekleyen: ${r.pendingAreaReviews.join(', ')}` : ''}</Text>
               {r.status === 'in_review' ? (
                 <View style={{ gap: 8 }}>
-                  {r.pendingAreaReviews.map(a => (
-                    <GhostButton key={a} label={`${a} alanında onayla (alan uzmanı)`} height={38} size={12} disabled={note.trim().length < 5} why={shortWhy(note, 5, 'Not')}
-                      onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/area-review`, { area: a, decision: 'approved', notes: note.trim() }), 'Alan incelemesi kaydedildi')} />
-                  ))}
+                  {r.pendingAreaReviews.map(a => {
+                    const acc = r.pendingAreaAccess?.find(x => x.area === a);
+                    return acc && !acc.canReview ? (
+                      <View key={a} testID={`area-blocked-${a}`} style={{ borderWidth: 1, borderColor: tint.warn(0.35), borderRadius: 14, padding: 10, gap: 3 }}>
+                        <Text style={type(12, 700, { color: C.warn })}>{a} alanı · bu hesap inceleyemez</Text>
+                        <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>{acc.note}</Text>
+                        {acc.waiting ? <Text testID={`area-waiting-${a}`} style={type(11.5, 600, { color: C.warn, lh: 1.45 })}>{acc.waiting}</Text> : null}
+                      </View>
+                    ) : (
+                      <GhostButton key={a} testID={`area-approve-${a}`} label={`${a} alanında onayla (alan uzmanı)`} height={38} size={12} disabled={note.trim().length < 5} why={shortWhy(note, 5, 'Not')}
+                        onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/area-review`, { area: a, decision: 'approved', notes: note.trim() }), 'Alan incelemesi kaydedildi')} />
+                    );
+                  })}
                   <PrimaryButton label="Kuralı onayla" height={42} size={12.5} glow={false} disabled={r.pendingAreaReviews.length > 0}
                     onPress={() => decide('Kuralı onaylamak', () => call('POST', `/admin/rule-versions/${r.id}/approve`, { reason: note.trim() }), 'Kural onaylandı')} />
                 </View>

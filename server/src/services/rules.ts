@@ -10,10 +10,18 @@ import { notify } from './notifications';
 import { currentObligations, recomputeCompany } from './obligations';
 import { currentFacts } from './profile';
 
+/** Where a frequency comes from, shown next to it: the source text, the administrator's own choice, the business's plan, or an example scenario. */
+export const FREQUENCY_BASES = ['source', 'admin_choice', 'business_plan', 'example_scenario'] as const;
+const at = z.string().regex(/^\d{2}:\d{2}$/);
+const basis = z.enum(FREQUENCY_BASES).optional();
+const common = { perEquipmentType: z.string().optional(), basis, basisNote: z.string().max(300).optional() };
 const recurrenceSchema = z.union([
-  z.object({ freq: z.literal('daily'), at: z.string().regex(/^\d{2}:\d{2}$/), perEquipmentType: z.string().optional() }),
-  z.object({ freq: z.literal('weekly'), weekday: z.number().int().min(1).max(7), at: z.string().regex(/^\d{2}:\d{2}$/), perEquipmentType: z.string().optional() }),
-  z.object({ freq: z.literal('monthly'), day: z.number().int().min(1).max(28), at: z.string().regex(/^\d{2}:\d{2}$/), perEquipmentType: z.string().optional() }),
+  z.object({ freq: z.literal('once'), on: z.iso.date(), at, ...common }),
+  z.object({ freq: z.literal('daily'), at, ...common }),
+  z.object({ freq: z.literal('weekly'), weekday: z.number().int().min(1).max(7), at, ...common }),
+  z.object({ freq: z.literal('monthly'), day: z.number().int().min(1).max(28), at, ...common }),
+  /** Not decided yet. A draft may be saved and reviewed with it; a rule that creates tasks cannot be approved or published until it is set. */
+  z.object({ freq: z.literal('unset'), ...common }),
 ]);
 
 export const templateSchema = z.object({
@@ -157,7 +165,17 @@ export async function listRuleVersions(tx: Tx, p: Principal, status?: string) {
   const rows = (await tx.query(
     `SELECT rv.id, r.code, rv.version, rv.status, rv.kind, rv.is_example, rv.obligation_title, rv.required_review_areas, rv.author_id, rv.reviewer_id, rv.created_at, rv.published_at, rv.status_reason, rv.status_changed_at, rv.returned_at
        FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE ($1::text IS NULL OR rv.status = $1) ORDER BY r.code, rv.version`, [status ?? null])).rows;
-  for (const r of rows) r.pendingAreaReviews = r.status === 'in_review' ? await pendingAreas(tx, r) : [];
+  for (const r of rows) {
+    r.pendingAreaReviews = r.status === 'in_review' ? await pendingAreas(tx, r) : [];
+    // Per pending area: may THIS person review it, who may, and is anyone defined at all (nobody → the record waits, with that reason).
+    r.pendingAreaAccess = [];
+    for (const area of r.pendingAreaReviews as string[]) {
+      const names = (await tx.query<{ n: string; id: string }>(`SELECT u.display_name AS n, u.id FROM reviewer_areas a JOIN users u ON u.id = a.user_id WHERE a.area = $1 ORDER BY u.display_name`, [area])).rows;
+      const mine = names.some(x => x.id === p.userId);
+      r.pendingAreaAccess.push({ area, canReview: mine && r.author_id !== p.userId, reviewers: names.map(x => x.n), waiting: names.length === 0 ? `"${area}" alanında tanımlı inceleyici yok; kayıt bir inceleyici atanana kadar bekler.` : null,
+        note: mine ? (r.author_id === p.userId ? 'Bu alanın inceleyicisisin ama kuralı sen yazdın; başka biri incelemeli.' : 'Bu alanda inceleme yetkin var.') : names.length ? `Bu alanda inceleme yetkin yok. Yetkili: ${names.join(', ')}.` : 'Bu alanda inceleme yetkin yok ve alanda tanımlı inceleyici de yok; bir platform yöneticisi alan ataması yapmalı.' });
+    }
+  }
   return rows;
 }
 
@@ -194,6 +212,12 @@ export async function confirmEffective(tx: Tx, p: Principal, id: string, raw: { 
   return { id, effectiveFrom: date.data };
 }
 
+/** A rule whose checks have no frequency yet would create no tasks (or guess one): it cannot be approved or published. */
+export async function assertFrequencySet(tx: Tx, rvId: string) {
+  const bad = (await tx.query<{ code: string }>(`SELECT code FROM task_templates WHERE rule_version_id = $1 AND recurrence->>'freq' = 'unset' ORDER BY code`, [rvId])).rows.map(r => r.code);
+  if (bad.length) throw conflict('FREQUENCY_UNSET', `Tekrar sıklığı belirlenmedi (${bad.join(', ')}): görev üreten kural, sıklık seçilmeden onaylanamaz ve yayımlanamaz.`, { checks: bad });
+}
+
 export async function approve(tx: Tx, p: Principal, id: string, reason: string | null | undefined, opts: { dateSetByLegislationFlow?: boolean } = {}) {
   if (!has(p, 'rule_reviewer')) throw forbidden('Onay yalnızca kural inceleyicisi tarafından verilebilir.');
   const why = needReason(reason, 'Kuralı onaylamak');
@@ -201,6 +225,7 @@ export async function approve(tx: Tx, p: Principal, id: string, reason: string |
   if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını onaylayamaz.');
   if (!opts.dateSetByLegislationFlow) needEffectiveConfirmation(rv);
+  await assertFrequencySet(tx, id);
   const missing = await pendingAreas(tx, rv);
   if (missing.length) throw conflict('AREA_REVIEW_MISSING', `Önce alan uzmanı incelemesi gerekiyor: ${missing.join(', ')}`, { missing });
   await tx.query(`UPDATE task_templates SET emergency_approved_by = $2 WHERE rule_version_id = $1 AND emergency_instruction IS NOT NULL`, [id, p.userId]);
@@ -228,6 +253,7 @@ export async function publish(tx: Tx, p: Principal, id: string, opts: { allowExa
 export async function publishVersion(tx: Tx, actorId: string, id: string, opts: { allowExampleRules: boolean; reason: string; extra?: Record<string, unknown>; dateSetByLegislationFlow?: boolean }) {
   const rv = await version(tx, id);
   if (rv.status !== 'approved') throw conflict('INVALID_STATE', 'Yalnızca onaylanmış sürüm yayınlanabilir.');
+  await assertFrequencySet(tx, id);
   if (!opts.dateSetByLegislationFlow) needEffectiveConfirmation(rv);
   if (rv.is_example && !opts.allowExampleRules) throw forbidden('Örnek kurallar yalnızca demo ortamında yayınlanabilir.');
   await tx.query(`UPDATE rule_versions SET status = 'retired', retired_at = now() WHERE rule_id = $1 AND status = 'published'`, [rv.rule_id]);
@@ -266,7 +292,7 @@ export const SAMPLE_PROFILES: { key: string; label: string; facts: Record<string
   { key: 'unknown', label: 'Yeni işletme · profil eksik', facts: { 'activity.food_preparation': true }, equipment: [] },
 ];
 
-const FREQ_TR = (r: any) => r.freq === 'daily' ? `her gün ${r.at}` : r.freq === 'weekly' ? `her hafta (${r.weekday}. gün) ${r.at}` : `her ay ${r.day}. gün ${r.at}`;
+const FREQ_TR = (r: any) => r.freq === 'unset' ? 'sıklık belirlenmedi' : r.freq === 'once' ? `tek seferlik ${r.on} ${r.at}` : r.freq === 'daily' ? `her gün ${r.at}` : r.freq === 'weekly' ? `her hafta (${r.weekday}. gün) ${r.at}` : `her ay ${r.day}. gün ${r.at}`;
 
 /** Which obligations and which tasks a draft would create for each sample profile. Nothing is written. */
 export function samplePreview(rv: { condition: any; effective_from: string; effective_to: string | null; ambiguity_note: string | null; id: string },

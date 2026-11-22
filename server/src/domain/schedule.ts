@@ -3,6 +3,7 @@
  * site is closed. Only fixed IANA zones via Intl; no external date library.
  */
 export type Recurrence =
+  | { freq: 'once'; on: string; at: string }
   | { freq: 'daily'; at: string }
   | { freq: 'weekly'; weekday: number; at: string }
   | { freq: 'monthly'; day: number; at: string };
@@ -48,7 +49,8 @@ export function occurrences(rec: Recurrence, cal: SiteCalendar, fromDay: string,
   for (let day = fromDay; day <= toDay; day = addDays(day, 1)) {
     const open = cal.openingDays.includes(isoWeekday(day)) && !cal.closures.includes(day);
     if (!open) continue;
-    if (rec.freq === 'daily') out.push({ periodKey: day, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
+    if (rec.freq === 'once') { if (day === rec.on) out.push({ periodKey: `O:${rec.on}`, dueAt: zonedToUtc(day, rec.at, cal.timezone) }); }
+    else if (rec.freq === 'daily') out.push({ periodKey: day, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
     else if (rec.freq === 'weekly' && isoWeekday(day) === rec.weekday) out.push({ periodKey: `W:${day}`, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
     else if (rec.freq === 'monthly' && Number(day.slice(8)) === rec.day) out.push({ periodKey: `M:${day.slice(0, 7)}`, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
   }

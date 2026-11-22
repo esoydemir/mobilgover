@@ -8,7 +8,8 @@ import { appendAudit } from './audit';
 import { notify } from './notifications';
 import { currentObligations, recomputeSite } from './obligations';
 import { currentFacts } from './profile';
-import { approve as approveRuleVersion, insertDraft, publishVersion, validateDraftInput, needReason, type DraftInput } from './rules';
+import { approve as approveRuleVersion, insertDraft, publishVersion, validateDraftInput, needReason, FREQUENCY_BASES, type DraftInput } from './rules';
+import { plannedOccurrences } from './tasks';
 import { topUpSite } from './tasks';
 import {
   OFFICIAL_HOSTS, defaultFetcher, errorKindOf, istanbulDay, parseWatchList, scanConsolidated, scanGazette, trDate,
@@ -47,7 +48,7 @@ const addDays = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') 
 
 // ───────────── Scanning ─────────────
 
-export type SourceResult = { source: SourceCode; ok: boolean; seen: number; /** matched a supported sector */ selected: number; /** a person must classify */ uncertain: number; /** left out, with the reason */ skipped: { title: string; why: string }[]; docsRead: number; /** new candidates put in the approval queue (already known ones are not counted again) */ created: number; errors: string[]; errorKind: string | null; notes: string[] };
+export type SourceResult = { source: SourceCode; ok: boolean; seen: number; /** matched a supported sector */ selected: number; /** a person must classify */ uncertain: number; /** left out, with the reason */ skipped: { key: string; url: string; title: string; why: string }[]; /** text could not be read; retried by the next scan */ unreadable: { key: string; url: string; title: string; error: string }[]; docsRead: number; /** new candidates put in the approval queue (already known ones are not counted again) */ created: number; errors: string[]; errorKind: string | null; notes: string[] };
 
 async function ensureSources(tx: Tx, cfg: LegislationConfig) {
   for (const [code, base] of [['resmi_gazete', cfg.rgBase], ['mevzuat', cfg.mevzuatBase]] as const) {
@@ -117,12 +118,12 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
            last_error = CASE WHEN $3 THEN NULL ELSE $4 END, last_error_at = CASE WHEN $3 THEN last_error_at ELSE now() END,
            failures_in_row = CASE WHEN $3 THEN 0 ELSE failures_in_row + 1 END WHERE code = $1`,
         [code, out?.seen ?? 0, ok, errors.join(' | ').slice(0, 1500), errorKind, out?.docsRead ?? 0]);
-      results.push({ source: code, ok, seen: out?.seen ?? 0, selected: out?.selected ?? 0, uncertain: out?.uncertain ?? 0, skipped: (out?.skipped ?? []).slice(0, 50), docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
+      results.push({ source: code, ok, seen: out?.seen ?? 0, selected: out?.selected ?? 0, uncertain: out?.uncertain ?? 0, skipped: (out?.skipped ?? []).slice(0, 100), unreadable: (out?.unreadable ?? []).slice(0, 50), docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
     }
     const status = results.every(r => r.ok) ? 'ok' : results.some(r => r.ok) ? 'partial' : 'failed';
     await tx.query(`UPDATE legislation_scan_runs SET finished_at = now(), status = $2, results = $3 WHERE id = $1`, [start.runId, status, JSON.stringify(results)]);
     await appendAudit(tx, { companyId: null, actorId: o.actorId ?? null, eventType: 'legislation.scanned', entityType: 'legislation_scan', entityId: start.runId,
-      payload: { trigger: o.trigger, status, results: results.map(r => ({ source: r.source, ok: r.ok, seen: r.seen, selected: r.selected, uncertain: r.uncertain, skipped: r.skipped.length, docsRead: r.docsRead, created: r.created, errorKind: r.errorKind, errors: r.errors.slice(0, 3) })) } });
+      payload: { trigger: o.trigger, status, results: results.map(r => ({ source: r.source, ok: r.ok, seen: r.seen, selected: r.selected, uncertain: r.uncertain, skipped: r.skipped.length, unreadable: r.unreadable.length, docsRead: r.docsRead, created: r.created, errorKind: r.errorKind, errors: r.errors.slice(0, 3) })) } });
     return { runId: start.runId, status, results };
   });
 }
@@ -177,13 +178,19 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
   const lastRun = (await tx.query(`SELECT id, trigger, status, started_at, finished_at, results FROM legislation_scan_runs ORDER BY started_at DESC LIMIT 1`)).rows[0] ?? null;
   const unclear = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM legislation_changes WHERE status IN ('pending','drafted') AND date_status = 'unclear'`)).rows[0]!.n;
   // Publications the scan left OUT of the queue (no supported sector in title or text). They never reach the queue, so this list is the only place a person can notice a missed one.
-  const skippedMap = new Map<string, { title: string; why: string; firstDay: string; lastDay: string; scans: number }>();
-  for (const r of (await tx.query<{ run_date: string; results: SourceResult[] | null }>(`SELECT to_char(run_date, 'YYYY-MM-DD') AS run_date, results FROM legislation_scan_runs WHERE started_at > now() - interval '14 days' AND status IN ('ok','partial') ORDER BY started_at`)).rows) {
-    for (const res of Array.isArray(r.results) ? r.results : []) for (const k of res.skipped ?? []) {
-      const e = skippedMap.get(k.title); if (e) { e.lastDay = r.run_date; e.scans += 1; } else skippedMap.set(k.title, { ...k, firstDay: r.run_date, lastDay: r.run_date, scans: 1 });
+  type Seen = { key: string; url: string | null; title: string; status: 'out_of_scope' | 'unreadable'; why: string; firstDay: string; lastDay: string; scans: number };
+  const skippedMap = new Map<string, Seen>();
+  for (const r of (await tx.query<{ run_date: string; results: SourceResult[] | null }>(`SELECT to_char(run_date, 'YYYY-MM-DD') AS run_date, results FROM legislation_scan_runs WHERE started_at > now() - interval '14 days' AND status IN ('ok','partial','failed') ORDER BY started_at`)).rows) {
+    for (const res of Array.isArray(r.results) ? r.results : []) {
+      const add = (k: { key?: string; url?: string; title: string }, status: Seen['status'], why: string) => {
+        const id = `${k.key ?? k.title}`; const e = skippedMap.get(id);
+        if (e) { e.lastDay = r.run_date; e.scans += 1; e.status = status; e.why = why; } else skippedMap.set(id, { key: k.key ?? k.title, url: k.url ?? null, title: k.title, status, why, firstDay: r.run_date, lastDay: r.run_date, scans: 1 });
+      };
+      for (const k of res.skipped ?? []) add(k, 'out_of_scope', k.why);
+      for (const k of res.unreadable ?? []) add(k, 'unreadable', `Metni okunamadı: ${k.error}. Sonraki taramada yeniden denenir; okunana kadar sınıflandırılamaz.`);
     }
   }
-  const recentSkipped = [...skippedMap.values()].sort((a, b) => b.lastDay.localeCompare(a.lastDay)).slice(0, 100);
+  const recentSkipped = [...skippedMap.values()].sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.key.localeCompare(b.key)).slice(0, 100);
   const okDays = (await tx.query<{ d: string }>(`SELECT DISTINCT to_char(run_date, 'YYYY-MM-DD') AS d FROM legislation_scan_runs WHERE trigger = 'schedule' AND status = 'ok'`)).rows.map(r => r.d);
   const schedOkToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [istanbulDay()])).rowCount ?? 0) > 0;
   return {
@@ -218,7 +225,17 @@ export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string
         AND ($8::uuid IS NULL OR c.drafted_by = $8 OR c.approved_by = $8 OR c.rejected_by = $8)
       ORDER BY c.detected_at DESC, c.id LIMIT 200`,
     [q.status ?? null, q.source ?? null, q.area ?? null, q.q?.trim() || null, q.dateStatus ?? null, q.effectiveFrom ?? null, q.effectiveTo ?? null, q.reviewer ?? null])).rows;
-  return rows.map(r => ({ ...r, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] }));
+  const out = [];
+  for (const r of rows) {
+    let waiting: string | null = null;
+    if (r.status === 'drafted' && r.rule_version_id) {
+      const areas = (await tx.query<{ required_review_areas: string[] }>(`SELECT required_review_areas FROM rule_versions WHERE id = $1`, [r.rule_version_id])).rows[0]?.required_review_areas ?? [];
+      const none = (await areaCoverage(tx, areas)).filter(x => x.reviewers === 0).map(x => x.area);
+      if (none.length) waiting = `Bekliyor: "${none.join(', ')}" alanında tanımlı inceleyici yok.`;
+    }
+    out.push({ ...r, waiting_reason: waiting, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] });
+  }
+  return out;
 }
 
 // ───────────── Impact preview ─────────────
@@ -275,6 +292,37 @@ async function specFromProposal(tx: Tx, proposal: any): Promise<ImpactSpec | nul
 }
 const applyDay = (effectiveFrom: string | null, today: string) => !effectiveFrom || effectiveFrom < today ? today : effectiveFrom;
 
+
+// ───────────── Frequency and review areas of a proposed rule ─────────────
+
+const FREQ_WORDS: { re: RegExp; freq: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'once' }[] = [
+  { re: /her\s+g[üu]n|g[üu]nl[üu]k|g[üu]nde\s+bir/i, freq: 'daily' }, { re: /her\s+hafta|haftal[ıi]k|haftada\s+bir/i, freq: 'weekly' },
+  { re: /her\s+ay(?![a-zçğıöşü])|ayl[ıi]k|ayda\s+bir/i, freq: 'monthly' }, { re: /her\s+y[ıi]l|y[ıi]ll[ıi]k|y[ıi]lda\s+bir/i, freq: 'yearly' },
+  { re: /bir\s+kez|tek\s+seferlik|bir\s+defa/i, freq: 'once' },
+];
+/** Does the source text itself say how often? Only a hint with the sentence it came from: the administrator decides. `yearly` is not a frequency the system supports. */
+export function sourceFrequencyHint(text: string | null | undefined): { freq: 'daily' | 'weekly' | 'monthly' | 'yearly' | 'once'; quote: string; supported: boolean } | null {
+  for (const sentence of (text ?? '').split(/(?<=[.;])\s+|\s*MADDE\s+\d+\s*[–-]\s*/)) for (const w of FREQ_WORDS) {
+    const m = w.re.exec(sentence); if (m) return { freq: w.freq, quote: sentence.trim().slice(0, 240), supported: w.freq !== 'yearly' };
+  }
+  return null;
+}
+/** A SUGGESTION of which specialist area fits a sector. It does not grant or require anything: who may review is decided by reviewer_areas. */
+export const AREA_BY_SECTOR: Record<string, { area: string; why: string }> = {
+  food: { area: 'food_safety', why: 'Gıda işletmesi kuralı.' }, electrical: { area: 'occupational_safety', why: 'Elektrik tesisatı güvenliği (iş sağlığı ve güvenliği alanına en yakın).' },
+  estate: { area: 'consumer', why: 'Müşteri ve mülk sahibiyle sözleşme/yetki belgesi (tüketici alanına en yakın).' },
+};
+async function areaCoverage(tx: Tx, areas: string[]) {
+  const out: { area: string; reviewers: number; names: string[] }[] = [];
+  for (const area of areas) {
+    const r = (await tx.query<{ n: string }>(`SELECT u.display_name AS n FROM reviewer_areas a JOIN users u ON u.id = a.user_id WHERE a.area = $1 ORDER BY u.display_name`, [area])).rows.map(x => x.n);
+    out.push({ area, reviewers: r.length, names: r });
+  }
+  return out;
+}
+const fmtFreq = (r: any) => !r ? '—' : r.freq === 'unset' ? 'Belirlenmedi' : r.freq === 'once' ? `Tek seferlik · ${r.on} ${r.at}` : r.freq === 'daily' ? `Her gün ${r.at}` : r.freq === 'weekly' ? `Haftalık · her ${['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'][(Number(r.weekday) || 1) - 1]} ${r.at}` : `Aylık · her ayın ${r.day}. günü ${r.at}`;
+export const BASIS_TR: Record<string, string> = { source: 'Kaynak metin', admin_choice: 'Yönetici seçimi', business_plan: 'İşletme planı', example_scenario: 'ÖRNEK senaryo' };
+
 // ───────────── One change ─────────────
 
 async function loadChange(tx: Tx, id: string, lock = false) {
@@ -303,16 +351,49 @@ export async function getChange(tx: Tx, p: Principal, id: string, now = new Date
       WHERE a.company_id IS NULL AND a.entity_type = 'legislation_change' AND a.entity_id = $1 ORDER BY a.seq`, [id])).rows;
   const published = (await tx.query(`SELECT r.code, r.title FROM rules r WHERE EXISTS (SELECT 1 FROM rule_versions rv WHERE rv.rule_id = r.id AND rv.status = 'published') ORDER BY r.code`)).rows;
   const blockers: string[] = [];
+  const templates: any[] = c.rule_version_id ? (await tx.query(`SELECT code, title, recurrence FROM task_templates WHERE rule_version_id = $1 ORDER BY code`, [c.rule_version_id])).rows : (c.proposal?.templates ?? []);
+  const applyD = c.apply_on ? String(c.apply_on).slice(0, 10) : applyDay((c.proposal?.effectiveFrom ?? c.effective_from) ? String(c.proposal?.effectiveFrom ?? c.effective_from).slice(0, 10) : null, today);
+  const sourceHint = sourceFrequencyHint(c.new_text ?? c.old_text);
+  const frequency = {
+    effectiveFrom: c.proposal?.effectiveFrom ?? c.effective_from, applyOn: applyD,
+    sourceHint: sourceHint ?? null, sourceSays: sourceHint ? `Kaynak metin sıklık söylüyor: "${sourceHint.quote}"${sourceHint.supported ? '' : ' (sistem yıllık sıklığı desteklemiyor)'}` : 'Kaynak metin bir tekrar sıklığı söylemiyor; sıklığı yönetici belirler.',
+    checks: templates.map(t => ({ code: t.code, title: t.title, recurrence: t.recurrence, text: fmtFreq(t.recurrence), unset: t.recurrence?.freq === 'unset', basis: t.recurrence?.basis ?? null,
+      basisLabel: t.recurrence?.basis ? BASIS_TR[t.recurrence.basis] : (c.is_example ? 'ÖRNEK senaryo (dayanak belirtilmemiş)' : 'Dayanak belirtilmemiş'), basisNote: t.recurrence?.basisNote ?? null })),
+    bases: FREQUENCY_BASES.map(b => ({ key: b, label: BASIS_TR[b] })),
+  };
+  // "This rule would open these tasks at this branch on these dates": from the same calendar the task generator uses (production window: today..+14 days).
+  if (impact) for (const site of impact.sites as any[]) {
+    if (site.to !== 'applies' || site.effect === 'ended') continue;
+    const windowEnd = new Date(Date.parse(applyD + 'T12:00:00Z') + 14 * 86_400_000).toISOString().slice(0, 10);
+    const plan = await plannedOccurrences(tx, site.companyId, site.siteId, templates, applyD, windowEnd);
+    site.plannedTasks = plan.map(x => ({ code: x.code, title: x.title, dueAt: x.dueAt, firstDue: x.firstDue, unset: x.unset }));
+    site.plannedText = plan.map(x => x.unset ? `${x.title}: tekrar sıklığı belirlenmedi; görev açılamaz.` : x.dueAt.length ? `Bu kuralla ${site.site} şubesinde ${x.dueAt.map(d => new Date(d).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })).join(', ')} tarihlerinde görev açılacak.`
+      : `${x.title}: ${applyD} – ${windowEnd} penceresinde görev yok${x.firstDue ? `; ilk görev vadesi ${new Date(x.firstDue).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}` : ''}.`).join(' ');
+  }
+  const reqAreas: string[] = (rule?.required_review_areas ?? c.proposal?.requiredReviewAreas ?? []) as string[];
+  const coverage = await areaCoverage(tx, reqAreas);
+  const mine = (await tx.query<{ area: string }>(`SELECT area FROM reviewer_areas WHERE user_id = $1`, [p.userId])).rows.map(r => r.area);
+  const sectors: string[] = [...((c.suggestion?.sectors as string[] | undefined) ?? []), ...((c.suggestion?.bodySectors as string[] | undefined) ?? [])];
+  const reviewAreas = {
+    suggestion: [...new Set(sectors)].map(k => ({ sector: k, ...AREA_BY_SECTOR[k] })).filter(x => x.area),
+    suggestionNote: 'Sektör alanı yalnız ÖNERİDİR; kuralı kimin inceleyebileceği ayrıca tanımlı inceleyici yetkisine (alan atamasına) bağlıdır.',
+    required: coverage.map(x => ({ ...x, approved: approvedAreas.has(x.area), canIReview: mine.includes(x.area),
+      waiting: x.reviewers === 0 ? `"${x.area}" alanında tanımlı inceleyici yok; kayıt, bir inceleyici atanana kadar gerekçesiyle kuyrukta bekler.` : null,
+      myAccess: mine.includes(x.area) ? 'Bu alanda inceleme yetkin var.' : `Bu alanda inceleme yetkin yok${x.reviewers ? `; yetkili: ${x.names.join(', ')}` : '; alanda yetkili inceleyici de tanımlı değil — bir platform yöneticisi alan ataması yapmalı'}.` })),
+  };
   if (c.date_status === 'unclear') blockers.push('Yürürlük tarihi belirsiz: bir yönetici tarihi çözene kadar uygulanamaz.');
   if (!c.source_url) blockers.push('Resmî kaynak bağlantısı yok.');
   if (!c.proposal && !c.rule_version_id) blockers.push('Önerilen kural değişikliği henüz yazılmadı.');
+  if (templates.some(t => t.recurrence?.freq === 'unset')) blockers.push('Tekrar sıklığı belirlenmedi: taslak kaydedilebilir, ama görev üreten kural sıklık seçilmeden onaylanamaz ve yayımlanamaz.');
+  if (c.proposal && !(reqAreas.length)) blockers.push('İnceleme alanı seçilmedi: taslak hazırlanamaz.');
+  for (const a of reviewAreas.required) if (a.waiting && !a.approved) blockers.push(a.waiting);
   return {
     id: c.id, status: c.status, sourceCode: c.source_code, changeType: c.change_type, typeLabel: CHANGE_TYPE_TR[c.change_type as keyof typeof CHANGE_TYPE_TR], scopeArea: c.scope_area,
     docRef: c.doc_ref, docTitle: c.doc_title, articleRef: c.article_ref, sourceUrl: c.source_url, publishedOn: c.published_on, effectiveFrom: c.effective_from,
     dateStatus: c.date_status, dateNote: c.date_note, oldText: c.old_text, newText: c.new_text, suggestion: c.suggestion, isExample: c.is_example,
     proposal: c.proposal, proposalBy: c.proposal_by, rule, missingAreaReviews: missingAreas,
     approveReason: c.approve_reason, rejectReason: c.reject_reason, applyOn: c.apply_on, appliedAt: c.applied_at, applyResult: c.apply_result, detectedAt: c.detected_at,
-    impact, impactNote, history, publishedRules: published, blockers,
+    impact, impactNote, history, publishedRules: published, blockers, frequency, reviewAreas,
     can: {
       edit: (has(p, 'rule_author') || has(p, 'platform_admin')) && c.status === 'pending',
       resolveDate: (has(p, 'platform_admin') || has(p, 'rule_reviewer')) && ['pending', 'drafted'].includes(c.status) && c.date_status === 'unclear',
@@ -355,12 +436,16 @@ export async function suggestProposal(tx: Tx, p: Principal, id: string, targetRu
       templates: tpl.map(t => ({ code: t.code, title: t.title, instructions: t.instructions, recurrence: t.recurrence, evidence: t.evidence, limits: t.limits, severity: t.severity, hazardType: t.hazard_type, emergencyInstruction: t.emergency_instruction ?? undefined })),
     } as DraftInput & { targetRuleCode: string | null };
   }
+  // Neither the review area nor the frequency is guessed: a sector SUGGESTS an area (shown as a suggestion), the frequency stays undecided until the administrator picks it.
+  const sectors: string[] = [...((c.suggestion?.sectors as string[] | undefined) ?? []), ...((c.suggestion?.bodySectors as string[] | undefined) ?? [])];
+  const skeleton = { areas: [...new Set(sectors.map(k => AREA_BY_SECTOR[k]?.area).filter(Boolean) as string[])],
+    condition: sectors.includes('estate') ? { fact: 'activity.brokerage', op: 'eq', value: true } : sectors.includes('electrical') ? { fact: 'activity.installation_business', op: 'eq', value: true } : { fact: 'activity.food_preparation', op: 'eq', value: true } };
   return {
     targetRuleCode: null, code: `LEG-${sha(c.external_key).slice(0, 8).toUpperCase()}`, title: c.doc_title.slice(0, 120), kind: 'legal_requirement', isExample: c.is_example, provisionIds: [], ambiguityNote: null,
-    condition: { fact: 'activity.food_preparation', op: 'eq', value: true },
+    condition: skeleton.condition,
     obligationTitle: c.doc_title.slice(0, 120), obligationSummary: (c.new_text ?? c.old_text ?? c.doc_title).replace(/\s+/g, ' ').slice(0, 400),
-    effectiveFrom: eff, effectiveTo: null, changeReason: `${CHANGE_TYPE_TR[c.change_type as keyof typeof CHANGE_TYPE_TR]}: ${c.doc_ref}`, requiredReviewAreas: ['food_safety'],
-    templates: [{ code: 'kontrol', title: 'Yeni düzenleme kontrolü', instructions: 'Uzman bu görevi düzenlemeye göre yazar (taslak yer tutucu).', recurrence: { freq: 'weekly', weekday: 1, at: '10:00' }, evidence: [{ kind: 'photo', min: 1 }], limits: [], severity: 'minor', hazardType: 'food_safety' }],
+    effectiveFrom: eff, effectiveTo: null, changeReason: `${CHANGE_TYPE_TR[c.change_type as keyof typeof CHANGE_TYPE_TR]}: ${c.doc_ref}`, requiredReviewAreas: skeleton.areas,
+    templates: [{ code: 'kontrol', title: 'Yeni düzenleme kontrolü', instructions: 'Uzman bu görevi düzenlemeye göre yazar (taslak yer tutucu).', recurrence: { freq: 'unset' }, evidence: [{ kind: 'photo', min: 1 }], limits: [], severity: 'minor', hazardType: 'food_safety' }],
   } as DraftInput & { targetRuleCode: string | null };
 }
 
@@ -403,6 +488,7 @@ export async function prepareDraft(tx: Tx, p: Principal, id: string) {
   if (c.status !== 'pending') throw conflict('INVALID_STATE', 'Bu kayıt için taslak zaten hazırlanmış ya da kayıt kapanmış.');
   if (c.date_status === 'unclear') throw conflict('DATE_UNCLEAR', 'Yürürlük tarihi belirsiz: önce bir yönetici tarihi çözmeli.');
   if (!c.proposal) throw conflict('NO_PROPOSAL', 'Önce önerilen kural değişikliğini yaz.');
+  if (!(c.proposal.requiredReviewAreas ?? []).length) throw conflict('AREA_REQUIRED', 'İnceleme alanı seçilmedi: kuralı hangi alanın uzmanının inceleyeceğini seç (sektör yalnız öneridir).');
   const prov = await upsertProvision(tx, c);
   const proposal = { ...c.proposal, provisionIds: [prov], isExample: !!c.proposal.isExample || c.is_example };
   const rv = await insertDraft(tx, p.userId, proposal);

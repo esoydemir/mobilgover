@@ -73,6 +73,24 @@ export async function ensureDecisions(tx: Tx, companyId: string, siteId: string,
   if (!hasDecisions) await recomputeSite(tx, companyId, siteId, actorId, now);
 }
 
+/**
+ * What a rule's checks WOULD create at a site between two days (writes nothing): the due dates by the same calendar rules generateTasks uses.
+ * `firstDue` looks further ahead (a year) so a first check beyond the production window is still shown.
+ */
+export async function plannedOccurrences(tx: Tx, companyId: string, siteId: string, templates: { code: string; title: string; recurrence: any }[], fromDay: string, toDay: string) {
+  const site = (await tx.query(`SELECT * FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
+  if (!site) return [];
+  const closures = (await tx.query<{ day: string }>(`SELECT day FROM site_closures WHERE site_id = $1`, [siteId])).rows.map(r => r.day);
+  const cal = { timezone: site.timezone, openingDays: site.opening_days, closures };
+  const yearAhead = localDay(new Date(Date.parse(fromDay + 'T12:00:00Z') + 400 * 86_400_000), site.timezone);
+  return templates.map(t => {
+    if (!t.recurrence || t.recurrence.freq === 'unset') return { code: t.code, title: t.title, dueAt: [] as string[], firstDue: null as string | null, unset: true };
+    const inWindow = occurrences(t.recurrence as Recurrence, cal, fromDay, toDay).map(o => o.dueAt.toISOString());
+    const first = occurrences(t.recurrence as Recurrence, cal, fromDay, yearAhead)[0]?.dueAt.toISOString() ?? null;
+    return { code: t.code, title: t.title, dueAt: inWindow, firstDue: first, unset: false };
+  });
+}
+
 export async function topUpSite(tx: Tx, companyId: string, siteId: string, days = 14, actorId: string | null = null, now = new Date()) {
   const site = (await tx.query<{ timezone: string }>(`SELECT timezone FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
   if (!site) throw notFound('Şube');
