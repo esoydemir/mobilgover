@@ -43,6 +43,25 @@ function addDays(day: string, n: number): string {
 
 const isoWeekday = (day: string) => ((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
 
+/** Days in the month of a YYYY-MM-DD day. */
+export const daysInMonth = (day: string) => new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)), 0)).getUTCDate();
+/** A monthly check on a day the month does not have (31 in April, 30/31 in February) falls on the LAST day of that month. A scheduling choice, not a legal requirement. */
+export const monthlyTargetDay = (wanted: number, inMonthOf: string) => Math.min(wanted, daysInMonth(inMonthOf));
+
+/**
+ * What happens to a monthly check in each month of a range, in words: the day used, whether the wanted day does not exist in that month,
+ * and whether the site is closed that day (then no task is created that month — the same rule the generator applies).
+ */
+export function monthlyNotes(rec: { day: number }, cal: SiteCalendar, fromDay: string, toDay: string): { month: string; day: string; clamped: boolean; closed: boolean }[] {
+  const out: { month: string; day: string; clamped: boolean; closed: boolean }[] = [];
+  for (let m = `${fromDay.slice(0, 7)}-01`; m.slice(0, 7) <= toDay.slice(0, 7); m = addDays(`${m.slice(0, 7)}-${String(daysInMonth(m)).padStart(2, '0')}`, 1)) {
+    const used = monthlyTargetDay(rec.day, m); const day = `${m.slice(0, 7)}-${String(used).padStart(2, '0')}`;
+    if (day < fromDay || day > toDay) continue;
+    out.push({ month: m.slice(0, 7), day, clamped: used !== rec.day, closed: !cal.openingDays.includes(isoWeekday(day)) || cal.closures.includes(day) });
+  }
+  return out;
+}
+
 /** Occurrences whose local day falls in [fromDay, toDay], inclusive. */
 export function occurrences(rec: Recurrence, cal: SiteCalendar, fromDay: string, toDay: string): Occurrence[] {
   const out: Occurrence[] = [];
@@ -52,7 +71,7 @@ export function occurrences(rec: Recurrence, cal: SiteCalendar, fromDay: string,
     if (rec.freq === 'once') { if (day === rec.on) out.push({ periodKey: `O:${rec.on}`, dueAt: zonedToUtc(day, rec.at, cal.timezone) }); }
     else if (rec.freq === 'daily') out.push({ periodKey: day, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
     else if (rec.freq === 'weekly' && isoWeekday(day) === rec.weekday) out.push({ periodKey: `W:${day}`, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
-    else if (rec.freq === 'monthly' && Number(day.slice(8)) === rec.day) out.push({ periodKey: `M:${day.slice(0, 7)}`, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
+    else if (rec.freq === 'monthly' && Number(day.slice(8)) === monthlyTargetDay(rec.day, day)) out.push({ periodKey: `M:${day.slice(0, 7)}`, dueAt: zonedToUtc(day, rec.at, cal.timezone) });
   }
   return out;
 }

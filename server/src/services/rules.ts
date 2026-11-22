@@ -19,7 +19,7 @@ const recurrenceSchema = z.union([
   z.object({ freq: z.literal('once'), on: z.iso.date(), at, ...common }),
   z.object({ freq: z.literal('daily'), at, ...common }),
   z.object({ freq: z.literal('weekly'), weekday: z.number().int().min(1).max(7), at, ...common }),
-  z.object({ freq: z.literal('monthly'), day: z.number().int().min(1).max(28), at, ...common }),
+  z.object({ freq: z.literal('monthly'), day: z.number().int().min(1).max(31), at, ...common }),
   /** Not decided yet. A draft may be saved and reviewed with it; a rule that creates tasks cannot be approved or published until it is set. */
   z.object({ freq: z.literal('unset'), ...common }),
 ]);

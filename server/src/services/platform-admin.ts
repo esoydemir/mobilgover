@@ -104,3 +104,32 @@ export async function setPlatformRole(tx: Tx, p: Principal, b: { userId: string;
     payload: { role: b.role, userName: u.display_name, reason: b.reason.trim() } });
   return { changed: true };
 }
+
+export const REVIEW_AREAS = ['food_safety', 'occupational_safety', 'gas_safety', 'fire_safety', 'environment', 'consumer', 'good_practice'] as const;
+
+/**
+ * Review-AREA authority: a separate act from assigning a file and from granting a platform role.
+ * Platform administrator only; the person must ALREADY hold the reviewer role (no silent role escalation); never on oneself; reason mandatory.
+ * The audit record names who gave it, which area, the scope (the file it was needed for, if any), when and why.
+ */
+export async function setReviewerArea(tx: Tx, p: Principal, b: { userId: string; area: string; grant: boolean; reason: string; changeId?: string | null }) {
+  if (!isAdmin(p)) throw forbidden('Alan yetkisini yalnız platform yöneticisi verir.');
+  if (!(REVIEW_AREAS as readonly string[]).includes(b.area)) throw invalid('Bilinmeyen inceleme alanı.');
+  reasonOk(b.reason);
+  if (b.userId === p.userId) throw forbidden('Kendi alan yetkini değiştiremezsin; başka bir platform yöneticisi yapmalı.');
+  const u = (await tx.query(`SELECT id, display_name FROM users WHERE id = $1`, [b.userId])).rows[0];
+  if (!u) throw notFound('Kullanıcı');
+  if (b.grant) {
+    const reviewer = (await tx.query(`SELECT 1 FROM platform_roles WHERE user_id = $1 AND role = 'rule_reviewer'`, [b.userId])).rowCount! > 0;
+    if (!reviewer) throw conflict('REVIEWER_ROLE_REQUIRED', 'Bu kişi kural inceleyici değil. Alan yetkisi rol vermez; önce rol ayrıca (gerekçeyle) verilmelidir.');
+  }
+  let scope: string | null = null;
+  if (b.changeId) scope = ((await tx.query(`SELECT doc_ref || ' · ' || doc_title AS t FROM legislation_changes WHERE id = $1`, [b.changeId])).rows[0]?.t as string | undefined) ?? null;
+  const exists = (await tx.query(`SELECT 1 FROM reviewer_areas WHERE user_id = $1 AND area = $2`, [b.userId, b.area])).rowCount! > 0;
+  if (b.grant ? exists : !exists) return { changed: false };
+  if (b.grant) await tx.query(`INSERT INTO reviewer_areas (user_id, area) VALUES ($1,$2)`, [b.userId, b.area]);
+  else await tx.query(`DELETE FROM reviewer_areas WHERE user_id = $1 AND area = $2`, [b.userId, b.area]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: b.grant ? 'platform.area_granted' : 'platform.area_revoked', entityType: 'user', entityId: b.userId,
+    payload: { area: b.area, userName: u.display_name, reason: b.reason.trim(), scope, changeId: b.changeId ?? null } });
+  return { changed: true };
+}

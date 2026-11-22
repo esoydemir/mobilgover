@@ -72,7 +72,7 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
     const busy = (await tx.query(`SELECT id FROM legislation_scan_runs WHERE status = 'running' AND started_at > now() - interval '20 minutes'`)).rowCount;
     if (busy) return null;
     await tx.query(`UPDATE legislation_scan_runs SET status = 'failed', finished_at = now(), results = '[{"error":"yarım kaldı"}]' WHERE status = 'running'`);
-    const run = (await tx.query<{ id: string }>(`INSERT INTO legislation_scan_runs (trigger, actor_id, run_date) VALUES ($1,$2,$3) RETURNING id`, [o.trigger, o.actorId ?? null, today])).rows[0]!;
+    const run = (await tx.query<{ id: string }>(`INSERT INTO legislation_scan_runs (trigger, actor_id, run_date, started_at) VALUES ($1,$2,$3,$4) RETURNING id`, [o.trigger, o.actorId ?? null, today, now])).rows[0]!;
     const prev = new Map<string, Record<string, string>>();
     for (const r of (await tx.query(`SELECT doc_key, articles FROM legislation_documents WHERE source_code = 'mevzuat'`)).rows) prev.set(r.doc_key, r.articles);
     const lastRgOk = (await tx.query<{ t: Date | null }>(`SELECT last_success_at AS t FROM legislation_sources WHERE code = 'resmi_gazete'`)).rows[0]?.t ?? null;
@@ -144,6 +144,19 @@ async function storeChange(tx: Tx, c: DetectedChange, isExample: boolean): Promi
 // ───────────── Admin screen data ─────────────
 
 /** Next planned daily run (Europe/Istanbul is a fixed UTC+3). Null when the scheduler is off. Only a successful SCHEDULED run counts for the day (a manual scan does not skip it). */
+/**
+ * Retry policy for the daily scan when a day's run did not finish cleanly (a publication could not be read, the source was down):
+ * wait 30 min, 1 h, 2 h, 4 h between attempts, at most 5 attempts a day. Healthy publications are processed in every attempt (keys make that idempotent);
+ * an unreadable one is queued ONCE, in the attempt where it first becomes readable. The next attempt time is shown to the administrator.
+ */
+export const RETRY_BASE_MIN = 30; export const RETRY_MAX_ATTEMPTS = 5;
+export function retryPlan(attempts: number, lastStartedAt: Date | null, now: Date): { due: boolean; nextAttemptAt: string | null; exhausted: boolean } {
+  if (attempts === 0 || !lastStartedAt) return { due: true, nextAttemptAt: null, exhausted: false };
+  if (attempts >= RETRY_MAX_ATTEMPTS) return { due: false, nextAttemptAt: null, exhausted: true };
+  const at = new Date(lastStartedAt.getTime() + RETRY_BASE_MIN * 60_000 * 2 ** (attempts - 1));
+  return { due: at.getTime() <= now.getTime(), nextAttemptAt: at.toISOString(), exhausted: false };
+}
+
 export function nextScheduledRun(cfg: LegislationConfig | undefined, scheduledOkToday: boolean, now = new Date()): string | null {
   if (!cfg?.enabled) return null;
   const OFFSET = 3 * 3_600_000;
@@ -197,14 +210,26 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
     sources, lastSuccessfulScan: lastOk, lastRun, recentSkipped,
     pendingReview: (counts.pending ?? 0) + (counts.drafted ?? 0), counts: { pending: counts.pending ?? 0, drafted: counts.drafted ?? 0, scheduled: counts.scheduled ?? 0, applied: counts.applied ?? 0, rejected: counts.rejected ?? 0 },
     unclearDates: unclear,
-    schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday), missedDays: cfg?.enabled ? missedScheduledDays(okDays, istanbulDay()) : [] },
+    schedule: { retry: await retryInfo(tx, cfg), enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday), missedDays: cfg?.enabled ? missedScheduledDays(okDays, istanbulDay()) : [] },
     baselineNote: 'İlk okuma yalnız TABAN kaydeder: o gün mevcut metinler "değişiklik" sayılmaz, kuyruğa kayıt düşmez. Kuyruğa yalnız sonraki okumalardaki farklar ve yeni yayınlar girer.',
     canScan: has(p, 'platform_admin') || has(p, 'rule_reviewer'),
     exampleNote: 'Örnek/sentetik kaynaktan gelen kayıtlar ÖRNEKTİR; gerçek veya uzman onaylı mevzuat olarak yayımlanamaz.',
   };
 }
 
-export type ChangeFilter = { status?: string; source?: string; area?: string; q?: string; dateStatus?: 'known' | 'unclear'; effectiveFrom?: string; effectiveTo?: string; reviewer?: string };
+async function retryInfo(tx: Tx, cfg?: LegislationConfig) {
+  if (!cfg?.enabled) return null;
+  const today = istanbulDay();
+  const okToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [today])).rowCount ?? 0) > 0;
+  if (okToday) return null;
+  const a = (await tx.query<{ n: number; last: Date | null; res: any }>(`SELECT count(*)::int AS n, max(started_at) AS last, (array_agg(results ORDER BY started_at DESC))[1] AS res FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule'`, [today])).rows[0]!;
+  if (!a.n) return null;
+  const plan = retryPlan(a.n, a.last, new Date());
+  const errs = (Array.isArray(a.res) ? a.res : []).flatMap((r: any) => [...(r.errors ?? []), ...(r.error ? [r.error] : [])]).slice(0, 3);
+  return { attempts: a.n, maxAttempts: RETRY_MAX_ATTEMPTS, nextAttemptAt: plan.nextAttemptAt, exhausted: plan.exhausted, lastErrors: errs };
+}
+
+export type ChangeFilter = { status?: string; source?: string; area?: string; q?: string; dateStatus?: 'known' | 'unclear'; effectiveFrom?: string; effectiveTo?: string; reviewer?: string; assignee?: string; waiting?: boolean; match?: 'uncertain' };
 
 /** Review queue with the filters the desk needs: source, sector, status, effective-date window, free text and the person who drafted or decided. */
 export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string = {}) {
@@ -213,8 +238,9 @@ export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string
   const rows = (await tx.query(
     `SELECT c.id, c.source_code, c.change_type, c.scope_area, c.doc_ref, c.doc_title, c.article_ref, c.published_on, c.effective_from, c.date_status, c.status, c.is_example, c.apply_on, c.detected_at,
             c.rule_version_id, (c.proposal IS NOT NULL) AS has_proposal, c.drafted_by, c.approved_by, c.rejected_by,
-            c.suggestion->>'matchLevel' AS match_level, c.suggestion->'sectors' AS sectors, c.suggestion->'bodySectors' AS body_sectors
-       FROM legislation_changes c
+            c.suggestion->>'matchLevel' AS match_level, c.suggestion->'sectors' AS sectors, c.suggestion->'bodySectors' AS body_sectors,
+            c.assigned_to, c.assigned_at, au.display_name AS assignee_name, c.proposal->'requiredReviewAreas' AS proposal_areas
+       FROM legislation_changes c LEFT JOIN users au ON au.id = c.assigned_to
       WHERE ($1::text IS NULL OR c.status = $1)
         AND ($2::text IS NULL OR c.source_code = $2)
         AND ($3::text IS NULL OR c.scope_area = $3)
@@ -223,19 +249,70 @@ export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string
         AND ($6::date IS NULL OR c.effective_from >= $6)
         AND ($7::date IS NULL OR c.effective_from <= $7)
         AND ($8::uuid IS NULL OR c.drafted_by = $8 OR c.approved_by = $8 OR c.rejected_by = $8)
+        AND ($9::uuid IS NULL OR c.assigned_to = $9)
+        AND ($10::text IS NULL OR c.suggestion->>'matchLevel' = $10)
       ORDER BY c.detected_at DESC, c.id LIMIT 200`,
-    [q.status ?? null, q.source ?? null, q.area ?? null, q.q?.trim() || null, q.dateStatus ?? null, q.effectiveFrom ?? null, q.effectiveTo ?? null, q.reviewer ?? null])).rows;
+    [q.status ?? null, q.source ?? null, q.area ?? null, q.q?.trim() || null, q.dateStatus ?? null, q.effectiveFrom ?? null, q.effectiveTo ?? null, q.reviewer ?? null, q.assignee === 'me' ? p.userId : q.assignee ?? null, q.match ?? null])).rows;
   const out = [];
   for (const r of rows) {
-    let waiting: string | null = null;
-    if (r.status === 'drafted' && r.rule_version_id) {
-      const areas = (await tx.query<{ required_review_areas: string[] }>(`SELECT required_review_areas FROM rule_versions WHERE id = $1`, [r.rule_version_id])).rows[0]?.required_review_areas ?? [];
+    let waiting: string | null = null; let areas: string[] = [];
+    if (r.status === 'drafted' && r.rule_version_id) areas = (await tx.query<{ required_review_areas: string[] }>(`SELECT required_review_areas FROM rule_versions WHERE id = $1`, [r.rule_version_id])).rows[0]?.required_review_areas ?? [];
+    else if (r.status === 'pending') areas = (r.proposal_areas as string[] | null) ?? [...new Set([...(r.sectors ?? []), ...(r.body_sectors ?? [])].map((k: string) => AREA_BY_SECTOR[k]?.area).filter(Boolean) as string[])];
+    if (areas.length && ['pending', 'drafted'].includes(r.status)) {
       const none = (await areaCoverage(tx, areas)).filter(x => x.reviewers === 0).map(x => x.area);
       if (none.length) waiting = `Bekliyor: "${none.join(', ')}" alanında tanımlı inceleyici yok.`;
     }
-    out.push({ ...r, waiting_reason: waiting, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] });
+    if (q.waiting && !waiting) continue;
+    const { proposal_areas: _pa, ...rest } = r;
+    out.push({ ...rest, review_areas: areas, waiting_reason: waiting, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] });
   }
   return out;
+}
+
+// ───────────── Assignment, return ─────────────
+
+/** Who could review this record: platform reviewers, with the areas they cover and whether that covers what the record needs. Granting nothing. */
+export async function assigneeCandidates(tx: Tx, p: Principal, id: string) {
+  if (!canView(p)) throw forbidden();
+  const c = await loadChange(tx, id);
+  const need: string[] = c.rule_version_id ? (await tx.query<{ r: string[] }>(`SELECT required_review_areas AS r FROM rule_versions WHERE id = $1`, [c.rule_version_id])).rows[0]?.r ?? [] : c.proposal?.requiredReviewAreas ?? [];
+  const rows = (await tx.query<{ id: string; name: string; email: string | null; areas: string[] }>(
+    `SELECT u.id, u.display_name AS name, u.email, COALESCE((SELECT array_agg(a.area ORDER BY a.area) FROM reviewer_areas a WHERE a.user_id = u.id), '{}') AS areas
+       FROM users u JOIN platform_roles r ON r.user_id = u.id AND r.role = 'rule_reviewer' ORDER BY u.display_name`)).rows;
+  return { needAreas: need, assignedTo: c.assigned_to as string | null, candidates: rows.map(r => ({ ...r, covers: need.filter(a => r.areas.includes(a)), eligible: need.length === 0 ? false : need.some(a => r.areas.includes(a)) })),
+    note: need.length === 0 ? 'Önce kayıt için inceleme alanı seçilmeli; alan seçilmeden uygun inceleyici belirlenemez.' : null };
+}
+
+/** Assigns the FILE to a person. Never changes anyone's role or area: the person must already be a platform reviewer covering one of the needed areas. */
+export async function assignChange(tx: Tx, p: Principal, id: string, b: { userId: string | null; reason: string }) {
+  if (!has(p, 'platform_admin')) throw forbidden('Atamayı yalnız platform yöneticisi yapar.');
+  const c = await loadChange(tx, id, true);
+  if (!['pending', 'drafted'].includes(c.status)) throw conflict('INVALID_STATE', `Kayıt ${c.status} durumunda; atama yapılamaz.`);
+  const why = (b.reason ?? '').trim(); if (why.length < 5) throw invalid('Atama gerekçesini yaz (en az 5 karakter).');
+  let name: string | null = null; let areas: string[] = [];
+  if (b.userId) {
+    const cand = await assigneeCandidates(tx, p, id);
+    const u = cand.candidates.find(x => x.id === b.userId);
+    if (!u) throw conflict('NOT_A_REVIEWER', 'Bu kişi platform inceleyicisi değil. Dosya atamak rol vermez; rol ayrı bir işlemdir.');
+    if (!u.eligible) throw conflict('AREA_NOT_COVERED', cand.needAreas.length ? `Bu kişi kaydın alanlarından hiçbirinde (${cand.needAreas.join(', ')}) yetkili değil. Alan yetkisi ayrı bir işlemdir; dosya atamak onu vermez.` : 'Önce inceleme alanı seçilmeli.');
+    name = u.name; areas = u.covers;
+  }
+  await tx.query(`UPDATE legislation_changes SET assigned_to = $2, assigned_by = $3, assigned_at = now(), assign_note = $4 WHERE id = $1`, [id, b.userId, p.userId, why]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: b.userId ? 'legislation.assigned' : 'legislation.unassigned', entityType: 'legislation_change', entityId: id,
+    payload: { assigneeId: b.userId, assigneeName: name, coveredAreas: areas, previousAssignee: c.assigned_to, reason: why, docRef: c.doc_ref } });
+  return { assignedTo: b.userId };
+}
+
+/** Sends a prepared draft back to the proposal stage with a reason. The draft rule version stays as a draft (history), nothing reaches a business. */
+export async function returnChange(tx: Tx, p: Principal, id: string, reason: string | null | undefined) {
+  if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) throw forbidden('İade yetkin yok.');
+  const c = await loadChange(tx, id, true);
+  if (c.status !== 'drafted') throw conflict('INVALID_STATE', 'İade yalnız hazırlanmış taslak için yapılır.');
+  const why = needReason(reason, 'İade');
+  if (c.rule_version_id) await tx.query(`UPDATE rule_versions SET status = 'draft' WHERE id = $1 AND status = 'in_review'`, [c.rule_version_id]);
+  await tx.query(`UPDATE legislation_changes SET status = 'pending', rule_version_id = NULL, drafted_by = NULL, drafted_at = NULL WHERE id = $1`, [id]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'legislation.returned', entityType: 'legislation_change', entityId: id, payload: { docRef: c.doc_ref, reason: why, returnedRuleVersionId: c.rule_version_id } });
+  return { status: 'pending' };
 }
 
 // ───────────── Impact preview ─────────────
@@ -258,6 +335,7 @@ export async function previewImpact(tx: Tx, spec: ImpactSpec, onDate: string) {
   const openBy = new Map<string, number>();
   if (prevRows.length) for (const r of (await tx.query(`SELECT obligation_id, count(*)::int AS n FROM tasks WHERE obligation_id = ANY($1) AND status = 'open' GROUP BY obligation_id`, [prevRows.map(r => r.id)])).rows) openBy.set(r.obligation_id, r.n);
   const out: any[] = [];
+  const outSample: { company: string; site: string; reason: string }[] = [];
   let outOfScope = 0;
   for (const s of sites) {
     const prev = prevBySite.get(s.id);
@@ -267,19 +345,19 @@ export async function previewImpact(tx: Tx, spec: ImpactSpec, onDate: string) {
     const nextIn = IN_SCOPE.has(next.decision);
     const versionChange = !!prev && !!spec.ruleVersionId && prev.rule_version_id !== spec.ruleVersionId;
     const ended = prevIn && next.decision === 'not_applicable';
-    if (!nextIn && !ended) { outOfScope++; continue; }
+    if (!nextIn && !ended) { outOfScope++; if (outSample.length < 6) outSample.push({ company: s.company, site: s.name, reason: next.reason }); continue; }
     const open = prev ? openBy.get(prev.id) ?? 0 : 0;
     const effect = ended ? 'ended' : next.decision === 'needs_info' ? 'needs_info' : prev?.decision === 'applies' && next.decision === 'applies' ? (versionChange || !spec.ruleVersionId ? 'version_change' : 'unchanged') : 'new_obligation';
     if (effect === 'unchanged') { outOfScope++; continue; }
     out.push({
-      companyId: s.company_id, company: s.company, siteId: s.id, site: s.name, from: prev?.decision ?? null, to: next.decision, effect, reason: next.reason, missingFacts: next.missing,
+      companyId: s.company_id, company: s.company, siteId: s.id, site: s.name, from: prev?.decision ?? null, to: next.decision, effect, reason: next.reason, missingFacts: next.missing, missingQuestions: next.missing.map(k => ({ key: k, label: (FACTS as Record<string, { label: string }>)[k]?.label ?? k })),
       openTasks: open,
       openTaskEffect: ended ? `${open} açık görev kapanır (süresi geçmişse "kaçırıldı", ilerideyse "iptal"); tamamlanmış görev, ölçüm ve kanıtlar eski kural sürümüne bağlı kalır.`
         : effect === 'version_change' ? `${open} açık görev kalır, "kural sürümü değişti" işaretiyle kontrol edilir; yeni görevler yeni sürümden üretilir.` : effect === 'new_obligation' ? 'Yeni yükümlülük; görevler yeni sürümden üretilir.' : 'Profil bilgisi eksik; görev üretilmez, bilgi istenir.',
       notify: next.decision === 'applies' || next.decision === 'needs_review' || ended,
     });
   }
-  return { onDate, sites: out, affectedSites: out.length, notifiedSites: out.filter(x => x.notify).length, outOfScopeSites: outOfScope, openTasksAffected: out.reduce((a, x) => a + (x.effect === 'ended' || x.effect === 'version_change' ? x.openTasks : 0), 0) };
+  return { onDate, sites: out, affectedSites: out.length, notifiedSites: out.filter(x => x.notify).length, outOfScopeSites: outOfScope, outOfScopeSample: outSample, openTasksAffected: out.reduce((a, x) => a + (x.effect === 'ended' || x.effect === 'version_change' ? x.openTasks : 0), 0) };
 }
 
 async function specFromRuleVersion(tx: Tx, rvId: string): Promise<ImpactSpec> {
@@ -320,7 +398,7 @@ async function areaCoverage(tx: Tx, areas: string[]) {
   }
   return out;
 }
-const fmtFreq = (r: any) => !r ? '—' : r.freq === 'unset' ? 'Belirlenmedi' : r.freq === 'once' ? `Tek seferlik · ${r.on} ${r.at}` : r.freq === 'daily' ? `Her gün ${r.at}` : r.freq === 'weekly' ? `Haftalık · her ${['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'][(Number(r.weekday) || 1) - 1]} ${r.at}` : `Aylık · her ayın ${r.day}. günü ${r.at}`;
+const fmtFreq = (r: any) => !r ? '—' : r.freq === 'unset' ? 'Belirlenmedi' : r.freq === 'once' ? `Tek seferlik · ${r.on} ${r.at}` : r.freq === 'daily' ? `Her gün ${r.at}` : r.freq === 'weekly' ? `Haftalık · her ${['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'][(Number(r.weekday) || 1) - 1]} ${r.at}` : `Aylık · her ayın ${r.day}. günü ${r.at}${r.day > 28 ? ' (ayda o gün yoksa ayın son günü)' : ''}`;
 export const BASIS_TR: Record<string, string> = { source: 'Kaynak metin', admin_choice: 'Yönetici seçimi', business_plan: 'İşletme planı', example_scenario: 'ÖRNEK senaryo' };
 
 // ───────────── One change ─────────────
@@ -366,10 +444,13 @@ export async function getChange(tx: Tx, p: Principal, id: string, now = new Date
     if (site.to !== 'applies' || site.effect === 'ended') continue;
     const windowEnd = new Date(Date.parse(applyD + 'T12:00:00Z') + 14 * 86_400_000).toISOString().slice(0, 10);
     const plan = await plannedOccurrences(tx, site.companyId, site.siteId, templates, applyD, windowEnd);
-    site.plannedTasks = plan.map(x => ({ code: x.code, title: x.title, dueAt: x.dueAt, firstDue: x.firstDue, unset: x.unset }));
+    site.plannedTasks = plan.map(x => ({ code: x.code, title: x.title, dueAt: x.dueAt, firstDue: x.firstDue, unset: x.unset, notes: x.notes, upcoming: x.upcoming }));
     site.plannedText = plan.map(x => x.unset ? `${x.title}: tekrar sıklığı belirlenmedi; görev açılamaz.` : x.dueAt.length ? `Bu kuralla ${site.site} şubesinde ${x.dueAt.map(d => new Date(d).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })).join(', ')} tarihlerinde görev açılacak.`
-      : `${x.title}: ${applyD} – ${windowEnd} penceresinde görev yok${x.firstDue ? `; ilk görev vadesi ${new Date(x.firstDue).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}` : ''}.`).join(' ');
+      : `${x.title}: ${applyD} – ${windowEnd} penceresinde görev yok${x.firstDue ? `; ilk görev vadesi ${new Date(x.firstDue).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })}` : ''}.`).join(' ')
+      + plan.filter(x => x.upcoming.length).map(x => ` Aylık takvim (6 ay): ${x.upcoming.map(d => new Date(d).toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul' })).join(', ')}.`).join('')
+      + plan.filter(x => x.notes.length).map(x => ` Not: ${x.notes.join('; ')}. (Bu bir zamanlama seçimidir, hukuki zorunluluk değildir.)`).join('');
   }
+  const asg = c.assigned_to ? (await tx.query(`SELECT u.display_name AS name FROM users u WHERE u.id = $1`, [c.assigned_to])).rows[0] : null;
   const reqAreas: string[] = (rule?.required_review_areas ?? c.proposal?.requiredReviewAreas ?? []) as string[];
   const coverage = await areaCoverage(tx, reqAreas);
   const mine = (await tx.query<{ area: string }>(`SELECT area FROM reviewer_areas WHERE user_id = $1`, [p.userId])).rows.map(r => r.area);
@@ -394,6 +475,10 @@ export async function getChange(tx: Tx, p: Principal, id: string, now = new Date
     proposal: c.proposal, proposalBy: c.proposal_by, rule, missingAreaReviews: missingAreas,
     approveReason: c.approve_reason, rejectReason: c.reject_reason, applyOn: c.apply_on, appliedAt: c.applied_at, applyResult: c.apply_result, detectedAt: c.detected_at,
     impact, impactNote, history, publishedRules: published, blockers, frequency, reviewAreas,
+    assignment: c.assigned_to ? { userId: c.assigned_to, name: asg?.name ?? null, at: c.assigned_at, note: c.assign_note } : null,
+    compare: { hasOld: !!c.old_text, note: c.old_text ? null : c.change_type === 'new_publication' ? 'Yeni yayın: karşılaştırılacak bir eski metin yok; metin olduğu gibi okunur.' : 'Eski metin yok: bu kaynak ilk okumada yalnız karşılaştırma TABANI olarak kaydedildi; sonraki okumadaki farklar bu tabana göre gösterilir.' },
+    cannot: cannotReasons(p, c, rule, blockers, reviewAreas.required),
+    nextInLine: nextInLine(c, rule, reviewAreas.required, asg?.name ?? null),
     can: {
       edit: (has(p, 'rule_author') || has(p, 'platform_admin')) && c.status === 'pending',
       resolveDate: (has(p, 'platform_admin') || has(p, 'rule_reviewer')) && ['pending', 'drafted'].includes(c.status) && c.date_status === 'unclear',
@@ -403,6 +488,36 @@ export async function getChange(tx: Tx, p: Principal, id: string, now = new Date
     },
     exampleNote: c.is_example ? 'ÖRNEK / SENTETİK KAYNAK — gerçek ya da uzman onaylı mevzuat değildir; yalnız demo ortamında kural olarak yayımlanabilir.' : null,
   };
+}
+
+/** Why an action is unavailable, in words, so the person reads the missing condition next to the button. */
+function cannotReasons(p: Principal, c: any, rule: any, blockers: string[], areas: { area: string; approved: boolean; waiting: string | null }[]) {
+  const r: Record<string, string | null> = { prepare: null, approve: null, reject: null, return: null, assign: null };
+  if (!has(p, 'rule_author')) r.prepare = 'Taslağı yalnız kural yazarı hazırlar; bu hesabın kural yazarı rolü yok.';
+  else if (c.status !== 'pending') r.prepare = c.status === 'drafted' ? 'Taslak zaten hazırlanmış.' : `Kayıt "${c.status}" durumunda.`;
+  else if (c.date_status === 'unclear') r.prepare = 'Yürürlük tarihi belirsiz: önce bir yönetici tarihi çözmeli.';
+  else if (!c.proposal) r.prepare = 'Önce önerilen kural değişikliğini yazıp kaydet.';
+  else if (!(c.proposal.requiredReviewAreas ?? []).length) r.prepare = 'İnceleme alanı seçilmedi.';
+  if (!has(p, 'rule_reviewer')) r.approve = 'Onayı yalnız kural onaylayıcısı verir; bu hesabın onaylayıcı rolü yok.';
+  else if (c.status !== 'drafted') r.approve = c.status === 'pending' ? 'Önce kural taslağı hazırlanıp inceleme alanı onayını almalı.' : `Kayıt "${c.status}" durumunda.`;
+  else if (rule && rule.author_id === p.userId) r.approve = 'Taslağı sen yazdın; onayı başka bir onaylayıcı verir.';
+  else if (areas.some(a => !a.approved)) r.approve = `Alan incelemesi bekleniyor: ${areas.filter(a => !a.approved).map(a => a.area).join(', ')}${areas.some(a => !a.approved && a.waiting) ? ' (tanımlı inceleyici yok)' : ''}.`;
+  else if (c.date_status === 'unclear') r.approve = 'Yürürlük tarihi belirsiz.';
+  else if (blockers.some(b => /sıklığı belirlenmedi/.test(b))) r.approve = 'Tekrar sıklığı belirlenmedi: sıklık seçilmeden onaylanamaz.';
+  if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) r.reject = 'Reddetme yetkin yok.';
+  else if (!['pending', 'drafted'].includes(c.status)) r.reject = `Kayıt "${c.status}" durumunda.`;
+  if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) r.return = 'İade yetkin yok.';
+  else if (c.status !== 'drafted') r.return = 'İade yalnız hazırlanmış taslak için.';
+  if (!has(p, 'platform_admin')) r.assign = 'Atamayı yalnız platform yöneticisi yapar.';
+  else if (!['pending', 'drafted'].includes(c.status)) r.assign = `Kayıt "${c.status}" durumunda; atama yapılamaz.`;
+  return r;
+}
+function nextInLine(c: any, rule: any, areas: { area: string; approved: boolean; waiting: string | null; names: string[] }[], assignee: string | null): string {
+  const who = assignee ? ` Atanan: ${assignee}.` : '';
+  if (c.status === 'pending') return `Sıra: kural yazarında (öneri ve taslak).${who}`;
+  if (c.status === 'drafted') { const w = areas.filter(a => !a.approved); return w.length ? `Sıra: alan incelemesinde (${w.map(a => `${a.area}: ${a.waiting ? 'inceleyici tanımlı değil' : a.names.join(', ')}`).join('; ')}); sonra kural onaylayıcısında.${who}` : `Sıra: kural onaylayıcısında (yazar dışında biri).${who}`; }
+  if (c.status === 'scheduled') return `Sıra: sistemde — ${String(c.apply_on).slice(0, 10)} günü kendiliğinden uygulanır.`;
+  if (c.status === 'applied') return 'Tamamlandı: uygulandı.'; return 'Kapandı: reddedildi.';
 }
 
 /** The administrator settles an unclear entry-into-force date (with the reason). Until then nothing can be approved. */
@@ -615,8 +730,7 @@ export async function legislationTick(db: Db, cfg: LegislationConfig, now = new 
       const okToday = (await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [today])).rowCount;
       if (okToday) return false;
       const attempts = (await tx.query<{ n: number; last: string | null }>(`SELECT count(*)::int AS n, max(started_at) AS last FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule'`, [today])).rows[0]!;
-      if (attempts.n >= 6) return false;
-      return !attempts.last || Date.parse(attempts.last) < now.getTime() - 30 * 60_000;
+      return retryPlan(attempts.n, attempts.last ? new Date(attempts.last) : null, now).due;
     });
     if (due) { out.scan = await runScan(db, cfg, { trigger: 'schedule', now }); log({ level: 'info', event: 'legislation_scan', ...(out.scan as object) }); }
   }

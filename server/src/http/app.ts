@@ -840,11 +840,23 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     platformGate(req);
     const f = z.object({
       status: z.enum(['pending', 'drafted', 'scheduled', 'applied', 'rejected']).optional(), source: z.string().max(60).optional(), area: z.string().max(60).optional(),
-      q: z.string().max(100).optional(), dateStatus: z.enum(['known', 'unclear']).optional(), effectiveFrom: z.iso.date().optional(), effectiveTo: z.iso.date().optional(), reviewer: uuid.optional(),
+      q: z.string().max(100).optional(), dateStatus: z.enum(['known', 'unclear']).optional(), effectiveFrom: z.iso.date().optional(), effectiveTo: z.iso.date().optional(), reviewer: uuid.optional(), assignee: z.union([z.literal('me'), uuid]).optional(), waiting: z.enum(['1']).optional(), match: z.enum(['uncertain']).optional(),
     }).parse(req.query);
-    return db.system(tx => leg.listChanges(tx, req.principal, f));
+    return db.system(tx => leg.listChanges(tx, req.principal, { ...f, waiting: f.waiting === '1' }));
   });
   app.get('/admin/legislation/changes/:id', async req => { platformGate(req); return db.system(tx => leg.getChange(tx, req.principal, rvId(req))); });
+  app.get('/admin/legislation/changes/:id/assignees', async req => { platformGate(req); return db.system(tx => leg.assigneeCandidates(tx, req.principal, rvId(req))); });
+  app.post('/admin/legislation/changes/:id/assign', async req => {
+    platformGate(req);
+    const b = z.object({ userId: uuid.nullable(), reason: z.string().max(1000) }).parse(req.body);
+    return db.system(tx => leg.assignChange(tx, req.principal, rvId(req), b));
+  });
+  app.post('/admin/legislation/changes/:id/return', async req => { platformGate(req); const b = reasonBody.parse(req.body ?? {}); return db.system(tx => leg.returnChange(tx, req.principal, rvId(req), b.reason)); });
+  app.post('/admin/reviewer-areas', async req => {
+    platformGate(req);
+    const b = z.object({ userId: uuid, area: z.string().max(40), grant: z.boolean(), reason: z.string().max(500), changeId: uuid.nullable().optional() }).parse(req.body);
+    return db.system(tx => padmin.setReviewerArea(tx, req.principal, b));
+  });
   app.post('/admin/legislation/scan', async req => {
     platformGate(req);
     if (!req.principal.platformRoles.includes('platform_admin') && !req.principal.platformRoles.includes('rule_reviewer')) throw forbidden('Elle tarama için yetkin yok.');
