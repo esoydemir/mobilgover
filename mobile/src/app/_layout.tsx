@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Text, View, useWindowDimensions } from 'react-native';
 import { QueueProvider } from '../api/queue';
+import { PrimaryButton } from '../components/ui';
 import { SessionProvider, useSession } from '../api/session';
 import { TabBar } from '../components/TabBar';
 import { ToastView } from '../components/ToastView';
@@ -56,8 +57,11 @@ export default function RootLayout() {
 
 /** Sends signed-out users to sign-in and users without a business to setup. */
 function Gate({ children }: { children: ReactNode }) {
-  const { ready, token, companies, me, provider } = useSession();
+  const { ready, token, companies, company, role, me, provider } = useSession();
   const path = usePathname();
+  // B-07: an outside verifier (grant, no role) reaches only the verification list, the cases and notifications; a direct address to anything else sends them back.
+  const outsideVerifier = !!company && !role && !!company.grants?.some(g => g.scopes.includes('ncr_verify'));
+  const verifierAllowed = path === '/' || path === '/verify-queue' || path.startsWith('/ncr/') || path === '/notifications' || path === '/account' || path === '/login';
   // Without a business: the provider area, the professional network and moderation stay reachable.
   const platform = (me?.platformRoles.length ?? 0) > 0;
   // People without a business: specialists, network users and platform staff (rules, review, institution demo).
@@ -78,6 +82,14 @@ function Gate({ children }: { children: ReactNode }) {
       <ActivityIndicator color={C.lime} />
       <Text style={{ color: C.t1, fontSize: 16, fontWeight: '600', textAlign: 'center' }}>Hesabın kontrol ediliyor</Text>
       <Text style={{ color: C.t2, fontSize: 13, lineHeight: 19, textAlign: 'center' }}>Uzman profilin sunucudan okunamadı (bağlantı yok olabilir). Bağlantı gelince doğru ekran kendiliğinden açılır; işletme kurulumuna gönderilmedin.</Text>
+    </View>
+  );
+  // B-05: an outside verifier asking for a page outside the permission gets the reason and the way back, not an empty "Bugün 0".
+  if (ready && token && outsideVerifier && !verifierAllowed) return (
+    <View testID="out-of-scope" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 }}>
+      <Text style={{ color: C.t1, fontSize: 18, fontWeight: '600', textAlign: 'center' }}>Bu sayfa iznin dışında</Text>
+      <Text style={{ color: C.t2, fontSize: 13.5, lineHeight: 20, textAlign: 'center' }}>Dış doğrulayıcı olarak yalnız sana atanan uygunsuzluk kayıtlarını ve bunların doğrulamasını görürsün. Görevler, belgeler, ekip ve şube bilgileri bu iznin kapsamında değildir.</Text>
+      <PrimaryButton testID="out-of-scope-back" label="Doğrulama kuyruğuma dön" onPress={() => router.replace('/verify-queue')} />
     </View>
   );
   return <>{children}</>;

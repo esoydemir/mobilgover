@@ -5,7 +5,7 @@ import { errorText } from '../../api/client';
 import { useSession } from '../../api/session';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field } from '../../components/states';
-import { GhostButton, PrimaryButton } from '../../components/ui';
+import { GhostButton, PrimaryButton, shortWhy } from '../../components/ui';
 import { USER_CONTENT } from '../../features/network';
 import { C, type } from '../../theme';
 
@@ -25,8 +25,8 @@ export default function ComposeRoute() {
       <Field label="Paylaşım" testID="net-post-body" value={body} onChangeText={setBody} multiline placeholder="ör. Kapı contasını yaz başında kontrol etmek sıcaklık sapmalarını azaltıyor." />
       {error ? <ErrorBox message={error} /> : null}
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <PrimaryButton testID="net-post-publish" label={busy ? 'Kaydediliyor…' : 'Yayımla'} glow={false} style={{ flex: 1 }} disabled={busy || body.trim().length < 3} onPress={() => save(true)} />
-        <GhostButton testID="net-post-draft" label="Taslak kaydet" disabled={busy || body.trim().length < 3} onPress={() => save(false)} />
+        <PrimaryButton testID="net-post-publish" label={busy ? 'Kaydediliyor…' : 'Yayımla'} glow={false} style={{ flex: 1 }} disabled={busy || body.trim().length < 3} why={shortWhy(body, 3, 'Metin')} onPress={() => save(true)} />
+        <GhostButton testID="net-post-draft" label="Taslak kaydet" disabled={busy || body.trim().length < 3} why={shortWhy(body, 3, 'Metin')} onPress={() => save(false)} />
       </View>
     </Screen>
   );

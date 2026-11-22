@@ -160,6 +160,21 @@ Hâlâ açık (GH-07) — **ürün kararı gerektiren karar noktası:**
 - Değerlendiren mobilde başlatan kişi olarak atanıyor; başka kişi seçimi API'de var, ekranda yok.
 - Ekranlar tarayıcıda görülmedi; yalnız `tsc` geçti.
 
+## Dokuzuncu dilim — B maddeleri (kısmi)
+
+Kapananlar (test: 523 geçti, 33 atlandı, 1 paket ortam nedeniyle çalışmadı; mobil ve sunucu `tsc` temiz):
+- **B-07** `b07-verifier-scope.test.ts` 3/3: kayıtla sınırlı dış doğrulayıcıda `/companies` şube listesi boş, ekip/profil/denetim dosyası 403, belge/görev/eğitim/QR boş, yalnız atanan vaka görünür. Düzeltilen sızıntılar: şube adları (`companies.ts`) ve eğitim kataloğu (`training.ts`). Mobil: izin dışı adres açıklama ekranı (B-05) gösterir.
+- **B-05** izin dışı sayfada "Bugün 0" yerine erişim açıklaması ve "Doğrulama kuyruğuma dön" (`_layout.tsx`); ekranda görülmedi.
+- **B-01** ve **B-15**: kod değişikliği gerekmedi, mevcut davranış testle kanıtlandı (`b15-roles-b01-login.test.ts` 4/4): pilotta demo kutusu 404 ve `/env`'de demo alanı yok, demoda normal giriş; platform yöneticisi moderasyon yapamaz, rol ancak gerekçeli atamayla gelir.
+- **B-11** `b11-pdf-pages.test.ts` 2/2: alt bilgi için fazladan boş sayfa açılıyordu ("Sayfa 1 / 1" ikinci sayfada); alt kenar boşluğu sıfırlanarak giderildi; kısa ve 4 sayfalık çıktıda numaralar 1..n, gerçek sayı.
+- **B-14** `b14-qr-bad-code.test.ts` 2/2: bozuk, kısa, yabancı bağlantılı veya yetkisiz kod aynı 404 mesajını verir; mobilde okunan ama GoverHub kodu olmayan içerik için mesaj ve "Yeniden okut".
+- **B-03** `PrimaryButton`/`GhostButton` `why` alanı: pasif düğmenin yanında eksik koşul yazılır ("Not en az 5 karakter olmalı (şu an 4)"); 31 not/gerekçe düğmesi ve 6 çok koşullu form bağlandı. Yalnız `tsc`; 4 ve 5 karakterle ekranda denenmedi.
+
+Açık (bu dilimde yapılmadı):
+- **B-10** taslak hatası: form durumu hata sonrası korunuyor, fakat sunucu genel "İstek alanları geçersiz." ve İngilizce `details` dönüyor; alana bağlı Türkçe mesaj yazılmadı.
+- **B-12** 320 px, **B-08** uzman profili açılışı/yeniden deneme: başlanmadı.
+- Ardından: üç açık ürün kararının öneri olarak yazılması, sınırlı kanıt doğrulamaları, altı uçtan uca senaryo ve final durum tablosu.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 yalnız soğutma ve gaz kategorilerini haritaladı.

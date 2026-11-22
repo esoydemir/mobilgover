@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field } from '../../components/states';
-import { FilterChip, PrimaryButton } from '../../components/ui';
+import { FilterChip, PrimaryButton, missingWhy } from '../../components/ui';
 import { DOC_TYPE } from '../../features/documents';
 import { C, type } from '../../theme';
 
@@ -57,7 +57,7 @@ export default function NewDocumentRoute() {
       <Field label="Belge no (isteğe bağlı)" value={documentNo} onChangeText={setDocumentNo} />
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Kaydettikten sonra dosyayı ve geçerlilik tarihlerini sürüm olarak eklersin; başka bir yetkili inceleyene kadar belge geçerli sayılmaz.</Text>
       {error ? <ErrorBox message={error} /> : null}
-      <PrimaryButton testID="doc-create" label={busy ? 'Kaydediliyor…' : 'Belgeyi oluştur'} disabled={busy || title.trim().length < 3 || (scope === 'equipment' && !equipmentId)} onPress={submit} />
+      <PrimaryButton testID="doc-create" label={busy ? 'Kaydediliyor…' : 'Belgeyi oluştur'} disabled={busy || title.trim().length < 3 || (scope === 'equipment' && !equipmentId)} why={missingWhy([[title.trim().length < 3, 'başlık (en az 3 karakter)'], [scope === 'equipment' && !equipmentId, 'ekipman seçimi']])} onPress={submit} />
     </Screen>
   );
 }

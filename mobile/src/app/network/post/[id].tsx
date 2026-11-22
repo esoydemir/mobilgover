@@ -6,7 +6,7 @@ import { useSession } from '../../../api/session';
 import { useApi } from '../../../api/useApi';
 import { Screen } from '../../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../../components/states';
-import { Card, Eyebrow, GhostButton, PrimaryButton, Tap } from '../../../components/ui';
+import { Card, Eyebrow, GhostButton, PrimaryButton, Tap, shortWhy } from '../../../components/ui';
 import { fmtDateTime } from '../../../features/dates';
 import { Avatar, CaseBox, ReportBox, USER_CONTENT, type Post } from '../../../features/network';
 import { useUi } from '../../../state/app';
@@ -81,7 +81,7 @@ export default function PostRoute() {
             </View>
           ))}
           <Field label="Yorum yaz" testID="net-comment-body" value={comment} onChangeText={setComment} multiline />
-          <PrimaryButton testID="net-comment-send" label="Yorumla" glow={false} height={40} size={12} disabled={comment.trim().length < 2}
+          <PrimaryButton testID="net-comment-send" label="Yorumla" glow={false} height={40} size={12} disabled={comment.trim().length < 2} why={shortWhy(comment, 2, 'Yorum')}
             onPress={() => run(async () => { await call('POST', `/network/posts/${id}/comments`, { body: comment.trim() }); setComment(''); }, 'Yorum eklendi')} />
         </Card>
       ) : null}

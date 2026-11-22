@@ -28,6 +28,14 @@ export async function listMyCompanies(db: Db, p: Principal) {
   return db.system(async tx => (await tx.query(
     `SELECT c.id, c.name, c.is_demo, json_agg(json_build_object('id', s.id, 'name', s.name, 'timezone', s.timezone) ORDER BY s.created_at) AS sites
        FROM companies c JOIN sites s ON s.company_id = c.id WHERE c.id = ANY($1) GROUP BY c.id ORDER BY c.created_at`, [ids])).rows
+    .map(c => {
+      // B-07: someone with only an outside grant (no membership) does not get the branch list. A grant limited to selected cases shows none;
+      // a site-limited grant shows that site only.
+      const member = p.memberships.some(m => m.companyId === c.id);
+      const gs = p.grants.filter(g => g.companyId === c.id);
+      const sites = member ? c.sites : (c.sites as { id: string }[]).filter(s => gs.some(g => !g.ncrIds && (!g.siteId || g.siteId === s.id)));
+      return { ...c, sites };
+    })
     .map(c => ({ ...c, roles: p.memberships.filter(m => m.companyId === c.id).map(m => ({ role: m.role, siteId: m.siteId })),
       grants: p.grants.filter(g => g.companyId === c.id).map(g => ({ kind: g.kind, scopes: g.scopes })) })));
 }

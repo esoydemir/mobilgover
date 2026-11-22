@@ -258,6 +258,8 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
+      // B-11: the footer sits inside the bottom margin; with the margin in force pdfkit would add a page just to hold it.
+      doc.page.margins.bottom = 0;
       doc.font('body').fontSize(7.5).fillColor('#777').text(`GoverHub denetim dosyası · ${r.company} · ${r.generatedAtText} · Sayfa ${i + 1} / ${range.count}${r.example ? ' · ÖRNEK VERİ' : ''}`,
         48, doc.page.height - 34, { width: W, align: 'center', lineBreak: false });
     }

@@ -7,7 +7,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, shortWhy } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
 import { C, tint, type } from '../../theme';
@@ -284,9 +284,9 @@ function ReviewCard({ e, onDone }: { e: Explanation; onDone: (newId: string) => 
         <>
           <Field label="İnceleme notu (neye baktın?)" testID="review-notes" value={notes} onChangeText={setNotes} multiline />
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <PrimaryButton testID="review-approve" label="Onayla" glow={false} height={42} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5}
+            <PrimaryButton testID="review-approve" label="Onayla" glow={false} height={42} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(async () => { const x = await call<{ obligationId: string }>('POST', `${base}/review`, { decision: 'approved', notes: notes.trim() }); showToast('Bilgiler doğrulandı', 'Kural motoru yeniden karar verdi: uygulanmaz.'); onDone(x.obligationId); })} />
-            <GhostButton testID="review-reject" label="Reddet" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 5}
+            <GhostButton testID="review-reject" label="Reddet" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(async () => { await call('POST', `${base}/review`, { decision: 'rejected', notes: notes.trim() }); showToast('İstek reddedildi', 'Yükümlülük sürüyor.'); onDone(e.obligation.id); })} />
           </View>
         </>

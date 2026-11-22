@@ -6,7 +6,7 @@ import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, SectionLabel } from '../components/states';
-import { Card, FilterChip, GhostButton, PrimaryButton } from '../components/ui';
+import { Card, FilterChip, GhostButton, PrimaryButton, shortWhy } from '../components/ui';
 import { credentialLabel } from '../features/labels';
 import { MarketOps } from '../features/ServiceExtras';
 import { AuditTrail, PlatformOverview, PlatformRoles } from '../features/PlatformAdmin';
@@ -73,7 +73,7 @@ export default function AdminRoute() {
               {r.status === 'in_review' ? (
                 <View style={{ gap: 8 }}>
                   {r.pendingAreaReviews.map(a => (
-                    <GhostButton key={a} label={`${a} alanında onayla (alan uzmanı)`} height={38} size={12} disabled={note.trim().length < 5}
+                    <GhostButton key={a} label={`${a} alanında onayla (alan uzmanı)`} height={38} size={12} disabled={note.trim().length < 5} why={shortWhy(note, 5, 'Not')}
                       onPress={() => act(() => call('POST', `/admin/rule-versions/${r.id}/area-review`, { area: a, decision: 'approved', notes: note.trim() }), 'Alan incelemesi kaydedildi')} />
                   ))}
                   <PrimaryButton label="Kuralı onayla" height={42} size={12.5} glow={false} disabled={r.pendingAreaReviews.length > 0}
@@ -82,16 +82,16 @@ export default function AdminRoute() {
               ) : null}
               {r.status === 'in_review' || r.status === 'approved' ? (
                 <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <GhostButton testID="rule-return" label="Taslağa iade et" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 10}
+                  <GhostButton testID="rule-return" label="Taslağa iade et" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 10} why={shortWhy(note, 10, 'Not')}
                     onPress={() => decide('Taslağa iade', () => call('POST', `/admin/rule-versions/${r.id}/return`, { reason: note.trim() }), 'Yazara iade edildi; alan incelemeleri yeniden gerekir')} />
-                  <GhostButton testID="rule-reject" label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.warn} border={tint.warn(0.4)} disabled={note.trim().length < 10}
+                  <GhostButton testID="rule-reject" label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.warn} border={tint.warn(0.4)} disabled={note.trim().length < 10} why={shortWhy(note, 10, 'Not')}
                     onPress={() => decide('Reddetmek', () => call('POST', `/admin/rule-versions/${r.id}/reject`, { reason: note.trim() }), 'Sürüm reddedildi')} />
                 </View>
               ) : null}
               {r.status === 'in_review' || r.status === 'approved' ? <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>İade yazara geri verir; ret sürümü kapatır. İkisi için de gerekçe en az 10 karakter.</Text> : null}
               {r.status === 'published' ? (
                 <View style={{ gap: 6 }}>
-                  <GhostButton testID="rule-withdraw" label="Yayımlanmış sürümü geri çek" height={38} size={12} color={C.warn} border={tint.warn(0.4)} disabled={note.trim().length < 10}
+                  <GhostButton testID="rule-withdraw" label="Yayımlanmış sürümü geri çek" height={38} size={12} color={C.warn} border={tint.warn(0.4)} disabled={note.trim().length < 10} why={shortWhy(note, 10, 'Not')}
                     onPress={() => decide('Geri çekmek', async () => { const x = await call<{ futureTasksStopped: number; dueTasksFlagged: number; notified: number }>('POST', `/admin/rule-versions/${r.id}/withdraw`, { reason: note.trim() }); showToast('Sürüm geri çekildi', `${x.futureTasksStopped} ileri tarihli iş durdu · ${x.dueTasksFlagged} iş incelemeye alındı · ${x.notified} bildirim`); }, 'Geri çekildi')} />
                   <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>Geri çekince yeni iş açılmaz, ileri tarihli işler durur, vadesi gelenler incelemeye düşer, geçmiş kayıtlar korunur.</Text>
                 </View>
@@ -117,9 +117,9 @@ export default function AdminRoute() {
               <Text style={type(13.5, 600)}>{v.display_name} · {v.kind === 'identity' ? 'Kimlik' : v.kind === 'credential' ? credentialLabel(v.credential_type ?? '') : 'İşletme kaydı'}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>{v.issuer} · {v.document_ref}{v.valid_until ? ` · ${v.valid_until}'e kadar` : ''}</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <GhostButton testID="ver-approve" label="Doğrulandı" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 5}
+                <GhostButton testID="ver-approve" label="Doğrulandı" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 5} why={shortWhy(note, 5, 'Not')}
                   onPress={() => act(() => call('POST', `/admin/marketplace/verifications/${v.id}/decide`, { decision: 'verified', checkMethod: note.trim(), notes: '' }), 'Belge doğrulandı')} />
-                <GhostButton label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.crit} border={tint.crit(0.35)} disabled={note.trim().length < 5}
+                <GhostButton label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.crit} border={tint.crit(0.35)} disabled={note.trim().length < 5} why={shortWhy(note, 5, 'Not')}
                   onPress={() => act(() => call('POST', `/admin/marketplace/verifications/${v.id}/decide`, { decision: 'rejected', checkMethod: note.trim(), notes: '' }), 'Belge reddedildi')} />
               </View>
             </Card>
@@ -133,7 +133,7 @@ export default function AdminRoute() {
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <GhostButton testID="auth-approve" label="Onayla" height={38} size={12} style={{ flex: 1 }} disabled={note.trim().length < 5 || !/^\d{4}-\d{2}-\d{2}$/.test(validUntil)}
                   onPress={() => act(() => call('POST', `/admin/marketplace/authorizations/${a.id}/decide`, { decision: 'approved', reason: note.trim(), validUntil }), 'Kategori onaylandı')} />
-                <GhostButton label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.crit} border={tint.crit(0.35)} disabled={note.trim().length < 5}
+                <GhostButton label="Reddet" height={38} size={12} style={{ flex: 1 }} color={C.crit} border={tint.crit(0.35)} disabled={note.trim().length < 5} why={shortWhy(note, 5, 'Not')}
                   onPress={() => act(() => call('POST', `/admin/marketplace/authorizations/${a.id}/decide`, { decision: 'rejected', reason: note.trim() }), 'Başvuru reddedildi')} />
               </View>
             </Card>

@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
+import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap, shortWhy } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { AppointmentCard, ComplaintCard, MessageThread } from '../../features/ServiceExtras';
 import { useUi } from '../../state/app';
@@ -110,9 +110,9 @@ export default function ServiceDetailRoute() {
               {note.trim().length < 5 ? (
                 <Text testID="job-accept-hint" style={type(11.5, 600, { color: C.warn, lh: 1.45 })}>Teslim kabul etmek için en az 5 karakterlik bir not yaz ({note.trim().length}/5). Not kabul kaydına eklenir.</Text>
               ) : null}
-              <PrimaryButton testID="job-accept" label="Teslim kabul et" disabled={note.trim().length < 5} height={46} size={13.5}
+              <PrimaryButton testID="job-accept" label="Teslim kabul et" disabled={note.trim().length < 5} why={shortWhy(note, 5, 'Not')} height={46} size={13.5}
                 onPress={() => act(() => call('POST', `/companies/${company!.id}/jobs/${d.job!.id}/acceptance`, { accept: true, note: note.trim() }), 'Teslim kabul edildi')} />
-              <GhostButton testID="job-revision" label="Gerekçeyle revizyon iste" disabled={note.trim().length < 10} color={C.warn} border={tint.warn(0.35)}
+              <GhostButton testID="job-revision" label="Gerekçeyle revizyon iste" disabled={note.trim().length < 10} why={shortWhy(note, 10, 'Not')} color={C.warn} border={tint.warn(0.35)}
                 onPress={() => act(() => call('POST', `/companies/${company!.id}/jobs/${d.job!.id}/acceptance`, { accept: false, note: note.trim() }), 'Revizyon istendi', )} />
               <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Teslim kabulü teknik etkinlik değildir: bağlı uygunsuzlukta sorunun giderildiğini ayrıca (ör. yeni ölçümle) kontrol et.</Text>
             </View>
@@ -179,7 +179,7 @@ export default function ServiceDetailRoute() {
         cancelOpen ? (
           <Card style={{ gap: 8 }}>
             <Field label="İptal gerekçesi" testID="svc-cancel-reason" value={cancelReason} onChangeText={setCancelReason} multiline />
-            <GhostButton testID="svc-cancel" label={d.job ? 'İşi iptal et' : 'Talebi iptal et'} color={C.crit} border={tint.crit(0.35)} disabled={cancelReason.trim().length < 10}
+            <GhostButton testID="svc-cancel" label={d.job ? 'İşi iptal et' : 'Talebi iptal et'} color={C.crit} border={tint.crit(0.35)} disabled={cancelReason.trim().length < 10} why={shortWhy(cancelReason, 10, 'Gerekçe')}
               onPress={() => act(() => call('POST', `/companies/${company!.id}/service-requests/${d.request.id}/cancel`, { reason: cancelReason.trim() }), 'İptal edildi')} />
           </Card>
         ) : <Text testID="svc-cancel-open" onPress={() => setCancelOpen(true)} style={type(12, 500, { color: C.crit })}>{d.job ? 'İşi gerekçeyle iptal et' : 'Talebi gerekçeyle iptal et'}</Text>

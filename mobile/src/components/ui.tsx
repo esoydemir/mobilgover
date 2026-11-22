@@ -44,9 +44,19 @@ export const SevPill = ({ sev, big }: { sev: Sev; big?: boolean }) => (
   <Pill label={SEV[sev].label} fg={SEV[sev].fg} bg={SEV[sev].bg} ls={big ? 0.09 : 0.08} style={big && { paddingVertical: 5, paddingHorizontal: 9 }} />
 );
 
-export function PrimaryButton({ label, onPress, height = 52, size = 14.5, style, disabled, glow = true, testID }: {
-  label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; disabled?: boolean; glow?: boolean; testID?: string;
-}) {
+type PrimaryProps = { label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; disabled?: boolean; glow?: boolean; testID?: string; why?: string | null };
+
+/** B-03: why a button is inactive (what is missing or not allowed), written next to it. Undefined when nothing is missing. */
+export const shortWhy = (value: string, min: number, what: string) => { const n = value.trim().length; return n < min ? `${what} en az ${min} karakter olmalı (şu an ${n}).` : undefined; };
+/** Several conditions: names every one still missing, e.g. "Eksik: başlık (en az 5 karakter), tehlike türü". */
+export const missingWhy = (checks: [boolean, string][]) => { const m = checks.filter(([bad]) => bad).map(([, t]) => t); return m.length ? `Eksik: ${m.join(', ')}.` : undefined; };
+const Why = ({ text, testID }: { text: string; testID?: string }) => <Text testID={testID ? `${testID}-why` : 'disabled-why'} style={type(11.5, 500, { color: C.warn, lh: 1.35 })}>{text}</Text>;
+
+export function PrimaryButton(props: PrimaryProps) {
+  if (props.disabled && props.why) return <View style={[{ gap: 5 }, props.style]}><PrimaryBtn {...props} style={undefined} /><Why text={props.why} testID={props.testID} /></View>;
+  return <PrimaryBtn {...props} />;
+}
+function PrimaryBtn({ label, onPress, height = 52, size = 14.5, style, disabled, glow = true, testID }: PrimaryProps) {
   return (
     <Tap
       testID={testID}
@@ -63,9 +73,12 @@ export function PrimaryButton({ label, onPress, height = 52, size = 14.5, style,
   );
 }
 
-export function GhostButton({ label, onPress, height = 48, size = 13.5, style, color = C.t1, border = C.bds, bg = 'transparent', testID, disabled }: {
-  label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; color?: string; border?: string; bg?: string; testID?: string; disabled?: boolean;
-}) {
+type GhostProps = { label: string; onPress?: () => void; height?: number; size?: number; style?: StyleProp<ViewStyle>; color?: string; border?: string; bg?: string; testID?: string; disabled?: boolean; why?: string | null };
+export function GhostButton(props: GhostProps) {
+  if (props.disabled && props.why) return <View style={[{ gap: 5 }, props.style]}><GhostBtn {...props} style={undefined} /><Why text={props.why} testID={props.testID} /></View>;
+  return <GhostBtn {...props} />;
+}
+function GhostBtn({ label, onPress, height = 48, size = 13.5, style, color = C.t1, border = C.bds, bg = 'transparent', testID, disabled }: GhostProps) {
   return (
     <Tap testID={testID} disabled={disabled} onPress={onPress} style={[{ height, borderRadius: 999, borderWidth: 1, borderColor: border, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, style]}>
       <Text style={type(size, 600, { color })}>{label}</Text>

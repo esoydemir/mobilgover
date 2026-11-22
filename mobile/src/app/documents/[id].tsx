@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap, shortWhy } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
 import { ExtractionCard, QrCard } from '../../features/Group4';
@@ -280,7 +280,7 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <PrimaryButton testID={`doc-review-ok-${v.version}`} label={busy ? 'Kaydediliyor…' : 'İncelendi'} glow={false} height={40} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5 || !isDay(until)}
               onPress={() => run(() => call('POST', `${base}/review`, { decision: 'verified', notes: notes.trim(), validUntil: until || null }), 'Kurum içi incelendi', 'Resmî doğrulama değildir; kurumla doğruladıysan ayrıca kaydet.')} />
-            <GhostButton testID={`doc-review-reject-${v.version}`} label="Reddet" height={40} size={12.5} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 5}
+            <GhostButton testID={`doc-review-reject-${v.version}`} label="Reddet" height={40} size={12.5} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(() => call('POST', `${base}/review`, { decision: 'rejected', notes: notes.trim() }), 'Belge reddedildi', 'Yükleyene bildirildi.')} />
             <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
           </View>

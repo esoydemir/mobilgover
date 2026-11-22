@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
+import { Card, Eyebrow, GhostButton, Pill, PrimaryButton, Tap, shortWhy } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { VERSION_STATUS, linkLabel, LINK_KIND } from '../../features/training';
 import { useUi } from '../../state/app';
@@ -73,7 +73,7 @@ export default function CourseRoute() {
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <PrimaryButton testID="tr-publish" label={busy ? 'Kaydediliyor…' : 'Yayımla'} glow={false} height={40} size={12} style={{ flex: 1 }} disabled={busy}
                     onPress={() => run(() => call('POST', `${base}/versions/${open.id}/publish`, { notes: notes.trim() || null }), 'Yayımlandı', pub ? 'Önceki sürüm arşivlendi.' : undefined)} />
-                  <GhostButton testID="tr-reject" label="Geri gönder" height={40} size={12} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 5}
+                  <GhostButton testID="tr-reject" label="Geri gönder" height={40} size={12} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
                     onPress={() => run(() => call('POST', `${base}/versions/${open.id}/reject`, { notes: notes.trim() }), 'Taslağa geri gönderildi')} />
                 </View>
               </>

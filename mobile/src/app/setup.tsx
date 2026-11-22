@@ -6,7 +6,7 @@ import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import { EnvBadge } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
-import { GhostButton, PrimaryButton } from '../components/ui';
+import { GhostButton, PrimaryButton, missingWhy } from '../components/ui';
 import { ActivityPicker } from '../features/ActivityPicker';
 import { EquipmentEditor } from '../features/EquipmentEditor';
 import { Invitations } from '../features/Invitations';
@@ -50,7 +50,7 @@ export default function SetupRoute() {
           <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Pilot kapsamı: yemek hazırlayan tek şubeli kafe/restoran. Sen işletme sahibi olarak eklenirsin.</Text>
           <Field label="İşletme adı" testID="setup-name" value={name} onChangeText={setName} placeholder="ör. Moda Kafe" />
           <Field label="Şube adı" testID="setup-site" value={siteName} onChangeText={setSiteName} placeholder="ör. Moda" />
-          <PrimaryButton testID="setup-create" label={busy ? 'Oluşturuluyor…' : 'Oluştur'} disabled={busy || name.trim().length < 2 || siteName.trim().length < 2}
+          <PrimaryButton testID="setup-create" label={busy ? 'Oluşturuluyor…' : 'Oluştur'} disabled={busy || name.trim().length < 2 || siteName.trim().length < 2} why={missingWhy([[name.trim().length < 2, 'işletme adı (en az 2 karakter)'], [siteName.trim().length < 2, 'şube adı (en az 2 karakter)']])}
             onPress={() => run(async () => { await createCompany(name.trim(), siteName.trim()); setStep(1); })} />
           <GhostButton label="Hizmet sağlayıcıyım (uzman profili)" onPress={() => router.push('/pro')} />
           <GhostButton label="Çıkış yap" onPress={logout} />

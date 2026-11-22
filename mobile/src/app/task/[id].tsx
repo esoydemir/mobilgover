@@ -12,7 +12,7 @@ import { useApi } from '../../api/useApi';
 import { CameraIcon, WarnIcon } from '../../components/Icons';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, StaleNote } from '../../components/states';
-import { Card, Chevron, Eyebrow, GhostButton, PrimaryButton, Rise, SevPill, Tap } from '../../components/ui';
+import { Card, Chevron, Eyebrow, GhostButton, PrimaryButton, Rise, SevPill, Tap, shortWhy } from '../../components/ui';
 import { AssignCard } from '../../features/AssignCard';
 import { fmtDateTime } from '../../features/dates';
 import { bucketTasks, taskWindowPath } from '../../features/work';
@@ -498,7 +498,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
       <Card>
         <Eyebrow>AÇIKLAMA {r.requiredWhen === 'nonconforming' ? '· SONUÇ UYGUNSUZSA ZORUNLU' : '· ZORUNLU'}</Eyebrow>
         <View style={{ marginTop: 10 }}><Field testID="note-text" value={note} onChangeText={setNote} multiline placeholder="Ne gördün, ne yaptın?" /></View>
-        <GhostButton testID="note-save" label="Notu kaydet" disabled={note.trim().length < 3} style={{ marginTop: 10 }} onPress={() => { onAdd('not', `${path}/evidence`, { kind: 'note', text: note.trim() }); setNote(''); }} />
+        <GhostButton testID="note-save" label="Notu kaydet" disabled={note.trim().length < 3} why={shortWhy(note, 3, 'Not')} style={{ marginTop: 10 }} onPress={() => { onAdd('not', `${path}/evidence`, { kind: 'note', text: note.trim() }); setNote(''); }} />
       </Card>
     );
   }

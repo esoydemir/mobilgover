@@ -1104,7 +1104,9 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     return db.tenant(companyId, tx => qr.qrImage(tx, req.principal, companyId, id, base));
   });
   app.get('/qr/resolve', async req => {
-    const { token } = z.object({ token: z.string().min(20).max(80).regex(/^[A-Za-z0-9_-]+$/) }).parse(req.query);
+    // B-14: a damaged or foreign code answers like an unknown one (same message, no validation detail), so nothing about records can be probed.
+    const { token } = z.object({ token: z.string().max(400) }).parse(req.query);
+    if (!/^[A-Za-z0-9_-]{20,80}$/.test(token)) throw notFound('QR kodu');
     return db.system(tx => qr.resolveQr(tx, req.principal, token));
   });
 
