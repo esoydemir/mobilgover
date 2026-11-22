@@ -6,6 +6,7 @@ import { forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { listDocuments } from './documents';
+import { DECISION_TR, type ProductDecision } from './product-decisions';
 
 /**
  * Audit file (6D) for a site (or all sites the person may see) and a date range: open critical cases,
@@ -41,6 +42,7 @@ function caseLine(type: string, pl: any, ref = '', ctx?: LineCtx): string | null
     case 'nonconformity.verification_failed': return `Etkinlik doğrulanamadı (tur ${pl.iteration ?? '—'}): ${clip(pl.notes)}`;
     case 'nonconformity.reopened': return `YENİDEN AÇILDI (tur ${pl.iteration ?? '—'}): ${clip(pl.reason, 220)}`;
     case 'nonconformity.closed': return `Vaka kapandı (${pl.mode === 'independent' ? 'bağımsız doğrulama' : pl.mode === 'self' ? 'öz doğrulama' : 'doğrulama'}): ${clip(pl.notes)}`;
+    case 'nonconformity.product_assessment_opened': case 'nonconformity.product_decided': return null; // shown in the product decision block, not mixed into the device sequence
     case 'service.requested': return 'Uzman hizmeti talep edildi';
     case 'service.quote_accepted': return 'Teklif kabul edildi';
     case 'service.report_submitted': return `Servis raporu teslim edildi (sürüm ${pl.version ?? '—'})`;
@@ -124,6 +126,16 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
      JOIN documents d ON d.service_job_id = j.id JOIN document_versions v ON v.document_id = d.id LEFT JOIN users u ON u.id = v.reviewed_by
      WHERE r.ncr_id = ANY($1) AND v.version = (SELECT max(x.version) FROM document_versions x WHERE x.document_id = d.id) ORDER BY r.created_at`, [caseIds])).rows : [];
   const caseLink = caseIds.length ? (await tx.query(`SELECT r.ncr_id, r.id AS request_id, j.id AS job_id FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.ncr_id = ANY($1)`, [caseIds])).rows : [];
+  // GH-07: the product decision is shown apart from the device fix. Open cases show what is still undecided.
+  const prodIds = [...new Set([...caseIds, ...critIds])];
+  const prodRows = prodIds.length ? (await tx.query(
+    `SELECT a.ncr_id, a.product_ref, a.quantity, a.quantity_unit, a.quantity_unknown, a.first_action, a.opened_at, a.decision, a.rationale, a.decided_at,
+            au.display_name AS assessor, du.display_name AS decider FROM ncr_product_assessments a JOIN users au ON au.id = a.assessor_id LEFT JOIN users du ON du.id = a.decided_by
+      WHERE a.ncr_id = ANY($1) ORDER BY a.opened_at`, [prodIds])).rows : [];
+  const productOf = (id: string) => prodRows.filter(x => x.ncr_id === id).map(x => ({
+    product: x.product_ref as string, quantity: x.quantity_unknown ? 'MİKTAR BİLİNMİYOR' : `${Number(x.quantity).toLocaleString('tr-TR')}${x.quantity_unit ? ' ' + x.quantity_unit : ''}`,
+    firstAction: x.first_action as string, assessor: x.assessor as string,
+    decision: x.decision ? `${DECISION_TR[x.decision as ProductDecision]} · ${x.decider ?? '—'} · ${tr(x.decided_at)} · gerekçe: ${clip(x.rationale, 200)}` : 'KARAR AÇIK' }));
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'audit.report_generated', entityType: 'company', entityId: companyId,
@@ -135,7 +147,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
     disclaimer: 'Bu dosya GoverHub kayıtlarının dökümüdür; resmî denetim sonucu ya da hukuki uygunluk beyanı değildir. Yalnız dosyayı alan kişinin erişebildiği kayıtlar ve ekler yer alır.',
     sections: {
       critical: critical.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), risk: RISK_TR[n.risk_level], status: n.status === 'awaiting_verification' ? 'Doğrulama bekliyor' : 'Açık',
-        ref: n.id.slice(0, 8), equipment: n.equipment ?? null, due: n.due_at ? tr(n.due_at) : null, reopened: n.reopened_count as number,
+        ref: n.id.slice(0, 8), product: productOf(n.id), equipment: n.equipment ?? null, due: n.due_at ? tr(n.due_at) : null, reopened: n.reopened_count as number,
         containment: (critEvents.filter(e => e.ref === n.id && e.event_type === 'nonconformity.step_done' && e.payload?.step === 'containment').at(-1)?.payload?.notes as string | undefined) ?? null,
         service: critSvc.filter(x => x.ncr_id === n.id).map(x => { const k = String(x.job_status ?? x.status); return SVC_TR[k] ?? k; }),
         actions: critActs.find(x => x.ncr_id === n.id) ?? { total: 0, declared: 0 },
@@ -150,7 +162,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
           measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', at: tr(m.measured_at) })),
           basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
             relation: b.relation as string, sourceCase: b.case_title ?? null, linkedCase: b.linked_case_title ?? null, linkedBy: b.linked_by ?? null, linkedAt: b.linked_at ?? null, linkBasis: b.link_basis ?? null, basisNote: b.basis_note ?? null })) })),
-        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
+        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), product: productOf(n.id), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
           sequence: caseEvents.filter(e => e.ref === n.id || caseLink.some(l => l.ncr_id === n.id && (l.request_id === e.ref || l.job_id === e.ref)))
             .map(e => ({ at: tr(e.occurred_at), who: e.actor ?? '—', text: caseLine(e.event_type, e.payload, e.ref, ctx) })).filter(x => x.text) })),
       },
@@ -194,6 +206,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
       p(`${n.site}${n.equipment ? ` · ekipman: ${n.equipment}` : ''} · ${n.status} · tespit ${n.detected} · sorumlu ${n.owner === '—' ? 'ATANMAMIŞ' : n.owner} · termin ${n.due ?? 'belirlenmemiş'}`, { color: '#555' });
       p(`   İlk müdahale: ${n.containment ? clip(n.containment, 160) : 'kayıtlı değil'} · aksiyon: ${n.actions.total} (${n.actions.declared} beyan doğrulanmadı) · servis: ${n.service.length ? n.service.join(', ') : 'talep yok'}`, { color: '#555', size: 8.5 });
       for (const h of n.history) p(`   ${h}`, { color: '#555', size: 8.5 });
+      for (const x of n.product) p(`   Ürün kararı: ${x.product} · ${x.quantity} · ${x.decision}`, { color: x.decision === 'KARAR AÇIK' ? '#b45309' : '#555', size: 8.5 });
       doc.moveDown(0.2);
     }
 
@@ -235,7 +248,10 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     for (const n of r.sections.closures.cases) {
       p(`Kayıt kapandı: ${n.title} · kayıt no ${n.ref} · ${n.site} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
       for (const sr of n.serviceReports) p(`   Servis raporu: ${sr}`, { color: '#555', size: 8.5 });
+      if (n.sequence.length) p('   Cihaz / düzeltme kararı ve adımları', { bold: true, size: 8.5 });
       for (const e of n.sequence) p(`   ${e.at} · ${e.who} · ${e.text}`, { color: '#555', size: 8.5 });
+      if (n.product.length) p('   Ürün kararı', { bold: true, size: 8.5 });
+      for (const x of n.product) p(`   ${x.product} · ${x.quantity} · ilk önlem: ${x.firstAction} · değerlendiren: ${x.assessor} · ${x.decision}`, { color: '#555', size: 8.5 });
       doc.moveDown(0.2);
     }
 

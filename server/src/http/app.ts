@@ -34,6 +34,7 @@ import type { Mailer } from '../services/mail';
 import { loadPrincipal } from '../services/principal';
 import * as mk from '../services/marketplace';
 import * as sops from '../services/service-ops';
+import * as pdec from '../services/product-decisions';
 import * as docs from '../services/documents';
 import * as verifiers from '../services/verifiers';
 import * as training from '../services/training';
@@ -708,6 +709,20 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id } = z.object({ id: uuid }).parse(req.params);
     const b = z.object({ reason: z.string().max(4000) }).parse(req.body);
     return mutate(req, reply, companyId, async tx => { await reopen(tx, req.principal, companyId, id, b.reason); return { ok: true }; });
+  });
+  // GH-07: product assessments, separate from the device fix.
+  app.post('/companies/:companyId/nonconformities/:id/product-assessments', async (req, reply) => {
+    const companyId = company(req);
+    const { id } = z.object({ id: uuid }).parse(req.params);
+    const b = z.object({ product: z.string().trim().max(200), quantity: z.number().min(0).max(1e9).nullable().default(null), unit: z.string().trim().max(20).nullable().default(null),
+      quantityUnknown: z.boolean().default(false), firstAction: z.string().trim().max(2000), assessorId: uuid }).parse(req.body);
+    return mutate(req, reply, companyId, tx => pdec.openAssessment(tx, req.principal, companyId, id, b), 201);
+  });
+  app.post('/companies/:companyId/nonconformities/:id/product-assessments/:aid/decision', async (req, reply) => {
+    const companyId = company(req);
+    const { id, aid } = z.object({ id: uuid, aid: uuid }).parse(req.params);
+    const b = z.object({ decision: z.enum(pdec.PRODUCT_DECISIONS), rationale: z.string().max(4000), evidenceIds: z.array(uuid).max(10).default([]) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => pdec.decideAssessment(tx, req.principal, companyId, id, aid, b));
   });
   // ── Outside verifiers (limited, time-boxed, revocable) and what is waiting for verification ──
   app.get('/companies/:companyId/verifiers', async req => {

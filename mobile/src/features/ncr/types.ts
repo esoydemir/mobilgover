@@ -1,7 +1,11 @@
 export type Cause = 'knowledge' | 'equipment' | 'resource' | 'process';
 export type StageKey = 'containment' | 'assignment' | 'cause' | 'actions' | 'root_cause' | 'effectiveness' | 'verification';
 
+import type { ProductState } from './ProductCard';
+
 export type NcrDetail = {
+  /** Null in sectors where no product can be affected. */
+  product?: ProductState | null;
   id: string; site_id: string; title: string; description: string; risk_level: string; depth: 'correction' | 'capa';
   status: 'open' | 'awaiting_verification' | 'closed'; recurrence_count: number; source: 'task' | 'manual'; flow_version: number;
   iteration: number; reopened_count: number; severity: string | null; hazard_type: string;

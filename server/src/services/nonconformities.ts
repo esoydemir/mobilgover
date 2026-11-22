@@ -3,6 +3,7 @@ import { AppError, conflict, forbidden, invalid, notFound } from '../domain/erro
 import { RECURRENCE_WINDOW_DAYS, assessRisk, type Severity } from '../domain/nonconformity';
 import { CAUSE_CATEGORIES, SELF_VERIFY_MIN_REASON, actionContributors, flow, nextStep, roundPerformers, selfVerifyAllowed, suggestions, type CauseCategory, type FlowInput, type RiskLevel } from '../domain/ncrflow';
 import { can, type Principal } from '../domain/permissions';
+import { assertProductClosable, productState } from './product-decisions';
 import { appendAudit } from './audit';
 import { listAssignments, relatedCourses } from './training';
 import { notify, siteManagers } from './notifications';
@@ -157,6 +158,7 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
   const history = (await tx.query(`SELECT e.event_type, e.payload, e.occurred_at, u.display_name AS actor_name FROM audit_events e
      LEFT JOIN users u ON u.id = e.actor_id WHERE e.company_id = $1 AND e.entity_type = 'nonconformity' AND e.entity_id = $2 ORDER BY e.seq`, [companyId, id])).rows;
   const canVerify = can(p, 'ncr.verify_close', target).ok;
+  const product = await productState(tx, n);
   // Training for this case: what was assigned (each state separate) and what fits the topic.
   const trainingVisible = can(p, 'ncr.manage', target).ok;
   const trainings = (await listAssignments(tx, p, companyId, trainingVisible ? 'managed' : 'mine', id));
@@ -239,7 +241,9 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
         dismissed: dec?.decision === 'dismissed' ? { reason: dec.reason, replacement: dec.replacement, by: dec.decided_by_name, at: dec.decided_at } : null };
     }) : [],
     measurement, documents, next, firstAction,
-    closureMissing: f.stages.filter(st => st.state !== 'done').map(st => ({ stage: st.key, missing: st.missing })),
+    closureMissing: [...f.stages.filter(st => st.state !== 'done').map(st => ({ stage: st.key, missing: st.missing })),
+      ...(product?.closureBlocker && n.status !== 'closed' ? [{ stage: 'product_decision', missing: [product.closureBlocker] }] : [])],
+    product,
     progress: { done: f.stages.filter(st => st.state === 'done').length, total: f.stages.length },
     permissions: {
       act: perms.act,
@@ -603,6 +607,8 @@ export async function verify(tx: Tx, p: Principal, companyId: string, id: string
   // A "done" that nobody has checked yet is not a result; the case cannot be closed on it.
   const f = flow(d.input);
   if (b.result === 'effective' && !f.readyForEffectiveness) throw new AppError(422, 'FLOW_INCOMPLETE', `Önce: ${f.blockers.join(' ')}`);
+  // The device may be fixed and measuring normally; a product effect still needs its own decision before closure.
+  if (b.result === 'effective') await assertProductClosable(tx, n);
   await tx.query(`INSERT INTO ncr_verifications (company_id, ncr_id, iteration, result, notes, verified_by, verification_mode, verified_via) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [companyId, id, n.iteration, b.result, b.notes.trim(), p.userId, mode, via]);
   if (b.result === 'effective') {

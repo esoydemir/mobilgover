@@ -11,6 +11,7 @@ import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../
 import { fmtDateTime } from '../../features/dates';
 import { SEVERITY_LABEL } from '../../features/labels';
 import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, ServiceLinkCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
+import { ProductCard } from '../../features/ncr/ProductCard';
 import { HAZARDS, type NcrDetail } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -115,6 +116,7 @@ export default function NcrRoute() {
         <Callout tone="info" title="Etkinlik kontrolü" body={`${effectiveness.notes}${effectiveness.data?.measurement ? ` · yeni ölçüm ${effectiveness.data.measurement.value} ${effectiveness.data.measurement.unit ?? ''}${effectiveness.data.measurement.within ? ' (limit içinde)' : ''}` : ''} · ${effectiveness.done_by_name}, ${fmtDateTime(effectiveness.done_at)}`} />
       ) : null}
 
+      {n.product ? <ProductCard product={n.product} base={base} reload={q.reload} closed={n.status === 'closed'} /> : null}
       <VerificationCard n={n} base={base} reload={q.reload} />
       <ServiceLinkCard n={n} base={base} reload={q.reload} />
       {n.status !== 'closed' && n.permissions.serviceRequest ? (

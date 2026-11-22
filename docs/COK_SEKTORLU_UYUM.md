@@ -142,6 +142,24 @@ Hâlâ açık (GH-06):
 - Operasyon listelerinden kayda tek dokunuşla geçiş yok (kayıt türü + kimlik veriliyor, ekran bağlantısı yok).
 - Mobil ekranlar tarayıcıda/cihazda görülmedi; yalnız `tsc` derlemesi geçti.
 
+## Sekizinci dilim — GH-07: cihazın düzelmesi ve ürünün akıbeti
+
+- **Ürün değerlendirmesi** (yeni tablo `ncr_product_assessments`, 034): etkilenen ürün/parti, miktar **ya da açık "miktar bilinmiyor" işareti** (ikisi birlikte veya ikisi de boş olamaz, veritabanı kısıtı + 422), alınan ilk önlem, değerlendiren kişi (şubede etkin üye), karar, gerekçe, kanıt bağlantıları (kaydın kendi kanıtları), karar veren ve zaman. API: `POST nonconformities/:id/product-assessments`, `…/:aid/decision`. Karar: bekletme, imha, yeniden işleme, tedarikçiye iade, kullanıma uygun, ürün etkisi yok. Karar tek seferliktir (ikincisi 409), gerekçe zorunludur; değerlendirilen kişiye bildirim gider.
+- **Cihaz düzeldi, ürün kararı açık kalabilir:** çalışan test: onarım, neden, etkinlik kontrolü tamam, vaka `awaiting_verification`; bağımsız doğrulayıcı kapatmayı deneyince `PRODUCT_DECISION_OPEN` (422), durum değişmez. Karar kaydedilince aynı doğrulayıcı kapatır.
+- **Yetkili değerlendirme:** "ürün etkisi yok" kararını yalnız kapanışı doğrulamaya yetkili kişi verebilir ve gerekçesi en az 20 karakterdir; diğer kararları atanan değerlendirici veya kaydı yöneten yetkili verir (personel 403).
+- **Ürün etkisi olmayan sektörlerde alan yok:** faaliyetinde yemek/içecek hazırlama bulunmayan şubede ayrıntıda `product: null`, kapanış eksiklerinde ürün maddesi yok, değerlendirme başlatma `PRODUCT_NOT_APPLICABLE` (422).
+- **Denetim dosyası:** kapanan vakada "Cihaz / düzeltme kararı ve adımları" ile "Ürün kararı" ayrı bloklar (JSON `sequence` ve `product`, PDF'te ayrı başlıklar); ürün olayları cihaz sırasına karışmaz. Açık vakada karar açıksa "KARAR AÇIK" yazar; bilinmeyen miktar "MİKTAR BİLİNMİYOR" görünür. Denetim zincirine açılış ve karar olayları yazılır.
+- Mobil: uygunsuzluk ayrıntısında "Ürün kararı" kartı (başlatma, miktar bilinmiyor işareti, karar ve gerekçe, kapatmayı engelleme notu); ürün etkisi olmayan şubede görünmez.
+- Test: `gh07-product-decision.test.ts` 8/8. Tam sunucu paketi: 511 geçti, 33 atlandı, 1 paket ortam nedeniyle çalışmadı (`backup-restore`).
+
+Hâlâ açık (GH-07) — **ürün kararı gerektiren karar noktası:**
+- **Kapanış zorunluluğu şu an "değerlendirme başlatıldıysa" devreye giriyor.** Gıda şubesinde soğuk zincir vakası ürün değerlendirmesi başlatılmadan da kapanabiliyor; ekran ve ayrıntı "ürün etkilenmiş olabilir" uyarısı (`product.suggested`) veriyor ama engellemiyor. Her soğuk zincir vakasında zorunlu yapmak mevcut altı testin ve eski davranışın değişmesi demek (kapanış için ya değerlendirme ya "ürün etkisi yok" kararı gerekir). Bu ürün kararıdır; onay verilirse tek koşul değişir.
+- Ürün etkisi tespiti yalnız "faaliyet: yemek/içecek hazırlama" + soğuk zincir tehlikesiyle haritalı; diğer sektörlerde ürün etkisi tanımı yazılmadı.
+- Karar sonradan değiştirilemez; yanlış karar için düzeltme/sürüm akışı yok (yeniden açma vakayı açar, kararı değil).
+- Kanıt bağlama yalnız mevcut kayıt kanıt kimlikleriyle; ürün fotoğrafı yüklemeyi mobil kartta sunmuyoruz.
+- Değerlendiren mobilde başlatan kişi olarak atanıyor; başka kişi seçimi API'de var, ekranda yok.
+- Ekranlar tarayıcıda görülmedi; yalnız `tsc` geçti.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 yalnız soğutma ve gaz kategorilerini haritaladı.
