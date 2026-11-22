@@ -219,9 +219,9 @@ describe('soru grupları: işletme yalnız kendi faaliyetine ait soruları gör�
     expect((await c.get(`/companies/${id}/obligations?siteId=${site}`)).body).toEqual(before);
   });
 
-  it('emlak ofisi: gıda ve montaj soruları sorulmaz; yalnız genel sorular', async () => {
+  it('emlak ofisi: gıda ve montaj soruları sorulmaz; genel sorular ve kendi sorusu (sözleşme dosyası) sorulur', async () => {
     const q = (await client(env, estateToken).get(`/companies/${estateCompany}/profile-questions`)).body;
-    expect(keys(q).sort()).toEqual(['site.district', 'site.province', 'staff.count']);
+    expect(keys(q).sort()).toEqual(['activity.client_contracts', 'site.district', 'site.province', 'staff.count']);
   });
 
   let shop: string, shopSite: string, shopToken: string;

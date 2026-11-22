@@ -118,6 +118,19 @@ export const EXAMPLE_SECTOR_RULES: Omit<DraftInput, 'provisionIds'>[] = [
       limits: [], severity: 'major', hazardType: 'electrical_safety',
     }],
   },
+  {
+    code: 'EX-ESTATE-FILES', title: 'Sözleşme ve yetki belgesi dosyası kontrolü (örnek iyi uygulama)', kind: 'good_practice', isExample: true, ambiguityNote: null,
+    condition: { fact: 'activity.client_contracts', op: 'eq', value: true },
+    obligationTitle: 'Müşteri sözleşme ve yetki belgesi dosyalarını kontrol et',
+    obligationSummary: 'Örnek iyi uygulama; mevzuat hükmü olarak sunulmaz. Müşteri veya mülk sahibi adına dosya tutan ofisler imzalı sözleşme ve yetki belgelerinin eksiksiz ve süresi içinde olduğunu düzenli kontrol eder.',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    templates: [{
+      code: 'estate_file_check', title: 'Sözleşme ve yetki belgesi dosyası kontrolü', instructions: 'Açık portföydeki dosyaları gözden geçir: imzalı sözleşme, yetki belgesi ve süre bitişi. Eksik dosyanın fotoğrafını ekle. (Örnek görev.)',
+      recurrence: { freq: 'monthly', day: 1, at: '10:00' },
+      evidence: [{ kind: 'checklist', items: [{ id: 'contracts_signed', label: 'Açık portföydeki tüm dosyalarda imzalı sözleşme var', critical: true }, { id: 'authority_valid', label: 'Yetki belgelerinin süresi dolmamış', critical: true }] }, { kind: 'photo', min: 1 }],
+      limits: [], severity: 'minor', hazardType: 'documentation',
+    }],
+  },
 ];
 
 /** Publishes the sector example rules once on a database that already holds the platform people. */
