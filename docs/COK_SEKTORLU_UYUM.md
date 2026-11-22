@@ -175,6 +175,18 @@ Açık (bu dilimde yapılmadı):
 - **B-12** 320 px, **B-08** uzman profili açılışı/yeniden deneme: başlanmadı.
 - Ardından: üç açık ürün kararının öneri olarak yazılması, sınırlı kanıt doğrulamaları, altı uçtan uca senaryo ve final durum tablosu.
 
+## Onuncu dilim — kapsam sürümü, çıkmaz kapatma, emlak ofisi (22 Kasım)
+
+**Bugün ne görülüyor (kayıt → ekran).** Market: "yemek hazırlamıyorum, soğuk ürün satıyorum" → ana ekranda "Soğuk ürün satışı için ekipman bilgisi eksik" + "Dolap ekle"; dolap kaydedilince görev 0→1, profil yeniden kaydedilince 1, diğer şubede 0 (izole tur 8099, aynı görev kimliğiyle atama ve kanıtlı tamamlama). Elektrik dükkânı: satışla başlar, montaj görevi yok; sahada montaj eklenince yalnız montaj görevi başlar, eski karar kalır (`multi-sector-flow`, sunucu testi; ekran turu yapılmadı). Emlak ofisi: kendi örnek görevi `EX-ESTATE-FILES` (sözleşme ve yetki dosyası kontrolü); personel dolabı gıda görevi üretmez (`gh10-estate-office`, sunucu testi; ekran turu yapılmadı).
+
+**Sürüm farkı.** Tohum kural değişikliği yayımlanmış v1'i güncellemez. `ensureFoodScopeRevision`, normal inceleme/yayın akışıyla EX-COLD-CHAIN, EX-REPORT-DOC ve EX-REPORT-MEAS için v2 üretir; tamamlanmış görev v1'e bağlı kalır, yeni görev v2'den gelir (`gh07d`: kafe görevleri v1:15, v2:16). Tarayıcıda v1→v2 geçişi gösterilmedi; izole ortam baştan v2 ile kuruldu.
+
+**Atlanan 33 test.** 29'u `backup-restore` (yerelde `pg_dump` ve geri yükleme veritabanı yok; CI'da `TEST_RESTORE_*` tanımlı, orada koşar), 4'ü `assistant-real-model` ve `legislation-live-observation` (gerçek model / canlı kaynak anahtarı ister, bilerek atlanır).
+
+**Alan hatası mesajları (B-10), eksik koşul ipuçları (B-03), dış doğrulayıcı sayfaları (B-05/B-07), uzman alanı (B-08), 320 px (B-12), QR (B-14), İngilizce alt başlık (B-16)** izole turda ekrandan doğrulandı; kanıt `docs/kanit-f1-tur-market/`.
+
+**Açık:** B-01 pilot giriş sayfası, B-02, mevzuat masası ekran turu, emlak için belge/hizmet ihtiyacı (yalnız görev var), gerçek hukuki karar ayrımı, v1→v2 tarayıcı gösterimi, push/PR/CI.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 yalnız soğutma ve gaz kategorilerini haritaladı.
