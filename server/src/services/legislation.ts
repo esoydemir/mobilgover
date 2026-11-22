@@ -176,10 +176,18 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
   const lastOk = (await tx.query(`SELECT finished_at, trigger FROM legislation_scan_runs WHERE status = 'ok' ORDER BY finished_at DESC LIMIT 1`)).rows[0] ?? null;
   const lastRun = (await tx.query(`SELECT id, trigger, status, started_at, finished_at, results FROM legislation_scan_runs ORDER BY started_at DESC LIMIT 1`)).rows[0] ?? null;
   const unclear = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM legislation_changes WHERE status IN ('pending','drafted') AND date_status = 'unclear'`)).rows[0]!.n;
+  // Publications the scan left OUT of the queue (no supported sector in title or text). They never reach the queue, so this list is the only place a person can notice a missed one.
+  const skippedMap = new Map<string, { title: string; why: string; firstDay: string; lastDay: string; scans: number }>();
+  for (const r of (await tx.query<{ run_date: string; results: SourceResult[] | null }>(`SELECT to_char(run_date, 'YYYY-MM-DD') AS run_date, results FROM legislation_scan_runs WHERE started_at > now() - interval '14 days' AND status IN ('ok','partial') ORDER BY started_at`)).rows) {
+    for (const res of Array.isArray(r.results) ? r.results : []) for (const k of res.skipped ?? []) {
+      const e = skippedMap.get(k.title); if (e) { e.lastDay = r.run_date; e.scans += 1; } else skippedMap.set(k.title, { ...k, firstDay: r.run_date, lastDay: r.run_date, scans: 1 });
+    }
+  }
+  const recentSkipped = [...skippedMap.values()].sort((a, b) => b.lastDay.localeCompare(a.lastDay)).slice(0, 100);
   const okDays = (await tx.query<{ d: string }>(`SELECT DISTINCT to_char(run_date, 'YYYY-MM-DD') AS d FROM legislation_scan_runs WHERE trigger = 'schedule' AND status = 'ok'`)).rows.map(r => r.d);
   const schedOkToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [istanbulDay()])).rowCount ?? 0) > 0;
   return {
-    sources, lastSuccessfulScan: lastOk, lastRun,
+    sources, lastSuccessfulScan: lastOk, lastRun, recentSkipped,
     pendingReview: (counts.pending ?? 0) + (counts.drafted ?? 0), counts: { pending: counts.pending ?? 0, drafted: counts.drafted ?? 0, scheduled: counts.scheduled ?? 0, applied: counts.applied ?? 0, rejected: counts.rejected ?? 0 },
     unclearDates: unclear,
     schedule: { enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday), missedDays: cfg?.enabled ? missedScheduledDays(okDays, istanbulDay()) : [] },
@@ -198,7 +206,7 @@ export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string
   const rows = (await tx.query(
     `SELECT c.id, c.source_code, c.change_type, c.scope_area, c.doc_ref, c.doc_title, c.article_ref, c.published_on, c.effective_from, c.date_status, c.status, c.is_example, c.apply_on, c.detected_at,
             c.rule_version_id, (c.proposal IS NOT NULL) AS has_proposal, c.drafted_by, c.approved_by, c.rejected_by,
-            c.suggestion->>'matchLevel' AS match_level, c.suggestion->'sectors' AS sectors
+            c.suggestion->>'matchLevel' AS match_level, c.suggestion->'sectors' AS sectors, c.suggestion->'bodySectors' AS body_sectors
        FROM legislation_changes c
       WHERE ($1::text IS NULL OR c.status = $1)
         AND ($2::text IS NULL OR c.source_code = $2)

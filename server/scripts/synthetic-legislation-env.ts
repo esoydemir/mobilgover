@@ -7,7 +7,9 @@ import { loadConfig } from '../src/config';
 import { assertDemoDatabase } from '../src/db/guards';
 import { Db } from '../src/db/pool';
 import { buildApp } from '../src/http/app';
+import { startLegislationScheduler } from '../src/services/legislation';
 import { istanbulDay } from '../src/services/legislation-sources';
+import { existsSync, readFileSync } from 'node:fs';
 import { DevOutboxMailer } from '../src/services/mail';
 import { LocalStore } from '../src/storage/local';
 import { SyntheticSource } from '../test/support/legislation-fixtures';
@@ -27,6 +29,19 @@ mk(3, 'Sentetik Taşınmaz Ticareti Aracılık Yönetmeliği', 'Taşınmaz ticar
 mk(4, 'Sentetik İşyeri Denetim Esasları Yönetmeliği', 'İşyerlerinde denetim esasları belirlenir.');
 mk(5, 'Sentetik Orman Yangınlarıyla Mücadele Yönetmeliği', 'Orman yangınlarıyla mücadele esasları.');
 src.consolidated.set('1.5.9001', { title: 'SENTETİK GIDA KANUNU', articles: { '1': 'Amaç: gıda güvenliği.', '2': 'Soğuk zincir kesintisiz sürdürülür.' } });
-const app = buildApp({ db, store: new LocalStore(config.evidenceDir), mailer: new DevOutboxMailer(db), config, legislation: src.config() });
+// ── Acceptance-only controls (this script never runs outside DEMO_MODE) ──
+// 1) The daily SCHEDULER runs here (no "Şimdi tara" button): every SYNTH_TICK_MS it applies what is due and runs the daily scan once the scan hour has come.
+//    The scan hour is SYNTH_SCAN_HOUR (default 23), so nothing is scanned until the TEST CLOCK is moved past it.
+// 2) TEST CLOCK: SYNTH_CLOCK_FILE holds {"offsetMs": n}; the scheduler's "now" is real time + offsetMs. Only the scheduler is shifted; HTTP requests (approval, login) use real time.
+// 3) PUBLISH FILE: SYNTH_PUBLISH_FILE is a JSON array of {id, title, sayi, articles[], category?}; each new id is published on the real Istanbul day as a new Resmî Gazete item.
+const legCfg = src.config({ enabled: true, scanHour: Number(process.env.SYNTH_SCAN_HOUR ?? 23) });
+const clockFile = process.env.SYNTH_CLOCK_FILE, pubFile = process.env.SYNTH_PUBLISH_FILE;
+const clock = () => { let off = 0; try { if (clockFile && existsSync(clockFile)) off = Number(JSON.parse(readFileSync(clockFile, 'utf8')).offsetMs) || 0; } catch { /* keep 0 */ } return new Date(Date.now() + off); };
+const published = new Set<string>();
+const pollPublish = () => { try { if (!pubFile || !existsSync(pubFile)) return; for (const it of JSON.parse(readFileSync(pubFile, 'utf8')) as { id: string; title: string; sayi: number; articles: string[]; category?: string }[]) {
+  if (published.has(it.id)) continue; published.add(it.id); src.publish(istanbulDay(new Date()), { id: it.id, category: it.category ?? 'YÖNETMELİKLER', title: it.title, sayi: it.sayi, articles: it.articles }); console.log(`published ${it.id} ${it.title}`); } } catch (e) { console.log('publish file unreadable', (e as Error).message); } };
+setInterval(pollPublish, 2000).unref();
+const app = buildApp({ db, store: new LocalStore(config.evidenceDir), mailer: new DevOutboxMailer(db), config, legislation: legCfg });
+if (process.env.SYNTH_SCHEDULER === '1') startLegislationScheduler(db, legCfg, l => console.log(JSON.stringify(l).slice(0, 600)), Number(process.env.SYNTH_TICK_MS ?? 10_000), { firstMs: 3000, clock });
 await app.listen({ port: config.port, host: config.host });
 console.log(`Synthetic legislation env http://localhost:${config.port} (source ${src.rg}, day ${today})`);

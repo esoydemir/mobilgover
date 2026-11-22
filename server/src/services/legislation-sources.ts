@@ -152,7 +152,13 @@ const SECTOR_TERMS: Record<Sector, RegExp> = {
   electrical: /elektrik|topraklama|kuvvetli akım|zayıf akım|yıldırım|paratoner|a[şs]ırı akım|elektrik tesis|[iİ]ç tesisat|ayd[ıi]nlatma tesis|pano|kaçak akım/i,
   estate: /emlak|gayrimenkul|ta[şs][ıi]nmaz|konut sat|kira(?:lama|c[ıi])|tapu|komisyoncu|aracılık hizmet|yetki belgesi|ta[şs][ıi]nmaz ticaret/i,
 };
-const GENERAL_TERMS = /i[şs]yeri|i[şs] sağlığı|yapı|bina|tüketici|ticari|ticaret|sözleşme|mesleki|esnaf|enerji|tesis|belgelendirme|denetim|güvenlik|standart/i;
+// General words only count at the START of a word ("yapı" must not match "yapılmasına", the verb in "Değişiklik Yapılmasına Dair").
+const GENERAL_TERMS = /(?<!\p{L})(?:i[şs]yeri|i[şs] sağlığı|yap[ıi](?:lar[ıi]?|n[ıi]n)?(?!\p{L})|bina(?:lar|n[ıi]n)?(?!\p{L})|tüketici|ticari|ticaret|sözleşme|mesleki|esnaf|enerji|tesis|belgelendirme|denetim|güvenlik|standart)/iu;
+/** An amendment/repeal title says WHAT it changes only by naming another text; the sector often shows up only in the body. */
+export const AMENDMENT_TITLE = /de(?:ğ|g)i[şs]iklik\s+yapılmasına\s+dair|yürürlükten\s+kaldırılmasına\s+dair/i;
+export function sectorsInText(text: string): { sector: Sector; word: string }[] {
+  return (Object.keys(SECTOR_TERMS) as Sector[]).flatMap(k => { const m = SECTOR_TERMS[k].exec(text); return m ? [{ sector: k, word: m[0] }] : []; });
+}
 const NOT_FOOD = /üniversite|yüksekokul|uygulama ve araştırma merkezi|araştırma ve uygulama merkezi|enstitü/i;
 export type SectorMatch = { level: 'clear' | 'uncertain' | 'out'; sectors: Sector[]; why: string };
 export function sectorRelevance(title: string): SectorMatch {
@@ -279,15 +285,22 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
     } catch (e) { out.errors.push(`${day}: ${(e as Error).message}`); continue; }
     out.seen += items.length;
     for (const it of items) {
-      const rel = sectorRelevance(it.title);
-      if (rel.level === 'out') { out.skipped.push({ title: it.title.slice(0, 160), why: rel.why }); continue; }
-      if (rel.level === 'clear') out.selected += 1; else out.uncertain += 1;
+      let rel: SectorMatch & { bodySectors?: Sector[] } = sectorRelevance(it.title);
+      const mustRead = rel.level !== 'out' || AMENDMENT_TITLE.test(it.title); // an amendment title may hide its sector: read the text before deciding
+      if (!mustRead) { out.skipped.push({ title: it.title.slice(0, 160), why: rel.why }); continue; }
       try {
         const url = new URL(it.url, base + '/').toString();
         // Links inside the day list are followed only when they stay on the configured source host.
         if (!sameHost(url, base)) throw new SourceError('refused_link', `${url} yapılandırılmış kaynak adresinin dışında; izlenmedi`);
         const doc = parseGazetteDocument(requireHtml(await fetchWithRetry(o.fetcher, url, { sleep: o.sleep }), url), { title: it.title, publishedOn: day });
         out.docsRead += 1;
+        if (rel.level === 'out') {
+          const hits = sectorsInText(doc.text);
+          if (!hits.length) { out.skipped.push({ title: it.title.slice(0, 160), why: 'Başlık değişiklik/kaldırma biçiminde; başlıkta da metinde de desteklenen iş kollarından (gıda, elektrik, emlak) ifade yok.' }); continue; }
+          rel = { level: 'uncertain', sectors: [], bodySectors: [...new Set(hits.map(h => h.sector))],
+            why: `Başlık hangi iş koluna ait olduğunu söylemiyor (yalnız "değişiklik/kaldırma"); metinde ${hits.map(h => `"${h.word}" (${SECTOR_TR[h.sector]})`).join(', ')} geçiyor. İnsan incelemesi gerekir.` };
+        }
+        if (rel.level === 'clear') out.selected += 1; else out.uncertain += 1;
         const type = changeTypeFromTitle(it.title);
         let eff = parseEffective(doc.effectiveClauses, day);
         // "Yayımı tarihinde yürürlüğe girer" can sit next to transition dates in other articles (e.g. "30/4/2027 tarihinden sonra ...").
@@ -302,7 +315,7 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
           sourceCode: 'resmi_gazete', externalKey: `rg:${file}`, changeType: type,
           docRef: `Resmî Gazete ${doc.sayi ?? '(sayı okunamadı)'} · ${trDate(day)}`, docTitle: it.title, articleRef: null, sourceUrl: url, publishedOn: day, effective: eff,
           oldText: null, newText,
-          suggestion: { relevance: rel.why, sectors: rel.sectors, matchLevel: rel.level, needsHumanClassification: rel.level === 'uncertain', category: it.category, issuer: doc.issuer, kind: type, effectiveDetail: effectiveDetail(doc, day),
+          suggestion: { relevance: rel.why, sectors: rel.sectors, matchLevel: rel.level, bodySectors: rel.bodySectors ?? [], needsHumanClassification: rel.level === 'uncertain', category: it.category, issuer: doc.issuer, kind: type, effectiveDetail: effectiveDetail(doc, day),
             hint: type === 'article_amendment' ? 'Değişiklik metni var; değişen maddenin eski metni için ilgili mevzuatın birleştirilmiş metnine bakın.' : type === 'repeal' ? 'Yürürlükten kaldırma: ilgili kural sürümü için bitiş tarihi önerilir.' : 'Yeni düzenleme: kural koşulunu ve görevleri uzman yazmalı.',
             ...compareTexts(null, newText) },
         });
