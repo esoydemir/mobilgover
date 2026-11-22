@@ -120,7 +120,7 @@ export const EXAMPLE_SECTOR_RULES: Omit<DraftInput, 'provisionIds'>[] = [
   },
   {
     code: 'EX-ESTATE-FILES', title: 'Sözleşme ve yetki belgesi dosyası kontrolü (örnek iyi uygulama)', kind: 'good_practice', isExample: true, ambiguityNote: null,
-    condition: { fact: 'activity.client_contracts', op: 'eq', value: true },
+    condition: { all: [{ fact: 'activity.brokerage', op: 'eq', value: true }, { fact: 'activity.client_contracts', op: 'eq', value: true }] },
     obligationTitle: 'Müşteri sözleşme ve yetki belgesi dosyalarını kontrol et',
     obligationSummary: 'Örnek iyi uygulama; mevzuat hükmü olarak sunulmaz. Müşteri veya mülk sahibi adına dosya tutan ofisler imzalı sözleşme ve yetki belgelerinin eksiksiz ve süresi içinde olduğunu düzenli kontrol eder.',
     effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',

@@ -1,6 +1,6 @@
 import type { Tx } from '../db/pool';
 import { invalid } from '../domain/errors';
-import { NACE_VERSION, dealsWithFood, lookupNace, normalizeNace } from '../domain/nace';
+import { NACE_VERSION, dealsWithFood, dealsWithBrokerage, lookupNace, normalizeNace } from '../domain/nace';
 import type { Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { recomputeSite } from './obligations';
@@ -56,6 +56,12 @@ export async function applyActivityToSite(tx: Tx, p: Principal, companyId: strin
     const curB = facts['activity.food_business'];
     if (curB?.value !== foodBusiness || curB.verification === 'rejected') {
       await recordFact(tx, p, companyId, { siteId, key: 'activity.food_business', value: foodBusiness, source: 'user_declared', verification: 'user_confirmed', sourceRef: ref,
+        note: `Onaylanan faaliyet kodlarından türetildi: ${codes.join(', ')}` });
+    }
+    const brokerage = entries.some(dealsWithBrokerage);
+    const curK = facts['activity.brokerage'];
+    if (curK?.value !== brokerage || curK.verification === 'rejected') {
+      await recordFact(tx, p, companyId, { siteId, key: 'activity.brokerage', value: brokerage, source: 'user_declared', verification: 'user_confirmed', sourceRef: ref,
         note: `Onaylanan faaliyet kodlarından türetildi: ${codes.join(', ')}` });
     }
   }

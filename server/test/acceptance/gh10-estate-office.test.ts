@@ -53,4 +53,12 @@ describe('GH-10 emlak ofisi: kendi görevi', () => {
     expect(await ensureFoodScopeRevision(env.db)).toEqual([]);
     expect(await ver()).toBe(before);
   });
+  it('emlak sorusu sorulmayan işletmede (elektrik dükkânı) emlak kuralı "bilgi eksik" değil "uygulanmaz" çıkar', async () => {
+    const id = (await env.ownerDb.query(`INSERT INTO users (display_name, email) VALUES ('Elektrikçi', 'elk10@test.invalid') RETURNING id`)).rows[0].id as string;
+    const c = client(env, await env.db.system(tx => createSession(tx, id, 24)));
+    const r = await c.post('/companies', { name: 'Volt', siteName: 'Çarşı' });
+    await c.post(`/companies/${r.body.companyId}/activity`, { naceCodes: ['47.59'], confirmed: true });
+    const o = ((await c.get(`/companies/${r.body.companyId}/obligations?siteId=${r.body.siteId}`)).body as any[]).find(x => x.rule === 'EX-ESTATE-FILES');
+    expect(o?.decision).toBe('not_applicable');
+  });
 });

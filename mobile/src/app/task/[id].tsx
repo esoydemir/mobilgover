@@ -157,6 +157,12 @@ export default function TaskDetailRoute() {
             <Text key={d.id} testID={`task-doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={type(12.5, 500, { color: C.info, lh: 1.45 })}>{d.title} · {d.purpose}</Text>
           ))}
         </Card>
+      ) : role !== 'staff' ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+          <Eyebrow>İLGİLİ BELGELER</Eyebrow>
+          <Text testID="task-doc-none" style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Bu kontrole bağlı belge yok. Belgeyi kasaya ekle; belgenin sayfasında “Nerede kullanılıyor” bölümünden bu kontrolü seç.</Text>
+          <GhostButton testID="task-doc-add" label="Belge kasasına ekle" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push('/documents/new' as never)} />
+        </Card>
       ) : null}
 
       {(t.measurements.length > 0 || t.evidence.length > 0) && (
