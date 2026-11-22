@@ -1,5 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
+import { useDesktop } from '../features/desktop';
+import { LegislationDesk } from '../features/LegislationDesk';
 import { Linking, Text, View } from 'react-native';
 import { errorText } from '../api/client';
 import { useSession } from '../api/session';
@@ -17,7 +19,7 @@ type Source = { code: string; name: string; base_url: string; is_example: boolea
 type Overview = {
   sources: Source[]; lastSuccessfulScan: { finished_at: string; trigger: string } | null; lastRun: { status: string; started_at: string; trigger: string; results?: { source: string; seen: number; selected?: number; uncertain?: number; skipped?: { title: string; why: string }[]; docsRead: number; created: number }[] } | null;
   recentSkipped?: { key: string; url: string | null; status: 'out_of_scope' | 'unreadable'; title: string; why: string; firstDay: string; lastDay: string; scans: number }[];
-  pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number; nextRunAt?: string | null; missedDays?: string[] }; baselineNote?: string; canScan: boolean; exampleNote: string;
+  pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number; nextRunAt?: string | null; missedDays?: string[]; retry?: { attempts: number; maxAttempts: number; nextAttemptAt: string | null; exhausted: boolean; lastErrors: string[] } | null }; baselineNote?: string; canScan: boolean; exampleNote: string;
 };
 type Row = { id: string; source_code: string; change_type: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null;
   date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null; match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null; body_sectors?: string[] | null; waiting_reason?: string | null; source_pub_id?: string | null; source_url?: string | null };
@@ -28,6 +30,11 @@ const SOURCE_TR: Record<string, string> = { resmi_gazete: 'Resmî Gazete', mevzu
 
 /** Legislation watch: daily scan health, review queue, manual rescan. Platform staff only. */
 export default function LegislationRoute() {
+  const desktop = useDesktop();
+  return desktop ? <LegislationDesk /> : <MobileLegislation />;
+}
+
+function MobileLegislation() {
   const { me, call } = useSession();
   const { showToast } = useUi();
   const allowed = (me?.platformRoles ?? []).some(r => ['platform_admin', 'rule_author', 'rule_reviewer'].includes(r));
@@ -67,8 +74,9 @@ export default function LegislationRoute() {
             <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>SON BAŞARILI TARAMA</Text>
             <Text testID="leg-last-ok" style={type(16, 700)}>{o.lastSuccessfulScan ? fmtDateTime(o.lastSuccessfulScan.finished_at) : 'Henüz başarılı tarama yok'}</Text>
             <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>
-              {o.schedule.enabled ? `Her gün ${String(o.schedule.dailyAtHour).padStart(2, '0')}:00 (${o.schedule.timezone}) kendiliğinden taranır; başarısız gün yarım saat arayla yeniden denenir.` : 'Günlük otomatik tarama bu ortamda kapalı; yalnız elle taranır.'}
+              {o.schedule.enabled ? `Her gün ${String(o.schedule.dailyAtHour).padStart(2, '0')}:00 (${o.schedule.timezone}) kendiliğinden taranır; başarısız deneme 30 dk, 1 sa, 2 sa, 4 sa arayla (günde en çok 5) yeniden denenir.` : 'Günlük otomatik tarama bu ortamda kapalı; yalnız elle taranır.'}
             </Text>
+            {o.schedule.retry ? <Text testID="leg-retry" style={type(12, 600, { color: C.warn, lh: 1.45 })}>Bugünkü planlı tarama başarısız: {o.schedule.retry.attempts}/{o.schedule.retry.maxAttempts} deneme. {o.schedule.retry.exhausted ? 'Bugün için deneme hakkı doldu.' : o.schedule.retry.nextAttemptAt ? `Sonraki deneme: ${fmtDateTime(o.schedule.retry.nextAttemptAt)}.` : ''}{o.schedule.retry.lastErrors.length ? ` Son hata: ${o.schedule.retry.lastErrors.join(' · ')}` : ''}</Text> : null}
             {o.schedule.enabled ? <Text testID="leg-next-run" style={type(12.5, 600)}>Sıradaki planlı tarama: {o.schedule.nextRunAt ? fmtDateTime(o.schedule.nextRunAt) : '—'}</Text> : null}
             {o.schedule.enabled && o.schedule.missedDays?.length ? <Text testID="leg-missed-days" style={type(12, 600, { color: C.warn, lh: 1.45 })}>⚠ Planlı tarama çalışmayan gün(ler): {o.schedule.missedDays.map(d => d.split('-').reverse().join('.')).join(', ')} (makine/Docker kapalıydı). Sonraki açılışta telafi edilir; Resmî Gazete taraması aradaki günleri geriye dönük okur.</Text> : null}
             {o.baselineNote ? <Text testID="leg-baseline-note" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{o.baselineNote}</Text> : null}

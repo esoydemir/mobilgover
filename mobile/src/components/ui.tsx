@@ -80,7 +80,7 @@ export function GhostButton(props: GhostProps) {
 }
 function GhostBtn({ label, onPress, height = 48, size = 13.5, style, color = C.t1, border = C.bds, bg = 'transparent', testID, disabled }: GhostProps) {
   return (
-    <Tap testID={testID} disabled={disabled} onPress={onPress} style={[{ height, borderRadius: 999, borderWidth: 1, borderColor: border, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, style]}>
+    <Tap testID={testID} disabled={disabled} onPress={onPress} style={[{ height, borderRadius: 999, borderWidth: 1, borderColor: border, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }, disabled ? { opacity: 0.45 } : null, style]}>
       <Text style={type(size, 600, { color })}>{label}</Text>
     </Tap>
   );

@@ -1,0 +1,4 @@
+const fs = require('fs'); const { q } = require('./leg-lib.cjs'); const T = 'C:/Users/gkhno/AppData/Local/Temp/'; const sleep = ms => new Promise(r => setTimeout(r, ms));
+const setClock = iso => fs.writeFileSync(T + 'synth-clock.json', JSON.stringify({ offsetMs: Date.parse(iso) - Date.now() }));
+(async () => { await sleep(6000); for (const [iso, w] of [['2026-11-23T23:00:30+03:00', 30], ['2026-11-23T23:20:00+03:00', 25], ['2026-11-23T23:32:00+03:00', 30]]) { setClock(iso); await sleep(w * 1000); console.log(iso.slice(11, 16), q(`SELECT count(*)||' zamanlanmis tarama bugun' FROM legislation_scan_runs WHERE trigger='schedule' AND run_date='2026-11-23'`)); }
+  console.log(q(`SELECT string_agg(to_char(started_at AT TIME ZONE 'Europe/Istanbul','HH24:MI:SS')||' '||status, ' // ' ORDER BY started_at) FROM legislation_scan_runs WHERE trigger='schedule' AND run_date='2026-11-23'`)); })();

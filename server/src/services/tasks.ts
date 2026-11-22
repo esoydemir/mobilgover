@@ -3,7 +3,7 @@ import { AppError, conflict, forbidden, invalid, notFound } from '../domain/erro
 import { assessEvidence, evidenceRequirementSchema, limitSchema, selectLimit, withinLimit, type EvidenceRequirement } from '../domain/evidence';
 import { reasonLines } from '../domain/explain-text';
 import { can, onlyAssignedTasks, type Principal } from '../domain/permissions';
-import { localDay, occurrences, type Recurrence } from '../domain/schedule';
+import { localDay, monthlyNotes, occurrences, type Recurrence } from '../domain/schedule';
 import { ALLOWED_MIME } from '../storage/local';
 import { documentsForTask } from './documents';
 import { taskServiceReports } from './marketplace';
@@ -84,10 +84,19 @@ export async function plannedOccurrences(tx: Tx, companyId: string, siteId: stri
   const cal = { timezone: site.timezone, openingDays: site.opening_days, closures };
   const yearAhead = localDay(new Date(Date.parse(fromDay + 'T12:00:00Z') + 400 * 86_400_000), site.timezone);
   return templates.map(t => {
-    if (!t.recurrence || t.recurrence.freq === 'unset') return { code: t.code, title: t.title, dueAt: [] as string[], firstDue: null as string | null, unset: true };
+    if (!t.recurrence || t.recurrence.freq === 'unset') return { code: t.code, title: t.title, dueAt: [] as string[], firstDue: null as string | null, unset: true, notes: [] as string[], upcoming: [] as string[] };
     const inWindow = occurrences(t.recurrence as Recurrence, cal, fromDay, toDay).map(o => o.dueAt.toISOString());
     const first = occurrences(t.recurrence as Recurrence, cal, fromDay, yearAhead)[0]?.dueAt.toISOString() ?? null;
-    return { code: t.code, title: t.title, dueAt: inWindow, firstDue: first, unset: false };
+    const rec = t.recurrence as Recurrence;
+    const notes: string[] = [];
+    const sixMonths = localDay(new Date(Date.parse(fromDay + 'T12:00:00Z') + 190 * 86_400_000), site.timezone);
+    const upcoming = rec.freq === 'monthly' ? occurrences(rec, cal, fromDay, sixMonths).map(o => o.dueAt.toISOString()) : [];
+    if (rec.freq === 'monthly') for (const n of monthlyNotes(rec, cal, fromDay, sixMonths)) {
+      if (n.clamped) notes.push(`${n.month}: ayın ${rec.day}. günü yok, ayın son günü (${n.day.split('-').reverse().join('.')}) kullanılır`);
+      if (n.closed) notes.push(`${n.month}: ${n.day.split('-').reverse().join('.')} şube kapalı olduğundan o ay görev açılmaz`);
+    }
+    if (rec.freq === 'once' && rec.on >= fromDay && rec.on <= toDay && !inWindow.length) notes.push(`${rec.on.split('-').reverse().join('.')} şube kapalı olduğundan görev açılmaz`);
+    return { code: t.code, title: t.title, dueAt: inWindow, firstDue: first, unset: false, notes, upcoming };
   });
 }
 
