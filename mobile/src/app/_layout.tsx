@@ -11,6 +11,7 @@ import { PrimaryButton } from '../components/ui';
 import { SessionProvider, useSession } from '../api/session';
 import { TabBar } from '../components/TabBar';
 import { ToastView } from '../components/ToastView';
+import { DESKTOP_MIN, isDeskPath } from '../features/desktop';
 import { UiProvider } from '../state/app';
 import { C } from '../theme';
 
@@ -26,7 +27,10 @@ export default function RootLayout() {
     JetBrainsMono_400Regular, JetBrainsMono_500Medium, JetBrainsMono_600SemiBold,
   });
   const win = useWindowDimensions();
-  const framed = Platform.OS === 'web' && win.width > 520;
+  const path = usePathname();
+  // Platform yönetim ekranları (mevzuat masası, yönetim) geniş pencerede telefon çerçevesi olmadan, tam genişlikte açılır.
+  const desk = Platform.OS === 'web' && win.width >= DESKTOP_MIN && isDeskPath(path);
+  const framed = Platform.OS === 'web' && win.width > 520 && !desk;
   const frame = { width: PHONE.width, height: Math.min(PHONE.height, win.height - 40) };
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
@@ -37,7 +41,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: C.bg } }}>
           <Stack.Screen name="task/[id]" options={{ animation: 'fade_from_bottom' }} />
         </Stack>
-        <Tabs />
+        {desk ? null : <Tabs />}
         <ToastView />
       </Gate>
     </View>
