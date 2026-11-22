@@ -241,8 +241,8 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
         dismissed: dec?.decision === 'dismissed' ? { reason: dec.reason, replacement: dec.replacement, by: dec.decided_by_name, at: dec.decided_at } : null };
     }) : [],
     measurement, documents, next, firstAction,
-    closureMissing: [...f.stages.filter(st => st.state !== 'done').map(st => ({ stage: st.key, missing: st.missing })),
-      ...(product?.closureBlocker && n.status !== 'closed' ? [{ stage: 'product_decision', missing: [product.closureBlocker] }] : [])],
+    // Device side only; the product decision is a separate block (`product.closureBlocker`).
+    closureMissing: f.stages.filter(st => st.state !== 'done').map(st => ({ stage: st.key, missing: st.missing })),
     product,
     progress: { done: f.stages.filter(st => st.state === 'done').length, total: f.stages.length },
     permissions: {

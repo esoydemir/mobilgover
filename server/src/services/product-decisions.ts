@@ -16,7 +16,7 @@ export const PRODUCT_DECISIONS = ['release', 'rework', 'hold', 'destroy', 'retur
 export type ProductDecision = (typeof PRODUCT_DECISIONS)[number];
 export const DECISION_TR: Record<ProductDecision, string> = { release: 'Satışa/kullanıma uygun', rework: 'Yeniden işleme', hold: 'Bekletme (karantina)',
   destroy: 'İmha', return_supplier: 'Tedarikçiye iade', no_product_effect: 'Ürün etkisi yok (yetkili değerlendirme)' };
-/** Hazards that, in a product sector, suggest the product may be affected. They prompt an assessment; closure is blocked once one is started. */
+/** Hazards that, in a product sector, suggest the product may be affected. Closure needs a product decision (or an authorized written "no product effect" assessment). */
 const PRODUCT_HAZARDS = new Set(['cold_chain_temperature']);
 const NO_EFFECT_MIN_REASON = 20;
 
@@ -43,11 +43,12 @@ export async function productState(tx: Tx, n: { id: string; company_id: string; 
        JOIN users au ON au.id = a.assessor_id JOIN users ou ON ou.id = a.opened_by LEFT JOIN users du ON du.id = a.decided_by
       WHERE a.ncr_id = $1 ORDER BY a.opened_at`, [n.id])).rows.map(view);
   if (!applies && !rows.length) return null; // sectors without a product effect do not see these fields
-  const required = applies && rows.length > 0;
+  const required = applies && (rows.length > 0 || PRODUCT_HAZARDS.has(n.hazard_type));
   const suggested = applies && rows.length === 0 && PRODUCT_HAZARDS.has(n.hazard_type);
   const open = rows.filter(r => r.state === 'open');
-  const blocker = !required ? null : open.length ? `${open.length} ürün değerlendirmesinin kararı açık.` : null;
-  return { applies, required, suggested, suggestionText: suggested ? 'Bu kayıtta ürün etkilenmiş olabilir. Etkilenen ürün için değerlendirme başlat; etkilenmediyse yetkili kişi gerekçeli "ürün etkisi yok" kararı versin.' : null, assessments: rows, openCount: open.length, unknownQuantity: rows.some(r => r.quantityUnknown), closureBlocker: blocker };
+  const blocker = !required ? null : !rows.length ? 'Ürün etkisi olabilecek kayıt: etkilenen ürün için değerlendirme başlat ya da yetkili kişi gerekçeli "ürün etkisi yok" kararı versin.'
+    : open.length ? `${open.length} ürün değerlendirmesinin kararı açık.` : null;
+  return { applies, required, suggested, suggestionText: suggested ? 'Bu kayıtta ürün etkilenmiş olabilir; kapatmak için ürün kararı gerekir. Etkilenen ürün için değerlendirme başlat; etkilenmediyse yetkili kişi gerekçeli "ürün etkisi yok" kararı versin.' : null, assessments: rows, openCount: open.length, unknownQuantity: rows.some(r => r.quantityUnknown), closureBlocker: blocker };
 }
 
 /** Called at closure: a product effect without a recorded decision keeps the case open, whatever the device measures. */

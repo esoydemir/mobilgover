@@ -48,7 +48,7 @@ describe('sectors without a product effect', () => {
     expect(r.status).toBe(201);
     const d = (await owner().get(`${C()}/nonconformities/${r.body.id}`)).body;
     expect(d.product).toBeNull();
-    expect(JSON.stringify(d.closureMissing)).not.toMatch(/product_decision/);
+    expect(JSON.stringify(d)).not.toMatch(/closureBlocker/);
     const a = await owner().post(`${C()}/nonconformities/${r.body.id}/product-assessments`, { product: 'Parti 1', quantity: 5, quantityUnknown: false, firstAction: 'Ayrıldı', assessorId: demo.users.manager.id });
     expect(a.status).toBe(422);
     expect(a.body.error.code).toBe('PRODUCT_NOT_APPLICABLE');
@@ -59,12 +59,22 @@ describe('cold-chain case: device fixed, product undecided', () => {
   let ncr: string, aid: string;
   const N = () => `${C()}/nonconformities/${ncr}`;
 
-  it('a cold-chain case in a product sector prompts for a product assessment; nothing is required until one is started', async () => {
+  it('a cold-chain case in a product sector needs a product decision from the start, and says so', async () => {
     ncr = await cold('Soğutucu sıcaklığı aşıldı');
     const d = (await manager().get(N())).body;
-    expect(d.product).toMatchObject({ applies: true, suggested: true, required: false, openCount: 0 });
+    expect(d.product).toMatchObject({ applies: true, suggested: true, required: true, openCount: 0 });
     expect(d.product.suggestionText).toMatch(/ürün etkilenmiş olabilir/);
-    expect(d.closureMissing.map((x: any) => x.stage)).not.toContain('product_decision');
+    expect(d.product.closureBlocker).toMatch(/ürün etkisi yok/);
+    expect(d.closureMissing.map((x: any) => x.stage)).not.toContain('product_decision'); // device side is reported separately
+  });
+
+  it('with no assessment at all, a fixed device still cannot be closed', async () => {
+    const bare = await cold('Vitrin sıcaklığı yüksek');
+    await fixDevice(bare);
+    const v = await owner().post(`${C()}/nonconformities/${bare}/verify`, { result: 'effective', notes: 'Cihaz düzeldi.' });
+    expect(v.status).toBe(422);
+    expect(v.body.error.code).toBe('PRODUCT_DECISION_OPEN');
+    expect(v.body.error.message).toMatch(/ürün etkisi yok/);
   });
 
   it('an assessment needs product, first measure and either a quantity or an explicit "unknown"', async () => {
@@ -79,7 +89,7 @@ describe('cold-chain case: device fixed, product undecided', () => {
     aid = ok.body.id;
     const d = (await manager().get(N())).body.product;
     expect(d).toMatchObject({ openCount: 1, unknownQuantity: true, required: true, suggested: false });
-    expect((await manager().get(N())).body.closureMissing.map((x: any) => x.stage)).toContain('product_decision');
+    expect((await manager().get(N())).body.product.closureBlocker).toMatch(/karar/);
     expect(d.assessments[0]).toMatchObject({ state: 'open', quantity: null, quantityUnknown: true, assessor: { name: expect.any(String) } });
   });
 

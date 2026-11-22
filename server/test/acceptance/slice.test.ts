@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { localDay } from '../../src/domain/schedule';
 import { seedDemoCompany, seedPlatform } from '../../src/seed/demo';
-import { client, fakeJpeg, freshEnv, type Env } from '../support/env';
+import { client, fakeJpeg, freshEnv, type Env, noProductEffect } from '../support/env';
 
 /**
  * End-to-end slice: profile → approved rule → applicability explanation →
@@ -196,6 +196,7 @@ describe('nonconformity and CAPA', () => {
   it('high risk is closed only by someone other than the person who fixed it', async () => {
     const self = await manager().post(`${C()}/nonconformities/${ncrId}/verify`, { result: 'effective', notes: 'Kontrol ettim.' });
     expect(self.body.error.code).toBe('VERIFIER_NOT_INDEPENDENT');
+    await noProductEffect(owner(), `${C()}/nonconformities/${ncrId}`, demo.users.owner.id);
     const ok = await owner().post(`${C()}/nonconformities/${ncrId}/verify`, { result: 'effective', notes: 'Ölçüm kayıtları ve conta faturası incelendi.' });
     expect(ok.status).toBe(200);
     expect(ok.body.status).toBe('closed');

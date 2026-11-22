@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedDemoCompany, seedPlatform } from '../../src/seed/demo';
 import { topUpAllSites } from '../../src/services/horizon';
 import { createSession } from '../../src/services/principal';
-import { client, fakeJpeg, freshEnv, type Env } from '../support/env';
+import { client, fakeJpeg, freshEnv, type Env, noProductEffect } from '../support/env';
 
 /**
  * Delivery 6A: one look at a case (stage, who is next, what is missing), the critical first step
@@ -124,6 +124,7 @@ describe('effectiveness with a new measurement, a new round and independence', (
     d = (await manager().get(N())).body;
     expect(d.permissions.verify).toBe(false);
     expect((await manager().post(`${N()}/verify`, { result: 'effective', notes: 'Kontrol ettim, çalışıyor.' })).body.error.code).toBe('VERIFIER_NOT_INDEPENDENT');
+    await noProductEffect(owner(), N(), demo.users.owner.id);
     expect((await owner().post(`${N()}/verify`, { result: 'effective', notes: 'Kendi ölçümümle 3 °C.' })).body.status).toBe('closed');
     d = (await manager().get(N())).body;
     expect(d.next.stage).toBe('closed');

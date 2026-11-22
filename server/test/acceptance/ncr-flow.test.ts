@@ -3,7 +3,7 @@ import { seedDemoCompany, seedDemoProvider, seedPlatform } from '../../src/seed/
 import { scanDeadlines } from '../../src/services/notifications';
 import { createSession } from '../../src/services/principal';
 import { createHash } from 'node:crypto';
-import { client, fakeJpeg, freshEnv, type Env } from '../support/env';
+import { client, fakeJpeg, freshEnv, type Env, noProductEffect } from '../support/env';
 
 /**
  * Nonconformity flow v2 end to end, over real HTTP and PostgreSQL:
@@ -303,6 +303,7 @@ describe('verification, failure, close, reopen', () => {
     await manager().post(`${N}/causes`, { stage: 'verified', categories: ['equipment'], notes: 'Menteşe sarkmış; conta tek başına yetmedi.' });
     expect((await staff().post(`${N}/steps`, { step: 'effectiveness_check', notes: 'Üç gün boyunca 2–4 °C.' })).status).toBe(201);
     expect((await manager().post(`${N}/verify`, { result: 'effective', notes: 'Kontrol ettim.' })).body.error.code).toBe('VERIFIER_NOT_INDEPENDENT');
+    await noProductEffect(owner(), N, demo.users.owner.id);
     expect((await owner().post(`${N}/verify`, { result: 'effective', notes: 'Ölçüm kayıtları ve servis raporu incelendi.' })).body.status).toBe('closed');
   });
 
