@@ -61,6 +61,8 @@ const COURSE_SQL = `SELECT c.id, c.company_id, c.is_example, c.created_at,
  FROM training_courses c`;
 
 export async function listCourses(tx: Tx, p: Principal, companyId: string) {
+  // An outside verifier (grant, no membership) is not a learner: no course catalogue, in-house courses included.
+  if (!p.memberships.some(m => m.companyId === companyId)) return [];
   const author = holds(p, 'training.author', companyId) || holds(p, 'training.publish', companyId);
   const rows = (await tx.query(`${COURSE_SQL} WHERE c.company_id = $1 OR c.company_id IS NULL ORDER BY c.is_example, c.created_at DESC`, [companyId])).rows;
   // Learners and verifiers see published content only; authors also see their drafts and reviews.

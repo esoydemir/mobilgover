@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
 import { useSession } from '../api/session';
@@ -10,36 +11,51 @@ type CatalogItem = { key: string; type: 'boolean' | 'number' | 'string' | 'strin
 type FactRecord = { value: unknown; source: string; verification: string; recordedAt: string };
 
 /** Keys the system fills itself; never asked. */
-const SYSTEM_KEYS = ['equipment.types'];
+const SYSTEM_KEYS = ['equipment.types', 'activity.nace_codes']; // faaliyet kodu kayıt adımında (ActivityPicker) sorulur
 
 /**
  * Business profile questions. "Bilmiyorum" is a real answer: nothing is
  * stored, and obligations that depend on it stay "needs information".
  */
-export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet' }: { onSaved?: (changed: number) => void; submitLabel?: string }) {
+export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet', focus }: { onSaved?: (changed: number) => void; submitLabel?: string; focus?: string }) {
   const { call, company, siteId } = useSession();
   const [catalog, setCatalog] = useState<CatalogItem[] | null>(null);
   const [current, setCurrent] = useState<Record<string, FactRecord>>({});
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [waiting, setWaiting] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (!company || !siteId) return;
+    setError(null);
     (async () => {
       try {
-        const [cat, cur] = await Promise.all([
-          call<CatalogItem[]>('GET', '/fact-catalog'),
+        const [cat, cur, obl] = await Promise.all([
+          call<CatalogItem[]>('GET', `/companies/${company.id}/profile-questions`),
           call<Record<string, FactRecord>>('GET', `/companies/${company.id}/sites/${siteId}/profile`),
+          call<{ decision: string; title: string; missingFacts: string[] }[]>('GET', `/companies/${company.id}/obligations?siteId=${siteId}`).catch(() => []),
         ]);
+        const w: Record<string, string[]> = {};
+        for (const o of obl) if (o.decision === 'needs_info') for (const k of o.missingFacts ?? []) (w[k] ??= []).push(o.title);
+        setWaiting(w);
         setCatalog(cat.filter(c => !SYSTEM_KEYS.includes(c.key)));
         setCurrent(cur);
       } catch (e) { setError(errorText(e)); }
     })();
-  }, [company, siteId, call]);
+  }, [company, siteId, call, attempt]);
 
   const changed = useMemo(() => Object.entries(answers).filter(([k, v]) => v !== undefined && JSON.stringify(v) !== JSON.stringify(current[k]?.value)), [answers, current]);
 
+  // B-08: an account without a business (an expert, for example) has no profile; say so instead of loading forever.
+  if (!company || !siteId) return (
+    <View style={{ gap: 10 }}>
+      <Text testID="profile-no-business" style={type(13.5, 400, { color: C.t2, lh: 1.5 })}>Bu sayfa işletme profili içindir. Bu hesapta bağlı bir işletme veya şube yok. Uzman profilin ayrı bir yerde: orada profilini görür, yoksa açabilirsin.</Text>
+      <PrimaryButton testID="profile-open-pro" label="Uzman alanını aç" glow={false} height={44} size={13} onPress={() => router.push('/pro')} />
+    </View>
+  );
+  if (error && !catalog) return <ErrorBox message={error} onRetry={() => setAttempt(a => a + 1)} />;
   if (error) return <ErrorBox message={error} />;
   if (!catalog) return <Loading />;
 
@@ -60,12 +76,13 @@ export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet' }: { onSaved?
 
   return (
     <View style={{ gap: 12 }}>
-      {catalog.map(item => {
+      {[...catalog].sort((a, b) => Number(b.key === focus) - Number(a.key === focus)).map(item => {
         const stored = current[item.key];
         const val = item.key in answers ? answers[item.key] : stored?.verification === 'rejected' ? undefined : stored?.value;
         const set = (v: unknown) => setAnswers(a => ({ ...a, [item.key]: v }));
         return (
-          <View key={item.key} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 20, backgroundColor: C.card, padding: 15, gap: 10 }}>
+          <View key={item.key} testID={`fact-row-${item.key}`} style={{ borderWidth: 1, borderColor: item.key === focus ? tint.lime(0.55) : C.bd, borderRadius: 20, backgroundColor: C.card, padding: 15, gap: 10 }}>
+            {waiting[item.key]?.length ? <Text testID={`fact-waiting-${item.key}`} style={type(11.5, 600, { color: C.warn, lh: 1.45 })}>{item.key === focus ? 'Açık soru · ' : ''}Bekleyen: {waiting[item.key]!.join(', ')}. Yanıtlanmayan soru "hayır" sayılmaz.</Text> : null}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
               <Text style={[type(14, 600, { ls: -0.01 }), { flex: 1 }]}>{item.label}</Text>
               {item.critical ? <Text style={type(9.5, 700, { ls: 0.08, color: C.warn })}>YÜKÜMLÜLÜK BELİRLER</Text> : null}

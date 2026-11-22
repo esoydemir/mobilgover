@@ -72,3 +72,11 @@ export function client(env: Env, token: string) {
 
 /** A minimal valid JPEG header followed by arbitrary bytes. */
 export const fakeJpeg = (seed: string) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(seed)]);
+
+/** GH-07: a cold-chain case in a product sector closes only after a product decision. These tests are about other things, so they record the authorized "no product effect" assessment. */
+export async function noProductEffect(by: ReturnType<typeof client>, ncrPath: string, assessorId: string) {
+  const a = await by.post(`${ncrPath}/product-assessments`, { product: 'Etkilenen ürün yok', quantity: 0, unit: 'adet', quantityUnknown: false, firstAction: 'İçerik kontrol edildi, ürün etkilenmedi.', assessorId });
+  if (a.status !== 201) throw new Error(`product assessment failed: ${a.status} ${JSON.stringify(a.body)}`);
+  const d = await by.post(`${ncrPath}/product-assessments/${a.body.id}/decision`, { decision: 'no_product_effect', rationale: 'Ürün sıcaklığı ölçüldü; güvenli aralıktan çıkmadı, ürün etkilenmedi.' });
+  if (d.status !== 200) throw new Error(`product decision failed: ${d.status} ${JSON.stringify(d.body)}`);
+}

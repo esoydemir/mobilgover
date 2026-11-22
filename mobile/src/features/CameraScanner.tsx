@@ -7,11 +7,11 @@ import { CAMERA_PROBLEM_TEXT, classifyCameraError, decodeFrame, onceWithin, toke
  * Live camera reading in the browser (getUserMedia + frame decoding). The stream is stopped when the component unmounts or when a code has
  * been accepted; the same code seen in consecutive frames is reported once. When the camera cannot be used the parent keeps the code entry.
  */
-export function CameraScanner({ onToken, onProblem }: { onToken: (token: string) => void; onProblem: (p: CameraProblem) => void }) {
+export function CameraScanner({ onToken, onProblem, onUnreadable }: { onToken: (token: string) => void; onProblem: (p: CameraProblem) => void; onUnreadable?: () => void }) {
   const videoRef = useRef<any>(null);
   const [state, setState] = useState<'starting' | 'live'>('starting');
-  const cb = useRef({ onToken, onProblem });
-  cb.current = { onToken, onProblem };
+  const cb = useRef({ onToken, onProblem, onUnreadable });
+  cb.current = { onToken, onProblem, onUnreadable };
 
   useEffect(() => {
     if (Platform.OS !== 'web') { cb.current.onProblem('unsupported'); return; }
@@ -38,6 +38,8 @@ export function CameraScanner({ onToken, onProblem }: { onToken: (token: string)
           if (!text) return;
           const token = tokenFromText(text);
           if (token && once(token)) cb.current.onToken(token);
+          // B-14: something was read but it is not a GoverHub code (damaged or foreign): say so once, keep scanning.
+          else if (!token && once(`bad:${text}`)) cb.current.onUnreadable?.();
         }, 250);
       } catch (e) { if (!stopped) cb.current.onProblem(classifyCameraError(e)); }
     })();

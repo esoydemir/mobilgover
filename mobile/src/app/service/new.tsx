@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, PrimaryButton, Tap } from '../../components/ui';
+import { Card, Eyebrow, PrimaryButton, Tap, missingWhy } from '../../components/ui';
 import { C, tint, type } from '../../theme';
 
 type Category = { code: string; name: string; description: string; is_example: boolean };
@@ -141,7 +141,7 @@ export default function NewServiceRoute() {
         </Card></View>
       ) : cat && title.trim().length >= 3 && description.trim().length >= 5 ? <Text style={type(11.5, 400, { color: C.t3 })}>Önizleme hazırlanıyor… Bağlantı yoksa talep gönderilemez.</Text> : null}
       {error ? <ErrorBox message={error} /> : null}
-      <PrimaryButton testID="svc-submit" label={busy ? 'Gönderiliyor…' : 'Önizlemeyi gördüm · talebi aç'} disabled={busy || !cat || title.trim().length < 3 || description.trim().length < 5 || !previewReady || (pickMany && chosen.length < 2)} onPress={submit} />
+      <PrimaryButton testID="svc-submit" label={busy ? 'Gönderiliyor…' : 'Önizlemeyi gördüm · talebi aç'} disabled={busy || !cat || title.trim().length < 3 || description.trim().length < 5 || !previewReady || (pickMany && chosen.length < 2)} why={missingWhy([[!cat, 'kategori'], [title.trim().length < 3, 'başlık (en az 3 karakter)'], [description.trim().length < 5, 'açıklama (en az 5 karakter)'], [!!cat && !previewReady, 'önizleme (yüklenmesini bekle)'], [pickMany && chosen.length < 2, 'en az 2 uzman seçimi']])} onPress={submit} />
     </Screen>
   );
 }

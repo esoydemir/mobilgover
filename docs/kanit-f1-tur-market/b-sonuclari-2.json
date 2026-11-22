@@ -1,0 +1,32 @@
+[
+ {
+  "id": "B-10",
+  "pass": true,
+  "note": "mesaj: \"Alanları düzelt — Başlık: En az 3 karakter olmalı. obligationTitle: En az 3 karakter olmalı. obligationSummary: En az 3 karakter olmalı. (+4 alan daha) \" | doldurulan alan korundu: EX-DENEME-1"
+ },
+ {
+  "id": "B-08 /profile",
+  "pass": true,
+  "note": "İşletme profili | DEMO · ÖRNEK VERİ | Bu sayfa işletme profili içindir. Bu hesapta bağlı bir işletme veya şube yok. Uzman profilin ayrı bir yerde: orada profilini görür, yoksa açabilirsin. | Uzman alanını aç"
+ },
+ {
+  "id": "B-08 /pro",
+  "pass": true,
+  "note": "Uzman alanı | DEMO · ÖRNEK VERİ | Murat Yıldız | Soğutma teknisyeni · 11 yıl · İstanbul · Kadıköy | HAKKINDA · HİZMET BÖLGESİ | Ticari soğutucu arıza ve bakım (demo profil). | Bölge: İstanbul · Kadıköy | NE KONTROL EDİLD"
+ },
+ {
+  "id": "B-05",
+  "pass": true,
+  "note": "Bu sayfa iznin dışında | Dış doğrulayıcı olarak yalnız sana atanan uygunsuzluk kayıtlarını ve bunların doğrulamasını görürsün. Görevler, belgeler, ekip ve şube bilgileri bu iznin kapsamında değildir. | Doğrulama kuyruğuma dön"
+ },
+ {
+  "id": "B-07 /team",
+  "pass": true,
+  "note": "Bu sayfa iznin dışında | Dış doğrulayıcı olarak yalnız sana atanan uygunsuzluk kayıtlarını ve bunların doğrulamasını görürsün. Görevler, belgeler, ekip ve şube bilgileri bu iznin kapsamında değildir. "
+ },
+ {
+  "id": "B-16",
+  "pass": true,
+  "note": "10 ekranda İngilizce alt başlık yok"
+ }
+]

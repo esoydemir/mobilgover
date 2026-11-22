@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field } from '../../components/states';
-import { Callout, Card, Eyebrow, FilterChip, PrimaryButton, Tap } from '../../components/ui';
+import { Callout, Card, Eyebrow, FilterChip, PrimaryButton, Tap, missingWhy } from '../../components/ui';
 import { HAZARDS, SEVERITIES } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -70,7 +70,7 @@ export default function NewNcrRoute() {
       <Field label="İlk müdahale (yaptıysan)" testID="ncr-new-containment" value={containment} onChangeText={setContainment} multiline placeholder="ör. Ürünleri yan dolaba taşıdım" />
       {severity === 'critical' ? <Callout tone="warn" body="Kritik bir durumda önce güvenliği sağla ve yöneticine hemen haber ver. Ürünün kullanımı ya da imhası kararını yetkili kişi verir." /> : null}
       {error ? <ErrorBox message={error} /> : null}
-      <PrimaryButton testID="ncr-new-save" label={busy ? 'Kaydediliyor…' : 'Uygunsuzluğu aç'} disabled={busy || title.trim().length < 5 || description.trim().length < 5 || !hazard || !severity} onPress={save} />
+      <PrimaryButton testID="ncr-new-save" label={busy ? 'Kaydediliyor…' : 'Uygunsuzluğu aç'} disabled={busy || title.trim().length < 5 || description.trim().length < 5 || !hazard || !severity} why={missingWhy([[title.trim().length < 5, 'başlık (en az 5 karakter)'], [description.trim().length < 5, 'açıklama (en az 5 karakter)'], [!hazard, 'tehlike türü'], [!severity, 'önem derecesi']])} onPress={save} />
     </Screen>
   );
 }

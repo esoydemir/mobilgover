@@ -5,7 +5,7 @@ import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
-import { Card, Eyebrow, Pill, PrimaryButton, Tap } from '../components/ui';
+import { Card, Eyebrow, Pill, PrimaryButton, Tap, shortWhy } from '../components/ui';
 import { C, tint, type } from '../theme';
 
 type Src = { n: number; kind: string; title: string; locator?: string; text: string; route: string | null; isExample: boolean; verifiedLaw: boolean; cited?: boolean };
@@ -26,7 +26,7 @@ export default function AssistantRoute() {
         <Eyebrow>SORU</Eyebrow>
         <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Yanıt yalnız işletmenin belge, görev ve yayımlanmış yükümlülüklerinden gelir; kaynak yoksa söylenir. Ceza tutarı hesaplanmaz. Örnek kurallar doğrulanmış mevzuat gibi sunulmaz.</Text>
         <Field label="Sorun" testID="assistant-q" value={q} onChangeText={setQ} multiline />
-        <PrimaryButton testID="assistant-ask" label={busy ? 'Aranıyor…' : 'Sor'} disabled={busy || q.trim().length < 5} onPress={ask} />
+        <PrimaryButton testID="assistant-ask" label={busy ? 'Aranıyor…' : 'Sor'} disabled={busy || q.trim().length < 5} why={shortWhy(q, 5, 'Soru')} onPress={ask} />
         {error ? <ErrorBox message={error} /> : null}
       </Card>
       {a ? (

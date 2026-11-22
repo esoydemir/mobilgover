@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../../components/states';
-import { Card, GhostButton, PrimaryButton } from '../../components/ui';
+import { Card, FilterChip, GhostButton, PrimaryButton } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -15,17 +15,24 @@ import { dayTr, STATUS_TR } from '../../features/legislation';
 /** Article ids come from the parser: "G1" = geçici madde 1, "E2" = ek madde 2. */
 const artTr = (id: string) => (/^G\d/.test(id) ? `geçici md. ${id.slice(1)}` : /^E\d/.test(id) ? `ek md. ${id.slice(1)}` : `md. ${id}`);
 type Impact = { onDate: string; affectedSites: number; notifiedSites: number; outOfScopeSites: number; openTasksAffected: number;
-  sites: { siteId: string; site: string; company: string; from: string | null; to: string; effect: string; reason: string; openTasks: number; openTaskEffect: string; notify: boolean; missingFacts: string[] }[] };
+  sites: { siteId: string; site: string; company: string; plannedText?: string; plannedTasks?: { code: string; title: string; dueAt: string[]; firstDue: string | null; unset: boolean }[]; from: string | null; to: string; effect: string; reason: string; openTasks: number; openTaskEffect: string; notify: boolean; missingFacts: string[] }[] };
 type Detail = {
   id: string; status: string; changeType: string; typeLabel: string; docRef: string; docTitle: string; articleRef: string | null; sourceUrl: string; sourceCode: string; publishedOn: string | null; effectiveFrom: string | null;
-  dateStatus: 'known' | 'unclear'; dateNote: string | null; oldText: string | null; newText: string | null; suggestion: { relevance?: string; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] };
+  dateStatus: 'known' | 'unclear'; dateNote: string | null; oldText: string | null; newText: string | null; suggestion: { relevance?: string; sectors?: string[]; matchLevel?: 'clear' | 'uncertain'; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] };
     effectiveDetail?: { general: { articleIds: string[]; clause: string | null }; transitional: { articleId: string; dates: string[]; sentence: string }[]; scope: { articleId: string; text: string } | null } } | null;
   isExample: boolean; exampleNote: string | null; proposal: any | null; rule: { id: string; code: string; version: number; status: string } | null; missingAreaReviews: string[];
   approveReason: string | null; rejectReason: string | null; applyOn: string | null; appliedAt: string | null; applyResult: any | null;
   impact: Impact | null; impactNote: string | null; history: { seq: number; occurred_at: string; event_type: string; payload: any; actor: string | null }[];
   publishedRules: { code: string; title: string }[]; blockers: string[];
+  frequency?: { effectiveFrom: string | null; applyOn: string; sourceHint: { freq: string; quote: string; supported: boolean } | null; sourceSays: string;
+    checks: { code: string; title: string; text: string; unset: boolean; basis: string | null; basisLabel: string; basisNote: string | null }[]; bases: { key: string; label: string }[] };
+  reviewAreas?: { suggestion: { sector: string; area: string; why: string }[]; suggestionNote: string;
+    required: { area: string; reviewers: number; names: string[]; approved: boolean; canIReview: boolean; waiting: string | null; myAccess: string }[] };
   can: { edit: boolean; resolveDate: boolean; prepare: boolean; approve: boolean; reject: boolean };
 };
+const AREAS = ['food_safety', 'occupational_safety', 'gas_safety', 'fire_safety', 'environment', 'consumer', 'good_practice'];
+const FREQS: [string, string][] = [['unset', 'Belirlenmedi'], ['once', 'Tek seferlik'], ['daily', 'Her gün'], ['weekly', 'Her hafta'], ['monthly', 'Her ay']];
+const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 const EFFECT: Record<string, [string, string]> = { new_obligation: ['YENİ YÜKÜMLÜLÜK', C.lime], version_change: ['KURAL SÜRÜMÜ DEĞİŞİR', C.info], ended: ['YÜKÜMLÜLÜK SONA ERER', C.warn], needs_info: ['BİLGİ EKSİK', C.warn] };
 const EVENT_TR: Record<string, string> = {
   'legislation.detected': 'Taramada bulundu', 'legislation.date_resolved': 'Yürürlük tarihi belirlendi', 'legislation.proposal_saved': 'Öneri yazıldı/güncellendi', 'legislation.drafted': 'Kural taslağı hazırlandı',
@@ -129,10 +136,18 @@ export default function LegislationDetailRoute() {
       {sg ? (
         <Card style={{ gap: 4 }}>
           <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>OTOMATİK KARŞILAŞTIRMA · YALNIZ ÖNERİDİR</Text>
-          {sg.relevance ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{sg.relevance}</Text> : null}
+          {sg.relevance ? <Text testID="leg-relevance" style={type(12, 400, { color: C.t2, lh: 1.45 })}>{sg.relevance}</Text> : null}
+          {sg.matchLevel === 'uncertain' ? <Text testID="leg-uncertain-note" style={type(12, 600, { color: C.warn, lh: 1.45 })}>Belirsiz eşleşme: başlıktan hangi iş koluna ait olduğu anlaşılmıyor. Metni oku; ilgisizse reddet, ilgiliyse iş kolunu belirterek taslağa al. Onaylanana kadar hiçbir işletme etkilenmez.</Text> : null}
           {sg.addedWords?.length ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Eklenen sözcükler: {sg.addedWords.join(', ')}</Text> : null}
           {sg.removedWords?.length ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Çıkan sözcükler: {sg.removedWords.join(', ')}</Text> : null}
           {sg.changedNumbers && (sg.changedNumbers.from.length || sg.changedNumbers.to.length) ? <Text style={type(12, 600, { color: C.warn, lh: 1.45 })}>Değişen sayılar: {sg.changedNumbers.from.join(', ') || '—'} → {sg.changedNumbers.to.join(', ') || '—'}</Text> : null}
+          {sg.sectors?.includes('electrical') || sg.sectors?.includes('estate') ? (
+            <View testID="leg-example-checks" style={{ gap: 3, marginTop: 4 }}>
+              <ExampleBadge label="ÖRNEK KONTROLLER" />
+              {sg.sectors.includes('electrical') ? <Text testID="leg-example-earthing" style={type(12, 500, { lh: 1.45 })}>ÖRNEK · Elektrik: “Montaj sonrası topraklama ölçümü” — kontrol listesi + ölçüm cihazı fotoğrafı. Gerçek mevzuat değildir; yalnız onaylı kural sürümü görev üretir.</Text> : null}
+              {sg.sectors.includes('estate') ? <Text testID="leg-example-contract" style={type(12, 500, { lh: 1.45 })}>ÖRNEK · Emlak: “Sözleşme ve yetki belgesi dosyası kontrolü” — dosya varlık teyidi; içeriği yetkili yönetici belge kasasında inceler. Gerçek mevzuat değildir.</Text> : null}
+            </View>
+          ) : null}
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Bu karşılaştırma karar vermez; uygulanan koşul, görev ve süre yalnız onaylanan kural sürümünden gelir.</Text>
         </Card>
       ) : null}
@@ -157,11 +172,39 @@ export default function LegislationDetailRoute() {
               <Field testID="leg-p-cond" label="Kapsam koşulu (JSON; işletme bilgisi alanları)" value={condText} onChangeText={setCondText} multiline />
               {(prop.templates ?? []).map((t: any, i: number) => (
                 <View key={i} style={{ gap: 6, borderWidth: 1, borderColor: C.bd, borderRadius: 14, padding: 10 }}>
-                  <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>GÖREV ŞABLONU {i + 1} · {t.recurrence?.freq} {t.recurrence?.at}</Text>
+                  <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>GÖREV ŞABLONU {i + 1}</Text>
                   <Field testID={`leg-t-title-${i}`} label="Görev adı" value={t.title} onChangeText={v => setTpl(i, { title: v })} />
                   <Field testID={`leg-t-instr-${i}`} label="Talimat" value={t.instructions} onChangeText={v => setTpl(i, { instructions: v })} multiline />
+                  <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>TEKRAR SIKLIĞI (YÖNETİCİ BELİRLER)</Text>
+                  <Text testID={`leg-freq-source-${i}`} style={type(11.5, 400, { color: d.frequency?.sourceHint ? C.info : C.warn, lh: 1.45 })}>{d.frequency?.sourceSays}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                    {FREQS.map(([k, l]) => <FilterChip key={k} testID={`leg-freq-${i}-${k}`} label={l} px={12} active={(t.recurrence?.freq ?? 'unset') === k} onPress={() => {
+                      const base = { basis: t.recurrence?.basis ?? 'admin_choice', basisNote: t.recurrence?.basisNote };
+                      const at = t.recurrence?.at ?? '10:00';
+                      setTpl(i, { recurrence: k === 'unset' ? { freq: 'unset', ...base } : k === 'once' ? { freq: 'once', on: String(prop.effectiveFrom ?? '').slice(0, 10), at, ...base } : k === 'daily' ? { freq: 'daily', at, ...base } : k === 'weekly' ? { freq: 'weekly', weekday: 1, at, ...base } : { freq: 'monthly', day: 1, at, ...base } });
+                    }} />)}
+                  </View>
+                  {t.recurrence?.freq === 'once' ? <Field testID={`leg-freq-on-${i}`} label="İlk (ve tek) görev vadesi · YYYY-AA-GG" value={t.recurrence.on} onChangeText={v => setTpl(i, { recurrence: { ...t.recurrence, on: v } })} /> : null}
+                  {t.recurrence?.freq === 'weekly' ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>{WEEKDAYS.map((w, n) => <FilterChip key={w} testID={`leg-freq-wd-${i}-${n + 1}`} label={w} px={10} active={t.recurrence.weekday === n + 1} onPress={() => setTpl(i, { recurrence: { ...t.recurrence, weekday: n + 1 } })} />)}</View>
+                  ) : null}
+                  {t.recurrence?.freq === 'monthly' ? <Field testID={`leg-freq-day-${i}`} label="Ayın günü (1–28)" value={String(t.recurrence.day)} onChangeText={v => setTpl(i, { recurrence: { ...t.recurrence, day: Number(v.replace(/[^0-9]/g, '')) || 1 } })} /> : null}
+                  {t.recurrence?.freq && t.recurrence.freq !== 'unset' ? (
+                    <>
+                      <Field testID={`leg-freq-at-${i}`} label="Saat (SS:DD)" value={t.recurrence.at} onChangeText={v => setTpl(i, { recurrence: { ...t.recurrence, at: v } })} />
+                      <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>SIKLIĞIN DAYANAĞI</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                        {(d.frequency?.bases ?? []).map(b => <FilterChip key={b.key} testID={`leg-freq-basis-${i}-${b.key}`} label={b.label} px={12} active={(t.recurrence.basis ?? 'admin_choice') === b.key} onPress={() => setTpl(i, { recurrence: { ...t.recurrence, basis: b.key } })} />)}
+                      </View>
+                    </>
+                  ) : <Text testID={`leg-freq-unset-${i}`} style={type(11.5, 600, { color: C.warn, lh: 1.45 })}>Sıklık seçilmedi: taslak kaydedilebilir, ama bu kural görev üreteceği için sıklık seçilmeden onaylanamaz ve yayımlanamaz.</Text>}
                 </View>
               ))}
+              <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>İNCELEME ALANI (SEKTÖR YALNIZ ÖNERİ)</Text>
+              {d.reviewAreas?.suggestion.length ? <Text testID="leg-area-suggest" style={type(11.5, 400, { color: C.info, lh: 1.45 })}>Öneri: {d.reviewAreas.suggestion.map(x => `${x.area} (${x.why})`).join(' · ')}. {d.reviewAreas.suggestionNote}</Text> : <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Sektörden alan önerisi yok; alanı sen seç.</Text>}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
+                {AREAS.map(a => <FilterChip key={a} testID={`leg-area-pick-${a}`} label={a} px={12} active={(prop.requiredReviewAreas ?? []).includes(a)} onPress={() => set({ requiredReviewAreas: (prop.requiredReviewAreas ?? []).includes(a) ? prop.requiredReviewAreas.filter((x: string) => x !== a) : [...(prop.requiredReviewAreas ?? []), a] })} />)}
+              </View>
               <PrimaryButton testID="leg-p-save" label="Öneriyi kaydet" glow={false} height={42} size={12.5} onPress={saveProposal} />
             </View>
           ) : null}
@@ -173,6 +216,38 @@ export default function LegislationDetailRoute() {
           <Text style={type(12, 400, { color: C.t3 })}>Yürürlük {dayTr(d.proposal.effectiveFrom)}{d.proposal.effectiveTo ? ` – ${dayTr(d.proposal.effectiveTo)}` : ''} · {(d.proposal.templates ?? []).map((t: any) => t.title).join(', ')}</Text>
         </Card>
       ) : <Text style={type(12, 400, { color: C.t3 })}>Henüz öneri yazılmadı.</Text>}
+
+      {d.frequency ? (
+        <>
+          <SectionLabel>SIKLIK VE TARİHLER (AYRI AYRI)</SectionLabel>
+          <Card testID="leg-frequency" style={{ gap: 6 }}>
+            <Text testID="leg-freq-effective" style={type(12.5, 600)}>Yürürlük tarihi: {d.frequency.effectiveFrom ? dayTr(d.frequency.effectiveFrom) : 'belirsiz'} · Uygulama günü: {dayTr(d.frequency.applyOn)}</Text>
+            <Text style={type(12, 400, { color: d.frequency.sourceHint ? C.info : C.warn, lh: 1.45 })}>{d.frequency.sourceSays}</Text>
+            {d.frequency.checks.length === 0 ? <Text style={type(12, 400, { color: C.t3 })}>Görev şablonu yok; bu kural görev üretmez.</Text> : null}
+            {d.frequency.checks.map(c => (
+              <View key={c.code} testID={`leg-freq-check-${c.code}`} style={{ borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 6, gap: 2 }}>
+                <Text style={type(12.5, 600)}>{c.title}</Text>
+                <Text style={type(12, 500, { color: c.unset ? C.warn : C.t2, lh: 1.45 })}>Tekrar: {c.text}</Text>
+                <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>Dayanak: {c.basisLabel}{c.basisNote ? ` — ${c.basisNote}` : ''}</Text>
+              </View>
+            ))}
+          </Card>
+        </>
+      ) : null}
+      {d.reviewAreas?.required.length ? (
+        <>
+          <SectionLabel>İNCELEME ALANI VE YETKİ</SectionLabel>
+          <Card testID="leg-areas" style={{ gap: 6 }}>
+            {d.reviewAreas.required.map(a => (
+              <View key={a.area} testID={`leg-area-${a.area}`} style={{ gap: 2 }}>
+                <Text style={type(12.5, 600)}>{a.area} · {a.approved ? 'incelendi' : a.waiting ? 'kuyrukta bekliyor' : 'inceleme bekliyor'}</Text>
+                <Text style={type(11.5, 400, { color: a.waiting ? C.warn : C.t2, lh: 1.4 })}>{a.waiting ?? `Tanımlı inceleyici: ${a.names.join(', ')}`}</Text>
+                <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>Bu hesap: {a.myAccess}</Text>
+              </View>
+            ))}
+          </Card>
+        </>
+      ) : null}
 
       <SectionLabel>ETKİLENECEK İŞLETME VE ŞUBELER (ÖNİZLEME)</SectionLabel>
       {d.impact ? (
@@ -186,6 +261,7 @@ export default function LegislationDetailRoute() {
                 <Text style={type(10.5, 700, { ls: 0.06, color: col })}>{lb}</Text>
                 <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{s.reason}</Text>
                 <Text style={type(12, 500, { color: C.t2, lh: 1.45 })}>Açık görevlere etkisi: {s.openTaskEffect}</Text>
+                {s.plannedText ? <Text testID={`leg-planned-${s.siteId}`} style={type(12, 600, { color: C.lime, lh: 1.45 })}>{s.plannedText}</Text> : null}
               </View>
             );
           })}
@@ -213,7 +289,7 @@ export default function LegislationDetailRoute() {
           <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>KARAR</Text>
           <Field testID="leg-reason" label="Gerekçe (onay ve ret için zorunlu)" value={reason} onChangeText={setReason} placeholder="ör. Resmî kaynak okundu; kapsam LPG kullanan kafeler" />
           {d.can.prepare ? <GhostButton testID="leg-prepare" label="Kural taslağını hazırla ve incelemeye gönder" height={42} size={12.5} disabled={!d.proposal || d.dateStatus === 'unclear'} onPress={() => act(() => call('POST', `/admin/legislation/changes/${id}/prepare`), 'Kural taslağı incelemeye gönderildi', 'Alan uzmanı ve inceleyici onaylayacak.')} /> : null}
-          {d.can.approve ? <PrimaryButton testID="leg-approve" label="Onayla" glow={false} height={44} size={13} disabled={d.missingAreaReviews.length > 0 || d.dateStatus === 'unclear'}
+          {d.can.approve ? <PrimaryButton testID="leg-approve" label="Onayla" glow={false} height={44} size={13} disabled={d.missingAreaReviews.length > 0 || d.dateStatus === 'unclear' || (d.frequency?.checks ?? []).some(c => c.unset)}
             onPress={() => { if (needReason('Onaylamak')) void act(() => call('POST', `/admin/legislation/changes/${id}/approve`, { reason: reason.trim() }), 'Onaylandı', 'Yürürlük gününde uygulanır.'); }} /> : null}
           {d.can.reject ? <GhostButton testID="leg-reject" label="Reddet" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)}
             onPress={() => { if (needReason('Reddetmek')) void act(() => call('POST', `/admin/legislation/changes/${id}/reject`, { reason: reason.trim() }), 'Reddedildi', 'Hiçbir işletme etkilenmedi.'); }} /> : null}

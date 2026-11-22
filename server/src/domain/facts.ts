@@ -16,11 +16,16 @@ export type FactDef = {
 
 export const FACTS = {
   'activity.food_preparation': { type: 'boolean', label: 'Yemek / içecek hazırlama', critical: true, level: 'site' },
+  'activity.food_business': { type: 'boolean', label: 'Gıda ürünü hazırlayan / satan faaliyet', critical: true, level: 'site' },
   'activity.nace_codes': { type: 'string[]', label: 'Faaliyet (NACE) kodları', critical: true, level: 'company' },
   'site.province': { type: 'string', label: 'İl', critical: true, level: 'site' },
   'site.district': { type: 'string', label: 'İlçe', critical: false, level: 'site' },
   'utility.lpg': { type: 'boolean', label: 'LPG / tüp gaz kullanımı', critical: true, level: 'site' },
   'service.delivery': { type: 'boolean', label: 'Paket servis', critical: true, level: 'site' },
+  'activity.onsite_installation': { type: 'boolean', label: 'Müşteri yerinde montaj / kurulum işi', critical: true, level: 'site' },
+  'activity.installation_business': { type: 'boolean', label: 'Montaj / kurulum işi yapılan faaliyet', critical: true, level: 'site' },
+  'activity.brokerage': { type: 'boolean', label: 'Emlak / aracılık faaliyeti', critical: true, level: 'site' },
+  'activity.client_contracts': { type: 'boolean', label: 'Müşteri adına sözleşme / yetki belgesi dosyası tutma', critical: true, level: 'site' },
   'storage.cold': { type: 'boolean', label: 'Soğuk depolama', critical: true, level: 'site' },
   'staff.count': { type: 'number', label: 'Çalışan sayısı', critical: true, level: 'company' },
   'equipment.types': { type: 'string[]', label: 'Kayıtlı ekipman türleri', critical: false, level: 'site' },

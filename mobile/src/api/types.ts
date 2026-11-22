@@ -31,13 +31,18 @@ export type Requirement =
 
 export type TaskDetail = {
   relatedTraining?: { id: string; title: string; summary: string; is_example: boolean; minutes: number | null }[];
-  relatedDocuments?: { id: string; title: string; purpose: string; kind: string }[];
+  relatedDocuments?: { id: string; title: string; purpose: string; kind: string; canReview: boolean; reviewBlockedReason: 'uploader' | 'no_permission' | null;
+    latest: { version: number; file: 'none' | 'pending' | 'stored'; uploadedBy: string; review: 'unreviewed' | 'verified' | 'rejected'; reviewedBy: string | null; reviewedAt: string | null } | null }[];
+  relatedDocumentsHidden?: number;
+  documentHistory?: { at: string; actor: string; documentId: string; title: string; action: string; version: number | null; note: string | null }[];
   id: string; siteId?: string; status: TaskRow['status']; outcome: TaskRow['outcome']; dueAt: string; reviewFlag: string | null;
   title: string; instructions: string; severity: TaskRow['severity'];
   equipment: { id: string; name: string; type: string } | null;
-  rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string };
+  rule: { version: number; kind: string; isExample: boolean; title?: string; summary?: string; status?: string | null; statusReason?: string | null };
   legalBasis?: { ref: string; excerpt: string; version_label: string | null; source_title: string; issuer: string | null; is_example: boolean }[];
   lastCompletedAt?: string | null; nextDueAt?: string | null; hazardType?: string;
+  why?: { obligationId: string; decision: string; text: string; statements: string[] } | null;
+  basis?: { ruleVersion: number; ruleStatus: string; effectiveFrom: string; newerVersion: { version: number; effectiveFrom: string } | null; note: string | null };
   reportEvidence?: { accepted: boolean;
     links: { id: string; documentId: string; documentTitle: string; version: number; fileSha256: string | null; selectedBy: string; selectedAt: string;
       status: 'active' | 'replaced' | 'stale'; counts: boolean; completionBasis: boolean; reason: string | null;
@@ -61,10 +66,12 @@ export type TaskDetail = {
   statusReason: string | null;
   assignee: { id: string; name: string | null } | null;
   seriesResponsible: { id: string; name: string } | null;
+  /** Every change of the responsible person, oldest first (GH-04). */
+  assignmentHistory: { at: string; source: 'single' | 'series' | 'bulk'; reason: string | null; previous: { id: string; name: string | null } | null; current: { id: string; name: string | null } | null; changedBy: { id: string; name: string | null } }[];
   canAssign: boolean;
 };
 
-export type Assignee = { id: string; display_name: string; role: 'owner' | 'hq_manager' | 'site_manager' | 'staff' };
+export type Assignee = { id: string; display_name: string; email?: string | null; role: 'owner' | 'hq_manager' | 'site_manager' | 'staff' };
 
 export type Obligation = {
   id: string; siteId: string; rule: string; version: number; title: string; kind: string; isExample: boolean;

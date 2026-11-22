@@ -6,7 +6,7 @@ import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Field, Loading, StaleNote } from '../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap } from '../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap, shortWhy } from '../components/ui';
 import { fmtDateTime } from '../features/dates';
 import { HAZARDS } from '../features/ncr/types';
 import { useUi } from '../state/app';
@@ -167,7 +167,7 @@ function RepeatRow({ r, reload }: { r: Repeat; reload: () => void }) {
             <Field label="Gerekçe" testID={`board-relate-reason-${r.later.id}`} value={reason} onChangeText={setReason} multiline />
             {error ? <ErrorBox message={error} /> : null}
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <PrimaryButton testID={`board-relate-save-${r.later.id}`} label={mode === 'linked' ? 'İlişkilendir' : 'İlgisiz işaretle'} glow={false} height={36} size={12} style={{ flex: 1 }} disabled={reason.trim().length < 10}
+              <PrimaryButton testID={`board-relate-save-${r.later.id}`} label={mode === 'linked' ? 'İlişkilendir' : 'İlgisiz işaretle'} glow={false} height={36} size={12} style={{ flex: 1 }} disabled={reason.trim().length < 10} why={shortWhy(reason, 10, 'Gerekçe')}
                 onPress={async () => { setError(null); try { await call('POST', `/companies/${company!.id}/nonconformities/${r.later.id}/relations`, { relatedId: r.earlier.id, decision: mode, reason: reason.trim() });
                   showToast(mode === 'linked' ? 'İlişkilendirildi' : 'İlgisiz işaretlendi', 'Kayıtlar birleştirilmedi; geçmiş değişmedi.'); setMode(null); setReason(''); reload(); } catch (e) { setError(errorText(e)); } }} />
               <GhostButton label="Vazgeç" height={36} size={12} onPress={() => setMode(null)} />

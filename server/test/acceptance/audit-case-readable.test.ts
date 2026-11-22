@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedDemoCompany, seedDemoProvider, seedPlatform } from '../../src/seed/demo';
 import { topUpAllSites } from '../../src/services/horizon';
-import { client, freshEnv, type Env } from '../support/env';
+import { client, freshEnv, type Env, noProductEffect } from '../support/env';
 
 /**
  * The audit file read alone: an open case shows its record number, equipment, first response, owner, deadline, actions and service state; a case that was closed
@@ -34,6 +34,7 @@ describe('audit file: open, closed and reopened case', () => {
     }
     await owner().post(`${N(reopened)}/causes`, { stage: 'verified', categories: ['equipment'], notes: 'Termostat doğrulandı.' });
     expect((await manager().post(`${N(reopened)}/steps`, { step: 'effectiveness_check', notes: 'İki gün ölçüm.', measurement: { value: 3 } })).status).toBe(201);
+    await noProductEffect(owner(), N(reopened), demo.users.owner.id);
     expect((await owner().post(`${N(reopened)}/verify`, { result: 'effective', notes: 'Kendi ölçümümle 3 °C.' })).body.status).toBe('closed');
     expect((await owner().post(`${N(reopened)}/reopen`, { reason: 'Üç gün sonra yine 8 °C ölçüldü; çözüm kalıcı değil.' })).status).toBe(200);
 
@@ -67,6 +68,7 @@ describe('audit file: open, closed and reopened case', () => {
     await P.put(`/pro/jobs/${jobId}/report/${rr.body.evidenceId}/content`, file, 'application/pdf');
     await owner().post(`${N(closed)}/causes`, { stage: 'verified', categories: ['equipment'], notes: 'Conta doğrulandı.' });
     await manager().post(`${N(closed)}/steps`, { step: 'effectiveness_check', notes: 'İki gün ölçüm.', measurement: { value: 3 } });
+    await noProductEffect(owner(), N(closed), demo.users.owner.id);
     expect((await owner().post(`${N(closed)}/verify`, { result: 'effective', notes: 'Kendi ölçümümle 3 °C.' })).body.status).toBe('closed');
     const rep2 = (await owner().get(`${C()}/audit-report?siteId=${demo.siteId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&format=json`)).body;
     const seq = (rep2.sections.closures.cases as any[]).find(c => c.id === closed)!.sequence.map((x: any) => x.text).join('\n');

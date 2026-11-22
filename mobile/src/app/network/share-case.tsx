@@ -5,7 +5,7 @@ import { errorText } from '../../api/client';
 import { useSession } from '../../api/session';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field } from '../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, Tap } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, Tap, shortWhy } from '../../components/ui';
 import { CaseBox, USER_CONTENT } from '../../features/network';
 import { C, tint, type } from '../../theme';
 
@@ -44,7 +44,7 @@ export default function ShareCaseRoute() {
       </View>
       <Field label="Ne öğrendiniz? (kendi cümlelerinle, en az bir cümle)" testID="case-summary" value={summary} onChangeText={v => { reset(); setSummary(v); }} multiline
         hint="İşletme, şube, kişi adı, telefon, e-posta, adres ya da fiyat yazma; kontrol bunları yakalar." />
-      <GhostButton testID="case-preview" label="Önizle ve kontrol et" disabled={summary.trim().length < 5} onPress={doPreview} />
+      <GhostButton testID="case-preview" label="Önizle ve kontrol et" disabled={summary.trim().length < 5} why={shortWhy(summary, 5, 'Özet')} onPress={doPreview} />
       {preview ? (
         <Card style={{ gap: 10 }}>
           <Eyebrow>ÖNİZLEME · AĞDA TAM OLARAK BU GÖRÜNÜR</Eyebrow>

@@ -1,5 +1,6 @@
 import type { Db } from '../db/pool';
 import type { Principal } from '../domain/permissions';
+import { applyActivityToSite } from '../services/activity';
 import { appendAudit } from '../services/audit';
 import { recomputeSite } from '../services/obligations';
 import { createSession } from '../services/principal';
@@ -103,6 +104,56 @@ export const EXAMPLE_REPORT_RULES: Omit<DraftInput, 'provisionIds'>[] = [
   },
 ];
 
+/** Sector example rules (installation work). Kept apart so existing demo databases receive them once, through ensureSectorRules. */
+export const EXAMPLE_SECTOR_RULES: Omit<DraftInput, 'provisionIds'>[] = [
+  {
+    code: 'EX-ELEC-INSTALL', title: 'Montaj sonrası topraklama ölçüm kaydı (örnek iyi uygulama)', kind: 'good_practice', isExample: true, ambiguityNote: null,
+    condition: { fact: 'activity.onsite_installation', op: 'eq', value: true },
+    obligationTitle: 'Sahada yaptığın montajın topraklama ölçümünü kaydet',
+    obligationSummary: 'Örnek iyi uygulama; mevzuat hükmü olarak sunulmaz. Müşteri yerinde montaj yapan işletmeler montaj sonrası ölçümü kayda geçirir.',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    templates: [{
+      code: 'install_earthing', title: 'Montaj sonrası topraklama ölçümü', instructions: 'Yaptığın montajın topraklama ölçümünü yap, listeyi doldur ve ölçüm cihazı ekranının fotoğrafını ekle. (Kabul limiti tanımlı değil; sonuç değerlendirmesi yetkili kişiye aittir.)',
+      recurrence: { freq: 'monthly', day: 1, at: '14:00' },
+      evidence: [{ kind: 'checklist', items: [{ id: 'earth_measured', label: 'Topraklama ölçümü yapıldı ve değer müşteriye bildirildi', critical: true }, { id: 'panel_closed', label: 'Pano kapağı kapatıldı', critical: false }] }, { kind: 'photo', min: 1 }],
+      limits: [], severity: 'major', hazardType: 'electrical_safety',
+    }],
+  },
+  {
+    code: 'EX-ESTATE-FILES', title: 'Sözleşme ve yetki belgesi dosyası kontrolü (örnek iyi uygulama)', kind: 'good_practice', isExample: true, ambiguityNote: null,
+    condition: { all: [{ fact: 'activity.brokerage', op: 'eq', value: true }, { fact: 'activity.client_contracts', op: 'eq', value: true }] },
+    obligationTitle: 'Müşteri sözleşme ve yetki belgesi dosyalarını kontrol et',
+    obligationSummary: 'Örnek iyi uygulama; mevzuat hükmü olarak sunulmaz. Müşteri veya mülk sahibi adına dosya tutan ofisler imzalı sözleşme ve yetki belgelerinin eksiksiz ve süresi içinde olduğunu düzenli kontrol eder.',
+    effectiveFrom: '2024-01-01', effectiveTo: null, changeReason: 'İlk örnek sürüm',
+    templates: [{
+      code: 'estate_file_check', title: 'Sözleşme ve yetki belgesi dosyası kontrolü', instructions: 'Açık portföydeki dosyaları gözden geçir: imzalı sözleşme, yetki belgesi ve süre bitişi. Eksik dosyanın fotoğrafını ekle. (Örnek görev.)',
+      recurrence: { freq: 'monthly', day: 1, at: '10:00' },
+      evidence: [{ kind: 'checklist', items: [{ id: 'contracts_signed', label: 'Açık portföydeki tüm dosyalarda imzalı sözleşme var', critical: true }, { id: 'authority_valid', label: 'Yetki belgelerinin süresi dolmamış', critical: true }] }, { kind: 'photo', min: 1 }],
+      limits: [], severity: 'minor', hazardType: 'documentation',
+    }],
+  },
+];
+
+/** Publishes the sector example rules once on a database that already holds the platform people. */
+export async function ensureSectorRules(db: Db) {
+  return db.system(async tx => {
+    const who = async (role: string, not?: string) => (await tx.query<{ user_id: string }>(
+      `SELECT user_id FROM platform_roles WHERE role = $1 AND ($2::uuid IS NULL OR user_id <> $2) ORDER BY user_id LIMIT 1`, [role, not ?? null])).rows[0]?.user_id;
+    const author = await who('rule_author'), reviewer = author ? await who('rule_reviewer', author) : undefined, admin = await who('platform_admin');
+    if (!author || !reviewer || !admin) return 0;
+    let added = 0;
+    for (const r of EXAMPLE_SECTOR_RULES) {
+      if ((await tx.query(`SELECT 1 FROM rules WHERE code = $1`, [r.code])).rowCount) continue;
+      const d = await createDraft(tx, principal(author, { platformRoles: ['rule_author'] }), { ...r, provisionIds: [] });
+      await submitForReview(tx, principal(author, { platformRoles: ['rule_author'] }), d.id);
+      await approve(tx, principal(reviewer, { platformRoles: ['rule_reviewer'] }), d.id, 'Örnek veri: seed sırasında onaylandı.');
+      await publish(tx, principal(admin, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true, reason: 'Örnek veri: seed sırasında yayımlandı.' });
+      added++;
+    }
+    return added;
+  });
+}
+
 /** Publishes the GM-30 devamı example rules once on a database that already holds the platform people (demo deployments only). */
 export async function ensureReportRules(db: Db) {
   return db.system(async tx => {
@@ -121,6 +172,80 @@ export async function ensureReportRules(db: Db) {
     }
     return added;
   });
+}
+
+/**
+ * Scope revision of the example cold-chain checks (v2). v1 applied only where food is prepared AND cold storage is kept, which left out a market that
+ * only sells chilled dairy. v2 applies to food businesses (prepare or sell food product) that keep product cold. This is a NEW rule version that goes
+ * through the normal draft, area review, approval and publish flow; the published v1 is never edited, tasks already done stay bound to v1.
+ * Limits stay EXAMPLE. Deployed databases receive it once through ensureFoodScopeRevision (seed/run.ts).
+ */
+const FOOD_SCOPE = { all: [{ fact: 'activity.food_business', op: 'eq', value: true }, { fact: 'storage.cold', op: 'eq', value: true }] };
+type Revision = { code: string; reason: string; condition?: unknown; marker?: string; apply: (v1: Omit<DraftInput, 'provisionIds'>) => Omit<DraftInput, 'provisionIds'> };
+export const EXAMPLE_RULE_REVISIONS: Revision[] = ['EX-COLD-CHAIN', 'EX-REPORT-DOC', 'EX-REPORT-MEAS'].map(code => ({
+  code, condition: FOOD_SCOPE, reason: 'Kapsam düzeltmesi: yalnız yemek hazırlayanlar değil, soğukta ürün saklayan gıda işletmeleri (ör. soğuk ürün satan market) de kapsanır.',
+  apply: v1 => ({ ...v1, condition: FOOD_SCOPE, obligationSummary: code === 'EX-COLD-CHAIN' ? 'Soğukta ürün saklayan gıda işletmeleri (yemek hazırlayanlar ve soğuk ürün satanlar) ünite sıcaklıklarını düzenli ölçüp kaydeder. ÖRNEK kural.' : v1.obligationSummary, changeReason: 'Kapsam düzeltmesi (v2): gıda faaliyeti + soğukta saklama; yemek hazırlama şartı kalktı. ÖRNEK kural.' }),
+}));
+
+/**
+ * Sector gate (v2): the check applies only to the kind of business whose questions ask for it. Before this, a business that is never asked
+ * the question (an estate office and "LPG", an electrician and "LPG", a market and "on-site installation") stayed "bilgi eksik" for ever.
+ * The published v1 stays as it was (history, finished tasks); v2 comes through the normal review and publish flow.
+ */
+const ESTATE_V2_MARK = 'Dosya varlığı ve içerik incelemesi ayrıldı (v2). ÖRNEK kural.';
+const GATE_REASON = 'Kapsam düzeltmesi: soru yalnız o faaliyetin sahibine sorulur; soru sorulmayan işletmede kural "bilgi eksik" değil "uygulanmaz" olur.';
+const LPG_GATE = { all: [{ fact: 'activity.food_business', op: 'eq', value: true }, { fact: 'utility.lpg', op: 'eq', value: true }] };
+const INSTALL_GATE = { all: [{ fact: 'activity.installation_business', op: 'eq', value: true }, { fact: 'activity.onsite_installation', op: 'eq', value: true }] };
+export const SECTOR_GATE_REVISIONS: Revision[] = [
+  { code: 'EX-LPG-CHECK', condition: LPG_GATE, reason: GATE_REASON, apply: v1 => ({ ...v1, condition: LPG_GATE, changeReason: 'Sektör geçidi (v2): gıda faaliyeti + LPG kullanımı. ÖRNEK kural.' }) },
+  { code: 'EX-ELEC-INSTALL', condition: INSTALL_GATE, reason: GATE_REASON, apply: v1 => ({ ...v1, condition: INSTALL_GATE, changeReason: 'Sektör geçidi (v2): montaj faaliyeti + sahada montaj. ÖRNEK kural.' }) },
+  { code: 'EX-ESTATE-FILES', marker: ESTATE_V2_MARK, reason: 'İçerik düzeltmesi: görev yalnız dosya VARLIĞINI teyit eder; sözleşme ve yetki belgesinin içeriğini belge kasasında yetkili kişi inceler.', apply: v1 => ({ ...v1, changeReason: ESTATE_V2_MARK,
+    templates: v1.templates.map(t => ({ ...t, instructions: 'Açık portföydeki her müşteri için sözleşme ve yetki belgesi dosyasının ofiste veya belge kasasında VAR olduğunu teyit et. Bu görev dosyanın içeriğini incelemez; imza ve yetki süresini belge kasasında ilgili sürümü görebilen yetkili yönetici inceler. Eksik dosyanın fotoğrafını ekle. (Örnek görev.)',
+      evidence: [{ kind: 'checklist', items: [{ id: 'files_present', label: 'Açık portföydeki her müşteri için sözleşme ve yetki belgesi dosyası var (yalnız varlık teyidi; içeriği incelemedim)', critical: true }, { id: 'missing_noted', label: 'Eksik veya bulunamayan dosya varsa yöneticime bildirdim', critical: false }] }, { kind: 'photo', min: 1 }] })) }) },
+];
+
+/** Key order is not meaningful in jsonb; compare conditions by content so a restart never publishes the same scope again. */
+const canon = (v: unknown): string => Array.isArray(v) ? `[${v.map(canon).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`).join(',')}}` : JSON.stringify(v);
+
+async function reviseExampleRules(db: Db, revisions: Revision[]) {
+  return db.system(async tx => {
+    const who = async (role: string, not?: string) => (await tx.query<{ user_id: string }>(
+      `SELECT user_id FROM platform_roles WHERE role = $1 AND ($2::uuid IS NULL OR user_id <> $2) ORDER BY user_id LIMIT 1`, [role, not ?? null])).rows[0]?.user_id;
+    const author = await who('rule_author'), reviewer = author ? await who('rule_reviewer', author) : undefined, admin = await who('platform_admin');
+    const specialist = (await tx.query<{ user_id: string }>(`SELECT user_id FROM reviewer_areas WHERE area = 'food_safety' LIMIT 1`)).rows[0]?.user_id;
+    const areaUser = async (area: string) => (await tx.query<{ user_id: string }>(`SELECT user_id FROM reviewer_areas WHERE area = $1 LIMIT 1`, [area])).rows[0]?.user_id ?? specialist;
+    if (!author || !reviewer || !admin) return [] as { code: string; from: number; to: number }[];
+    const moved: { code: string; from: number; to: number }[] = [];
+    for (const rev of revisions) {
+      const cur = (await tx.query(`SELECT rv.version, rv.condition, rv.change_reason FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE r.code = $1 AND rv.status = 'published'`, [rev.code])).rows[0];
+      if (!cur || (rev.marker ? cur.change_reason === rev.marker : canon(cur.condition) === canon(rev.condition))) continue;
+      const v1 = [...EXAMPLE_RULES, ...EXAMPLE_REPORT_RULES, ...EXAMPLE_SECTOR_RULES].find(r => r.code === rev.code)!;
+      const d = await createDraft(tx, principal(author, { platformRoles: ['rule_author'] }), { ...rev.apply(v1), provisionIds: [] });
+      await submitForReview(tx, principal(author, { platformRoles: ['rule_author'] }), d.id);
+      for (const area of v1.requiredReviewAreas ?? []) { const u = await areaUser(area); if (u) await areaReview(tx, principal(u, { platformRoles: ['rule_reviewer'] }), d.id, area, 'approved', 'Kapsam düzeltmesi, alan incelemesi (ÖRNEK kural).'); }
+      await approve(tx, principal(reviewer, { platformRoles: ['rule_reviewer'] }), d.id, rev.reason);
+      await publish(tx, principal(admin, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true, reason: rev.reason });
+      moved.push({ code: rev.code, from: cur.version, to: d.version });
+    }
+    return moved;
+  });
+}
+
+/** Moves the example cold-chain checks from v1 to the scope revision through the normal review and publish flow, once. */
+export const ensureFoodScopeRevision = (db: Db) => reviseExampleRules(db, EXAMPLE_RULE_REVISIONS);
+/** Gives the sector-specific example checks their gate (v2), once; see SECTOR_GATE_REVISIONS. */
+export const ensureSectorGateRevisions = (db: Db) => reviseExampleRules(db, SECTOR_GATE_REVISIONS);
+
+/**
+ * Existing businesses confirmed their activity before the derived sector facts (food_business, installation_business, brokerage) existed.
+ * Re-derives them from the confirmed NACE codes (records only what changed, never creates a task twice) so the sector gates can decide.
+ */
+export async function ensureActivityDerivedFacts(db: Db) {
+  const sites = await db.system(async tx => (await tx.query<{ company_id: string; id: string }>(
+    `SELECT s.company_id, s.id FROM sites s WHERE EXISTS (SELECT 1 FROM profile_facts f WHERE f.company_id = s.company_id AND f.key = 'activity.nace_codes')`)).rows);
+  let n = 0;
+  for (const s of sites) await db.tenant(s.company_id, async tx => { await applyActivityToSite(tx, 'system', s.company_id, s.id); n++; });
+  return n;
 }
 
 export type DemoSeed = {
@@ -203,7 +328,7 @@ export async function seedDemoCompany(db: Db, opts: { name?: string; isDemo?: bo
   // Owner declares the profile; staff count is left unanswered on purpose (shows "needs info").
   const ownerP = principal(owner.id, { memberships: [{ companyId: ids.companyId, siteId: null, role: 'owner' }] });
   await db.tenant(ids.companyId, async tx => {
-    for (const [key, value] of [['activity.food_preparation', true], ['storage.cold', true], ['utility.lpg', true], ['site.province', 'İstanbul']] as const) {
+    for (const [key, value] of [['activity.food_preparation', true], ['activity.food_business', true], ['storage.cold', true], ['utility.lpg', true], ['site.province', 'İstanbul']] as const) {
       await recordFact(tx, ownerP, ids.companyId, { siteId: ids.siteId, key, value, source: 'user_declared', verification: 'user_confirmed' });
     }
     await recomputeSite(tx, ids.companyId, ids.siteId, owner.id);

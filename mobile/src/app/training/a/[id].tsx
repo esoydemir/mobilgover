@@ -6,7 +6,7 @@ import { useSession } from '../../../api/session';
 import { useApi } from '../../../api/useApi';
 import { Screen } from '../../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, StepMark, Tap } from '../../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, StepMark, Tap, shortWhy } from '../../../components/ui';
 import { fmtDateTime } from '../../../features/dates';
 import { DuePicker } from '../../../features/ncr/parts';
 import { useUi } from '../../../state/app';
@@ -127,7 +127,7 @@ export default function AssignmentRoute() {
             <FilterChip testID="tr-field-not" label="Etkili değil" active={verdict === 'not_effective'} onPress={() => setVerdict('not_effective')} />
           </View>
           <Field label="Sahada ne gördün?" testID="tr-field-notes" value={notes} onChangeText={setNotes} multiline placeholder="ör. Üç açılışta kapıyı kapalı ve contayı kontrol edilmiş gördüm." />
-          <PrimaryButton testID="tr-field-save" label={busy ? 'Kaydediliyor…' : 'Kaydet'} glow={false} height={44} size={13} disabled={busy || notes.trim().length < 10}
+          <PrimaryButton testID="tr-field-save" label={busy ? 'Kaydediliyor…' : 'Kaydet'} glow={false} height={44} size={13} disabled={busy || notes.trim().length < 10} why={shortWhy(notes, 10, 'Not')}
             onPress={() => run(() => call('POST', `${base}/field-verify`, { result: verdict, notes: notes.trim(), actionId }), 'Sahadaki etkinlik kaydedildi', 'Uygunsuzluk kendi doğrulamasıyla kapanır.')} />
         </Card>
       ) : null}
@@ -137,7 +137,7 @@ export default function AssignmentRoute() {
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Bu atamanın okuma, tamamlama ve sınav kayıtları olduğu gibi kalır. Yeniden eğitim yeni bir atama olarak açılır; bağlı kayda ek aksiyon da ekleyebilirsin.</Text>
           <Field label="Neden" testID="tr-retrain-reason" value={notes} onChangeText={setNotes} multiline placeholder="ör. Sahada uygulanmadı; uygulamalı tekrar." />
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <PrimaryButton testID="tr-retrain" label={busy ? 'Atanıyor…' : 'Yeniden eğitim ata'} glow={false} height={42} size={12.5} disabled={busy || notes.trim().length < 5}
+            <PrimaryButton testID="tr-retrain" label={busy ? 'Atanıyor…' : 'Yeniden eğitim ata'} glow={false} height={42} size={12.5} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(async () => { const r = await call<{ id: string }>('POST', `${base}/retrain`, { reason: notes.trim(), dueAt: new Date(Date.now() + 3 * 86400000).toISOString() }); setNotes(''); router.push(`/training/a/${r.id}`); }, 'Yeniden eğitim atandı', 'Önceki kayıt korunur.')} />
             {a.ncrId ? <GhostButton testID="tr-extra-action" label="Kayda ek aksiyon ekle" height={42} size={12.5} onPress={() => router.push(`/ncr/${a.ncrId}`)} /> : null}
           </View>
@@ -165,7 +165,7 @@ function DueChange({ base, current, onDone }: { base: string; current: string | 
       <DuePicker value={due} onChange={setDue} />
       <Field label="Gerekçe" testID="tr-due-reason" value={reason} onChangeText={setReason} />
       {error ? <ErrorBox message={error} /> : null}
-      <PrimaryButton testID="tr-due-save" label="Kaydet" glow={false} height={40} size={12} disabled={reason.trim().length < 5}
+      <PrimaryButton testID="tr-due-save" label="Kaydet" glow={false} height={40} size={12} disabled={reason.trim().length < 5} why={shortWhy(reason, 5, 'Gerekçe')}
         onPress={async () => { setError(null); try { await call('POST', `${base}/due`, { dueAt: due, reason: reason.trim() }); showToast('Termin kaydedildi', 'Kişiye bildirildi; yaklaşınca ve geçince hatırlatılır.'); setOpen(false); onDone(); } catch (e) { setError(errorText(e)); } }} />
     </Card>
   );

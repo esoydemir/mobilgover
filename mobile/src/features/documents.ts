@@ -4,7 +4,7 @@ import { C, tint } from '../theme';
 export const DOC_TYPE: Record<string, string> = {
   business_license: 'İşyeri açma ve çalışma ruhsatı', food_registration: 'Gıda işletme kayıt / onay belgesi',
   calibration_certificate: 'Kalibrasyon sertifikası', maintenance_report: 'Bakım / servis raporu', training_certificate: 'Eğitim sertifikası',
-  health_certificate: 'Sağlık raporu', insurance: 'Sigorta poliçesi', contract: 'Sözleşme', other: 'Diğer belge',
+  health_certificate: 'Sağlık raporu', insurance: 'Sigorta poliçesi', contract: 'Sözleşme', pest_report: 'Zararlı mücadele (pest) hizmet raporu', signature_circular: 'İmza sirküleri', other: 'Diğer belge (serbest tür)',
 };
 
 /**

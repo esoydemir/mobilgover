@@ -1,7 +1,11 @@
 export type Cause = 'knowledge' | 'equipment' | 'resource' | 'process';
 export type StageKey = 'containment' | 'assignment' | 'cause' | 'actions' | 'root_cause' | 'effectiveness' | 'verification';
 
+import type { ProductState } from './ProductCard';
+
 export type NcrDetail = {
+  /** Null in sectors where no product can be affected. */
+  product?: ProductState | null;
   id: string; site_id: string; title: string; description: string; risk_level: string; depth: 'correction' | 'capa';
   status: 'open' | 'awaiting_verification' | 'closed'; recurrence_count: number; source: 'task' | 'manual'; flow_version: number;
   iteration: number; reopened_count: number; severity: string | null; hazard_type: string;
@@ -70,6 +74,8 @@ export const SEVERITIES: [string, string, string][] = [
 ];
 
 /** Audit events → short Turkish lines for the history card. */
+const PRODUCT_DECISION_TR: Record<string, string> = { release: 'Satışa/kullanıma uygun', rework: 'Yeniden işleme', hold: 'Bekletme (karantina)', destroy: 'İmha', return_supplier: 'Tedarikçiye iade', no_product_effect: 'Ürün etkisi yok' };
+
 export function historyLine(h: NcrDetail['history'][number]): string {
   const p = h.payload ?? {};
   switch (h.event_type) {
@@ -89,6 +95,9 @@ export function historyLine(h: NcrDetail['history'][number]): string {
     case 'nonconformity.training_field_verified': return `Eğitimin sahadaki etkinliği kaydedildi (${p.userName}): ${p.result === 'effective' ? 'etkili' : 'etkili değil'}`;
     case 'nonconformity.closed': return `Doğrulandı ve kapatıldı${p.mode === 'self' ? ' (öz doğrulama)' : p.via === 'grant' ? ' (dış doğrulayıcı)' : ''}`;
     case 'nonconformity.reopened': return `Yeniden açıldı: ${p.reason}`;
+    case 'nonconformity.product_assessment_opened': return `Ürün değerlendirmesi açıldı: ${p.product}${p.quantityUnknown ? ' · miktar bilinmiyor' : p.quantity != null ? ` · ${p.quantity}${p.unit ? ' ' + p.unit : ''}` : ''}`;
+    case 'nonconformity.product_decided': return `Ürün kararı verildi: ${p.product} · ${PRODUCT_DECISION_TR[p.decision] ?? p.decision}`;
+    case 'nonconformity.product_decision_corrected': return `Ürün kararı düzeltildi: ${p.product} · ${PRODUCT_DECISION_TR[p.previous?.decision] ?? p.previous?.decision} → ${PRODUCT_DECISION_TR[p.now?.decision] ?? p.now?.decision} · neden: ${p.reason}`;
     default: return h.event_type;
   }
 }

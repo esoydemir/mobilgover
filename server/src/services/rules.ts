@@ -6,13 +6,22 @@ import { conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { evidenceRequirementSchema, limitSchema } from '../domain/evidence';
 import type { Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
+import { notify } from './notifications';
 import { currentObligations, recomputeCompany } from './obligations';
 import { currentFacts } from './profile';
 
+/** Where a frequency comes from, shown next to it: the source text, the administrator's own choice, the business's plan, or an example scenario. */
+export const FREQUENCY_BASES = ['source', 'admin_choice', 'business_plan', 'example_scenario'] as const;
+const at = z.string().regex(/^\d{2}:\d{2}$/);
+const basis = z.enum(FREQUENCY_BASES).optional();
+const common = { perEquipmentType: z.string().optional(), basis, basisNote: z.string().max(300).optional() };
 const recurrenceSchema = z.union([
-  z.object({ freq: z.literal('daily'), at: z.string().regex(/^\d{2}:\d{2}$/), perEquipmentType: z.string().optional() }),
-  z.object({ freq: z.literal('weekly'), weekday: z.number().int().min(1).max(7), at: z.string().regex(/^\d{2}:\d{2}$/), perEquipmentType: z.string().optional() }),
-  z.object({ freq: z.literal('monthly'), day: z.number().int().min(1).max(28), at: z.string().regex(/^\d{2}:\d{2}$/), perEquipmentType: z.string().optional() }),
+  z.object({ freq: z.literal('once'), on: z.iso.date(), at, ...common }),
+  z.object({ freq: z.literal('daily'), at, ...common }),
+  z.object({ freq: z.literal('weekly'), weekday: z.number().int().min(1).max(7), at, ...common }),
+  z.object({ freq: z.literal('monthly'), day: z.number().int().min(1).max(28), at, ...common }),
+  /** Not decided yet. A draft may be saved and reviewed with it; a rule that creates tasks cannot be approved or published until it is set. */
+  z.object({ freq: z.literal('unset'), ...common }),
 ]);
 
 export const templateSchema = z.object({
@@ -146,7 +155,7 @@ export async function areaReview(tx: Tx, p: Principal, id: string, area: string,
 
 /** Area reviews still missing (latest decision per area must be "approved"). */
 async function pendingAreas(tx: Tx, rv: any): Promise<string[]> {
-  const r = await tx.query(`SELECT DISTINCT ON (area) area, decision FROM rule_area_reviews WHERE rule_version_id = $1 ORDER BY area, created_at DESC`, [rv.id]);
+  const r = await tx.query(`SELECT DISTINCT ON (area) area, decision FROM rule_area_reviews WHERE rule_version_id = $1 AND ($2::timestamptz IS NULL OR created_at > $2) ORDER BY area, created_at DESC`, [rv.id, rv.returned_at ?? null]);
   const approved = new Set(r.rows.filter(x => x.decision === 'approved').map(x => x.area));
   return rv.required_review_areas.filter((a: string) => !approved.has(a));
 }
@@ -154,9 +163,19 @@ async function pendingAreas(tx: Tx, rv: any): Promise<string[]> {
 export async function listRuleVersions(tx: Tx, p: Principal, status?: string) {
   if (!p.platformRoles.length) throw forbidden();
   const rows = (await tx.query(
-    `SELECT rv.id, r.code, rv.version, rv.status, rv.kind, rv.is_example, rv.obligation_title, rv.required_review_areas, rv.author_id, rv.reviewer_id, rv.created_at, rv.published_at
+    `SELECT rv.id, r.code, rv.version, rv.status, rv.kind, rv.is_example, rv.obligation_title, rv.required_review_areas, rv.author_id, rv.reviewer_id, rv.created_at, rv.published_at, rv.status_reason, rv.status_changed_at, rv.returned_at
        FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE ($1::text IS NULL OR rv.status = $1) ORDER BY r.code, rv.version`, [status ?? null])).rows;
-  for (const r of rows) r.pendingAreaReviews = r.status === 'in_review' ? await pendingAreas(tx, r) : [];
+  for (const r of rows) {
+    r.pendingAreaReviews = r.status === 'in_review' ? await pendingAreas(tx, r) : [];
+    // Per pending area: may THIS person review it, who may, and is anyone defined at all (nobody → the record waits, with that reason).
+    r.pendingAreaAccess = [];
+    for (const area of r.pendingAreaReviews as string[]) {
+      const names = (await tx.query<{ n: string; id: string }>(`SELECT u.display_name AS n, u.id FROM reviewer_areas a JOIN users u ON u.id = a.user_id WHERE a.area = $1 ORDER BY u.display_name`, [area])).rows;
+      const mine = names.some(x => x.id === p.userId);
+      r.pendingAreaAccess.push({ area, canReview: mine && r.author_id !== p.userId, reviewers: names.map(x => x.n), waiting: names.length === 0 ? `"${area}" alanında tanımlı inceleyici yok; kayıt bir inceleyici atanana kadar bekler.` : null,
+        note: mine ? (r.author_id === p.userId ? 'Bu alanın inceleyicisisin ama kuralı sen yazdın; başka biri incelemeli.' : 'Bu alanda inceleme yetkin var.') : names.length ? `Bu alanda inceleme yetkin yok. Yetkili: ${names.join(', ')}.` : 'Bu alanda inceleme yetkin yok ve alanda tanımlı inceleyici de yok; bir platform yöneticisi alan ataması yapmalı.' });
+    }
+  }
   return rows;
 }
 
@@ -193,6 +212,12 @@ export async function confirmEffective(tx: Tx, p: Principal, id: string, raw: { 
   return { id, effectiveFrom: date.data };
 }
 
+/** A rule whose checks have no frequency yet would create no tasks (or guess one): it cannot be approved or published. */
+export async function assertFrequencySet(tx: Tx, rvId: string) {
+  const bad = (await tx.query<{ code: string }>(`SELECT code FROM task_templates WHERE rule_version_id = $1 AND recurrence->>'freq' = 'unset' ORDER BY code`, [rvId])).rows.map(r => r.code);
+  if (bad.length) throw conflict('FREQUENCY_UNSET', `Tekrar sıklığı belirlenmedi (${bad.join(', ')}): görev üreten kural, sıklık seçilmeden onaylanamaz ve yayımlanamaz.`, { checks: bad });
+}
+
 export async function approve(tx: Tx, p: Principal, id: string, reason: string | null | undefined, opts: { dateSetByLegislationFlow?: boolean } = {}) {
   if (!has(p, 'rule_reviewer')) throw forbidden('Onay yalnızca kural inceleyicisi tarafından verilebilir.');
   const why = needReason(reason, 'Kuralı onaylamak');
@@ -200,6 +225,7 @@ export async function approve(tx: Tx, p: Principal, id: string, reason: string |
   if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını onaylayamaz.');
   if (!opts.dateSetByLegislationFlow) needEffectiveConfirmation(rv);
+  await assertFrequencySet(tx, id);
   const missing = await pendingAreas(tx, rv);
   if (missing.length) throw conflict('AREA_REVIEW_MISSING', `Önce alan uzmanı incelemesi gerekiyor: ${missing.join(', ')}`, { missing });
   await tx.query(`UPDATE task_templates SET emergency_approved_by = $2 WHERE rule_version_id = $1 AND emergency_instruction IS NOT NULL`, [id, p.userId]);
@@ -227,6 +253,7 @@ export async function publish(tx: Tx, p: Principal, id: string, opts: { allowExa
 export async function publishVersion(tx: Tx, actorId: string, id: string, opts: { allowExampleRules: boolean; reason: string; extra?: Record<string, unknown>; dateSetByLegislationFlow?: boolean }) {
   const rv = await version(tx, id);
   if (rv.status !== 'approved') throw conflict('INVALID_STATE', 'Yalnızca onaylanmış sürüm yayınlanabilir.');
+  await assertFrequencySet(tx, id);
   if (!opts.dateSetByLegislationFlow) needEffectiveConfirmation(rv);
   if (rv.is_example && !opts.allowExampleRules) throw forbidden('Örnek kurallar yalnızca demo ortamında yayınlanabilir.');
   await tx.query(`UPDATE rule_versions SET status = 'retired', retired_at = now() WHERE rule_id = $1 AND status = 'published'`, [rv.rule_id]);
@@ -259,13 +286,13 @@ export async function previewImpact(tx: Tx, p: Principal, id: string) {
 
 /** Synthetic business profiles used to preview a draft before publishing. Not real businesses. */
 export const SAMPLE_PROFILES: { key: string; label: string; facts: Record<string, unknown>; equipment: string[] }[] = [
-  { key: 'cafe_cold', label: 'Kafe · soğuk depo var · LPG yok', facts: { 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 6, 'site.province': 'İstanbul' }, equipment: ['refrigerator', 'thermometer'] },
-  { key: 'restaurant_lpg', label: 'Lokanta · soğuk depo ve LPG var · paket servis', facts: { 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': true, 'service.delivery': true, 'staff.count': 14, 'site.province': 'Ankara' }, equipment: ['refrigerator', 'freezer', 'thermometer'] },
-  { key: 'kiosk', label: 'Büfe · hazırlama yok · soğutucu yok', facts: { 'activity.food_preparation': false, 'storage.cold': false, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 2, 'site.province': 'İzmir' }, equipment: [] },
+  { key: 'cafe_cold', label: 'Kafe · soğuk depo var · LPG yok', facts: { 'activity.food_business': true, 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 6, 'site.province': 'İstanbul' }, equipment: ['refrigerator', 'thermometer'] },
+  { key: 'restaurant_lpg', label: 'Lokanta · soğuk depo ve LPG var · paket servis', facts: { 'activity.food_business': true, 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': true, 'service.delivery': true, 'staff.count': 14, 'site.province': 'Ankara' }, equipment: ['refrigerator', 'freezer', 'thermometer'] },
+  { key: 'kiosk', label: 'Büfe · hazırlama yok · soğutucu yok', facts: { 'activity.food_business': true, 'activity.food_preparation': false, 'storage.cold': false, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 2, 'site.province': 'İzmir' }, equipment: [] },
   { key: 'unknown', label: 'Yeni işletme · profil eksik', facts: { 'activity.food_preparation': true }, equipment: [] },
 ];
 
-const FREQ_TR = (r: any) => r.freq === 'daily' ? `her gün ${r.at}` : r.freq === 'weekly' ? `her hafta (${r.weekday}. gün) ${r.at}` : `her ay ${r.day}. gün ${r.at}`;
+const FREQ_TR = (r: any) => r.freq === 'unset' ? 'sıklık belirlenmedi' : r.freq === 'once' ? `tek seferlik ${r.on} ${r.at}` : r.freq === 'daily' ? `her gün ${r.at}` : r.freq === 'weekly' ? `her hafta (${r.weekday}. gün) ${r.at}` : `her ay ${r.day}. gün ${r.at}`;
 
 /** Which obligations and which tasks a draft would create for each sample profile. Nothing is written. */
 export function samplePreview(rv: { condition: any; effective_from: string; effective_to: string | null; ambiguity_note: string | null; id: string },
@@ -301,7 +328,7 @@ export async function ruleVersionDetail(tx: Tx, p: Principal, id: string) {
      WHERE ar.rule_version_id = $1 ORDER BY ar.created_at`, [id])).rows;
   const usedByTasks = (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM tasks t JOIN task_templates tt ON tt.id = t.template_id WHERE tt.rule_version_id = $1`, [id])).rows[0]!.n;
   return {
-    id: rv.id, code: rv.code, title: rv.rule_title, version: rv.version, status: rv.status, kind: rv.kind, isExample: rv.is_example, condition: rv.condition,
+    id: rv.id, code: rv.code, title: rv.rule_title, version: rv.version, status: rv.status, statusReason: rv.status_reason ?? null, statusChangedAt: rv.status_changed_at ?? null, kind: rv.kind, isExample: rv.is_example, condition: rv.condition,
     obligationTitle: rv.obligation_title, obligationSummary: rv.obligation_summary, effectiveFrom: rv.effective_from, effectiveTo: rv.effective_to, changeReason: rv.change_reason,
     ambiguityNote: rv.ambiguity_note, requiredReviewAreas: rv.required_review_areas, pendingAreaReviews: rv.status === 'in_review' ? await pendingAreas(tx, rv) : [],
     provisionIds: rv.provision_ids, sources, reviews, templates, usedByTasks,
@@ -348,4 +375,78 @@ export async function listProvisions(tx: Tx, p: Principal) {
   if (!p.platformRoles.length) throw forbidden();
   return (await tx.query(`SELECT pr.id, pr.ref, left(pr.excerpt, 160) AS excerpt, ls.title, ls.is_example, sv.version_label FROM provisions pr
      JOIN source_versions sv ON sv.id = pr.source_version_id JOIN legal_sources ls ON ls.id = sv.source_id ORDER BY ls.title, pr.ref`)).rows;
+}
+
+
+const REASON_MIN = 10;
+function decisionReason(reason: string | null | undefined, what: string) {
+  const r = needReason(reason, what);
+  if (r.length < REASON_MIN) throw invalid(`${what} için gerekçe en az ${REASON_MIN} karakter olmalı.`);
+  return r;
+}
+
+/**
+ * Iade: a reviewer sends a version in review (or approved, not yet published) back to its author. The version becomes a draft again;
+ * area reviews given before the return no longer count, so the specialists look at the corrected text again.
+ */
+export async function returnToDraft(tx: Tx, p: Principal, id: string, reason: string | null | undefined) {
+  if (!has(p, 'rule_reviewer')) throw forbidden('İade yalnızca kural inceleyicisi tarafından yapılabilir.');
+  const why = decisionReason(reason, 'Taslağa iade');
+  const rv = await version(tx, id);
+  if (rv.status !== 'in_review' && rv.status !== 'approved') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yalnızca incelemedeki veya onaylı (yayımlanmamış) sürüm iade edilir.`);
+  if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını iade edemez.');
+  await tx.query(`UPDATE rule_versions SET status = 'draft', status_reason = $2, status_changed_by = $3, status_changed_at = now(), returned_at = now(), reviewer_id = NULL, reviewed_at = NULL WHERE id = $1`, [id, why, p.userId]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.returned', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, from: rv.status, reason: why } });
+}
+
+/** Ret: the version is refused for good (terminal). A corrected rule is written as a new version. */
+export async function rejectVersion(tx: Tx, p: Principal, id: string, reason: string | null | undefined) {
+  if (!has(p, 'rule_reviewer')) throw forbidden('Ret yalnızca kural inceleyicisi tarafından verilebilir.');
+  const why = decisionReason(reason, 'Reddetmek');
+  const rv = await version(tx, id);
+  if (rv.status !== 'in_review' && rv.status !== 'approved') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yalnızca incelemedeki veya onaylı (yayımlanmamış) sürüm reddedilir.`);
+  if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını reddedemez.');
+  await tx.query(`UPDATE rule_versions SET status = 'rejected', status_reason = $2, status_changed_by = $3, status_changed_at = now() WHERE id = $1`, [id, why, p.userId]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.rejected', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, from: rv.status, reason: why } });
+}
+
+/**
+ * Geri çekme: a published version is taken back. From now on nothing new starts under it:
+ *  - every site whose current decision rests on it gets a new "needs_review" decision carrying the reason (older decisions stay);
+ *  - open work still ahead is cancelled with the reason; work already due stays open and is flagged RULE_WITHDRAWN for a person to review;
+ *  - completed work keeps its record and its (now withdrawn) rule version;
+ *  - managers of affected sites get one correction notice per version and site.
+ */
+export async function withdrawVersion(tx: Tx, p: Principal, id: string, reason: string | null | undefined) {
+  if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) throw forbidden('Geri çekme yetkin yok.');
+  const why = decisionReason(reason, 'Yayımlanmış sürümü geri çekmek');
+  const rv = await version(tx, id);
+  if (rv.status !== 'published') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yalnızca yayımlanmış sürüm geri çekilir.`);
+  await tx.query(`UPDATE rule_versions SET status = 'withdrawn', status_reason = $2, status_changed_by = $3, status_changed_at = now() WHERE id = $1`, [id, why, p.userId]);
+  await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.withdrawn', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, reason: why } });
+
+  const sites = (await tx.query<{ company_id: string; site_id: string }>(`SELECT DISTINCT company_id, site_id FROM obligations WHERE rule_version_id = $1`, [id])).rows;
+  let stopped = 0, flagged = 0, notified = 0, affectedSites = 0;
+  for (const s of sites) {
+    const prev = (await currentObligations(tx, s.company_id, s.site_id)).find(o => o.rule_id === rv.rule_id);
+    if (!prev || prev.rule_version_id !== id) continue; // this site already moved on to another version
+    const ins = await tx.query<{ id: string }>(
+      `INSERT INTO obligations (company_id, site_id, rule_id, rule_version_id, decision, decided_by, reason, trace, facts_snapshot, missing_facts)
+       VALUES ($1,$2,$3,$4,'needs_review',$5,$6,$7,$8,$9) RETURNING id`,
+      [s.company_id, s.site_id, rv.rule_id, id, p.userId, `Kural sürümü geri çekildi: ${why}`, JSON.stringify({ result: 'withdrawn', reason: why }), JSON.stringify(prev.facts_snapshot ?? {}), prev.missing_facts ?? []]);
+    await appendAudit(tx, { companyId: s.company_id, actorId: p.userId, eventType: 'obligation.decided', entityType: 'obligation', entityId: ins.rows[0]!.id,
+      payload: { ruleCode: rv.code, ruleVersion: rv.version, decision: 'needs_review', previous: prev.decision, withdrawn: true, reason: why } });
+    const ahead = await tx.query(`UPDATE tasks SET status = 'cancelled', status_reason = $3, cancel_code = 'obligation_changed' WHERE company_id = $1 AND obligation_id = $2 AND status = 'open' AND due_at >= now()`,
+      [s.company_id, prev.id, `Kural sürümü geri çekildi: ${why}`]);
+    const due = await tx.query(`UPDATE tasks SET review_flag = 'RULE_WITHDRAWN' WHERE company_id = $1 AND obligation_id = $2 AND status = 'open' AND due_at < now()`, [s.company_id, prev.id]);
+    stopped += ahead.rowCount ?? 0; flagged += due.rowCount ?? 0; affectedSites++;
+    if ((ahead.rowCount ?? 0) + (due.rowCount ?? 0) > 0 || prev.decision === 'applies') {
+      const recipients = (await tx.query<{ user_id: string }>(
+        `SELECT DISTINCT user_id FROM memberships WHERE company_id = $1 AND status = 'active' AND role IN ('owner','hq_manager','site_manager') AND (site_id IS NULL OR site_id = $2)`, [s.company_id, s.site_id])).rows.map(r => r.user_id);
+      notified += await notify(tx, { companyId: s.company_id, siteId: s.site_id, userIds: recipients, kind: 'rule_withdrawn', entityType: 'obligation', entityId: ins.rows[0]!.id,
+        dedupeKey: `rule-withdrawn:${id}:${s.site_id}`, title: `${rv.is_example ? 'ÖRNEK · ' : ''}Düzeltme: ${rv.obligation_title}`,
+        body: `Bu kural sürümü geri çekildi. Yeni görev açılmayacak; vadesi gelmiş açık işlerini gözden geçir. Gerekçe: ${why}` });
+    }
+  }
+  return { ruleCode: rv.code, version: rv.version, sites: affectedSites, futureTasksStopped: stopped, dueTasksFlagged: flagged, notified };
 }

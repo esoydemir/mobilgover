@@ -1,14 +1,15 @@
 import { Redirect, router } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import type { Indicators, Obligation, TaskRow as Task } from '../api/types';
 import { useApi } from '../api/useApi';
 import { GradientFill } from '../components/Gradient';
 import { WarnIcon } from '../components/Icons';
 import { Screen } from '../components/Screen';
-import { Empty, ErrorBox, Loading, StaleNote } from '../components/states';
+import { Empty, ErrorBox, Field, Loading, StaleNote } from '../components/states';
 import { Bar, Card, Eyebrow, GhostButton, PrimaryButton, SevPill, Tap, TimelineRow } from '../components/ui';
 import { addDays, dayKey, fmtDate, fmtTime, shortDay, startOfDay } from '../features/dates';
 import { KIND_LABEL, useRiskItems } from '../features/risk';
@@ -16,6 +17,8 @@ import { bucketTasks, taskWindowPath } from '../features/work';
 import { goRoot } from '../state/app';
 import { C, tint, type } from '../theme';
 
+export type Gap = { kind: 'equipment' | 'question' | 'conflict'; siteId: string; siteName: string; ruleCode: string; obligation: string; message: string; missing: string[];
+  action: { kind: 'add_equipment' | 'answer_question'; label: string; equipmentType?: string; factKey?: string; siteId: string } };
 type Ncr = { id: string; title: string; risk_level: string; status: string; due_at: string | null };
 
 const STATUS_TEXT: Record<Indicators['status'], [string, string]> = {
@@ -41,6 +44,7 @@ function HomeScreen() {
   // Same window and same buckets as the task list, so a count here is the length of the list it opens.
   const tasks = useApi<Task[]>(base && siteId ? taskWindowPath(base, siteId) : null);
   const isStaff = role === 'staff';
+  const gaps = useApi<Gap[]>(base && !isStaff ? `${base}/gaps${role === 'site_manager' && siteId ? `?siteId=${siteId}` : ''}` : null);
   // Staff get only the cases they own or hold an action in (server-side).
   const ncrs = useApi<Ncr[]>(base ? `${base}/nonconformities?status=open` : null);
   const obligations = useApi<Obligation[]>(base && !isStaff ? `${base}/obligations${role === 'site_manager' && siteId ? `?siteId=${siteId}` : ''}` : null);
@@ -64,11 +68,12 @@ function HomeScreen() {
   }, [tasks.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const risk = useRiskItems('site');
-  const reload = () => { void tasks.reload(); void ncrs.reload(); void obligations.reload(); void ind.reload(); risk.reload(); };
+  const reload = () => { void gaps.reload(); void tasks.reload(); void ncrs.reload(); void obligations.reload(); void ind.reload(); risk.reload(); };
   const critical = (ncrs.data ?? []).find(n => n.risk_level === 'high' || n.risk_level === 'critical');
   // The one thing that matters most: the first critical risk item (any kind), not only a nonconformity.
   const topRisk = risk.items.find(i => i.sev === 'crit');
   const needsInfo = (obligations.data ?? []).filter(o => o.decision === 'needs_info' || o.decision === 'needs_review');
+  const firstMissing = needsInfo.flatMap(o => o.missingFacts ?? [])[0];
   const total = derived.todays.length;
   const remaining = total - derived.done;
 
@@ -185,9 +190,11 @@ function HomeScreen() {
         </Tap>
       ) : null}
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
-        <Text style={type(10.5, 600, { ls: 0.12, color: C.t3 })}>BUGÜNÜN GÖREVLERİ</Text>
-        <Tap testID="home-today-all" onPress={() => goRoot('/tasks?filter=today')} hitSlop={8}><Text style={type(11, 600, { ls: 0.08, color: C.t2 })}>TÜMÜ →</Text></Tap>
+      {!isStaff && gaps.data ? gaps.data.filter(g => g.ruleCode === 'EX-COLD-CHAIN' || g.kind === 'equipment').map(g => <GapCard key={`${g.kind}-${g.siteId}-${g.ruleCode}-${g.missing.join()}`} gap={g} onDone={reload} />) : null}
+
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, gap: 10 }}>
+        <Text numberOfLines={1} style={[type(10.5, 600, { ls: 0.12, color: C.t3 }), { flexShrink: 1 }]}>BUGÜNÜN GÖREVLERİ</Text>
+        <Tap testID="home-today-all" onPress={() => goRoot('/tasks?filter=today')} hitSlop={8} style={{ flexShrink: 0 }}><Text numberOfLines={1} style={type(11, 600, { ls: 0.08, color: C.t2 })}>TÜMÜ →</Text></Tap>
       </View>
       {tasks.data && derived.todays.length === 0 ? <Empty title="Bugün için görev yok" body={isStaff ? 'Sana atanmış görev yok. Yöneticin bir kontrolü sana atadığında burada görünür.' : 'Görevler, uygulanan yükümlülüklerden oluşturulur. Profil yanıtlarını ve ekipmanları kontrol et.'} /> : null}
       {derived.todays.map(t => <TaskLine key={t.id} t={t} showAssignee={!isStaff} />)}
@@ -202,10 +209,11 @@ function HomeScreen() {
       )}
 
       {!isStaff && needsInfo.length > 0 && (
-        <Tap onPress={() => router.push('/profile')} style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: tint.lime(0.32), borderRadius: 22, backgroundColor: tint.lime(0.04), paddingVertical: 16, paddingHorizontal: 18, marginTop: 4 }}>
+        <Tap testID="home-profile-missing" onPress={() => router.push(`/profile${firstMissing ? `?focus=${firstMissing}` : ''}` as never)} style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: tint.lime(0.32), borderRadius: 22, backgroundColor: tint.lime(0.04), paddingVertical: 16, paddingHorizontal: 18, marginTop: 4 }}>
           <Text style={type(10, 600, { ls: 0.11, color: C.lime })}>PROFİL EKSİK</Text>
           <Text style={[type(14.5, 600, { ls: -0.01 }), { marginTop: 8 }]}>{needsInfo.length} yükümlülük için bilgi veya inceleme bekleniyor</Text>
-          <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>Eksik bilgi "uygulanmaz" sayılmaz; yanıtlayınca netleşir.</Text>
+          <Text testID="home-profile-missing-list" style={[type(12, 400, { color: C.t2, lh: 1.45 }), { marginTop: 4 }]}>{needsInfo.slice(0, 3).map(o => o.title).join(' · ')}{needsInfo.length > 3 ? ` · +${needsInfo.length - 3}` : ''}</Text>
+          <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>Eksik bilgi "uygulanmaz" sayılmaz; ilk soruyu açmak için dokun.</Text>
         </Tap>
       )}
     </Screen>
@@ -248,5 +256,33 @@ export function TaskLine({ t, showAssignee = false, note }: { t: Task; showAssig
       </View>
       <SevPill sev={t.severity === 'critical' ? 'crit' : t.severity === 'major' ? 'imp' : 'low'} />
     </Tap>
+  );
+}
+
+/** An obligation that cannot become work yet says what is missing and offers the direct action, so nobody is left on an empty screen. */
+function GapCard({ gap, onDone }: { gap: Gap; onDone: () => void }) {
+  const { company, call } = useSession();
+  const [open, setOpen] = useState(false); const [name, setName] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const base = company ? `/companies/${company.id}` : null;
+  const title = gap.kind === 'equipment' ? 'Soğuk ürün satışı için ekipman bilgisi eksik' : gap.kind === 'conflict' ? 'Yanıtların birbiriyle çelişiyor' : 'Bir bilgi eksik';
+  const save = async () => {
+    if (!base || !gap.action.equipmentType) return;
+    setBusy(true); setErr(null);
+    try { await call('POST', `${base}/equipment`, { siteId: gap.siteId, type: gap.action.equipmentType, name: name.trim() }); setOpen(false); setName(''); onDone(); }
+    catch (e) { setErr(errorText(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Card testID={`gap-${gap.kind}`} style={{ marginTop: 12, gap: 8 }}>
+      <Eyebrow>{title.toUpperCase()} · {gap.siteName}</Eyebrow>
+      <Text style={type(13, 400, { color: C.t2, lh: 1.45 })}>{gap.message}</Text>
+      {gap.action.kind === 'add_equipment' ? (open ? (
+        <View style={{ gap: 6 }}>
+          <Field label="Dolabın adı" testID="gap-equipment-name" value={name} onChangeText={setName} />
+          <PrimaryButton testID="gap-equipment-save" label="Dolabı kaydet" glow={false} height={42} size={13} disabled={busy || name.trim().length < 2} onPress={save} />
+          {err ? <ErrorBox message={err} /> : null}
+        </View>
+      ) : <PrimaryButton testID="gap-equipment-add" label={gap.action.label} glow={false} height={42} size={13} onPress={() => setOpen(true)} />)
+        : <GhostButton testID="gap-answer" label={gap.action.label} height={40} size={12.5} onPress={() => router.push(`/profile${gap.action.factKey ? `?focus=${gap.action.factKey}` : ''}` as never)} />}
+    </Card>
   );
 }

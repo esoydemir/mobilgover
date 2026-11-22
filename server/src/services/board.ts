@@ -3,7 +3,7 @@ import { conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { listDocuments } from './documents';
-import { topUpSite } from './tasks';
+import { equipmentGaps, topUpSite } from './tasks';
 
 /**
  * Manager board (6B): what needs a manager today, in a fixed, explained order. Every count is the
@@ -88,7 +88,7 @@ export async function board(tx: Tx, p: Principal, companyId: string, f: BoardFil
   };
   return {
     scope: 'manager', priority: PRIORITY, filter: f, choices,
-    sections: { critical, overdueActions, awaitingVerification, documents, repeats: repeats.list },
+    sections: { critical, overdueActions, awaitingVerification, documents, repeats: repeats.list, gaps: await equipmentGaps(tx, companyId, siteIds) },
     indicators, comparison,
     note: 'Bu ekran puan, sıralama ya da ceza değildir; bugün müdahale gereken işleri gösterir.',
   };
@@ -216,4 +216,11 @@ export async function addSite(tx: Tx, p: Principal, companyId: string, b: { name
   // and any check that already applies gets its tasks. What is still missing is visible on the obligations list.
   const filled = await topUpSite(tx, companyId, s.id, 14, p.userId);
   return { id: s.id, createdTasks: filled.created };
+}
+
+/** What keeps obligations from becoming work, for the sites this person manages (see equipmentGaps). Staff see none. */
+export async function gapsFor(tx: Tx, p: Principal, companyId: string, siteId?: string | null) {
+  const sites = (await visibleSites(tx, p, companyId)).filter(s => !siteId || s.id === siteId);
+  if (!sites.length) return [];
+  return equipmentGaps(tx, companyId, sites.map(s => s.id));
 }

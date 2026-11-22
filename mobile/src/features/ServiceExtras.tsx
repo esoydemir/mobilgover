@@ -109,3 +109,113 @@ export function MessageThread({ requestId, profileId, provider }: { requestId: s
     </Card>
   );
 }
+
+type Complaint = { id: string; opened_side: 'business' | 'provider'; reason: string; status: 'open' | 'responded' | 'resolved'; response: string | null; resolution: string | null; created_at: string };
+const COMPLAINT_TR: Record<string, string> = { open: 'Yanıt bekliyor', responded: 'Yanıtlandı · karar bekliyor', resolved: 'Karara bağlandı' };
+
+/**
+ * Complaints of one job, from either side. A complaint is its own record: it does not change the job's status,
+ * the review of the report document or the nonconformity. The other side answers; a marketplace reviewer decides in writing.
+ */
+export function ComplaintCard({ jobId, provider }: { jobId: string; provider?: boolean }) {
+  const { company, call } = useSession();
+  const side = provider ? 'provider' : 'business';
+  const base = provider ? '/pro' : `/companies/${company?.id}`;
+  const q = useApi<Complaint[]>(provider || company ? `${base}/jobs/${jobId}/complaints` : null);
+  const [text, setText] = useState(''); const [answer, setAnswer] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
+  const run = async (f: () => Promise<unknown>) => { setBusy(true); setError(null); try { await f(); setText(''); setAnswer(''); q.reload(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } };
+  const mineOpen = (q.data ?? []).some(c => c.opened_side === side && c.status !== 'resolved');
+  return (
+    <Card radius={22} style={{ padding: 15, gap: 8 }}>
+      <View testID="complaint-card"><Eyebrow>ŞİKÂYET</Eyebrow></View>
+      {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
+      {!q.data && q.loading ? <Loading /> : null}
+      {q.data?.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Bu iş için şikâyet yok.</Text> : null}
+      {(q.data ?? []).map(c => (
+        <View key={c.id} style={{ gap: 4, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
+          <Text style={type(11, 600, { color: C.warn })}>{c.opened_side === side ? 'Senin şikâyetin' : 'Karşı tarafın şikâyeti'} · {COMPLAINT_TR[c.status]} · {fmtDateTime(c.created_at)}</Text>
+          <Text style={type(13, 400, { lh: 1.4 })}>{c.reason}</Text>
+          {c.response ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.4 })}>Yanıt: {c.response}</Text> : null}
+          {c.resolution ? <Text style={type(12.5, 600, { color: C.lime, lh: 1.4 })}>Karar: {c.resolution}</Text> : null}
+          {c.status === 'open' && c.opened_side !== side ? (
+            <View style={{ gap: 6 }}>
+              <Field label="Yanıtın" testID="complaint-answer" value={answer} onChangeText={setAnswer} multiline />
+              <PrimaryButton testID="complaint-respond" label="Yanıtla" disabled={busy || answer.trim().length < 10} onPress={() => run(() => call('POST', `${base}/complaints/${c.id}/respond`, { response: answer }))} />
+            </View>
+          ) : null}
+        </View>
+      ))}
+      {!mineOpen ? (
+        <View style={{ gap: 6 }}>
+          <Field label="Şikâyetin nedeni" testID="complaint-reason" value={text} onChangeText={setText} multiline />
+          <GhostButton testID="complaint-open" label="Şikâyet aç" height={38} size={12} disabled={busy || text.trim().length < 10} onPress={() => run(() => call('POST', `${base}/jobs/${jobId}/complaints`, { reason: text }))} />
+        </View>
+      ) : null}
+      {error ? <ErrorBox message={error} /> : null}
+      <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>Şikâyet iş durumunu, rapor incelemesini veya uygunsuzluğu değiştirmez; platform değerlendiricisi gerekçeli karar verir.</Text>
+    </Card>
+  );
+}
+
+type Suggestion = { category: { code: string; name: string }; urgency: 'case' | 'planned'; reason: string; providers: { id: string; name: string; authorization: { validUntil: string | null } }[]; leftOutExpiredApproval: number; noMatch: boolean; openRequest: { note: string } | null };
+
+/** Services the business may need, each with the reason it rests on. Reading only: nothing is sent until the person opens a request. */
+export function ServiceSuggestions({ onOpen }: { onOpen: (categoryCode: string) => void }) {
+  const { company, siteId } = useSession();
+  const q = useApi<{ suggestions: Suggestion[] }>(company && siteId ? `/companies/${company.id}/service-suggestions?siteId=${siteId}` : null);
+  if (!q.data?.suggestions.length) return null;
+  return (
+    <View testID="service-suggestions" style={{ gap: 8 }}>
+      <Eyebrow>İHTİYACINA GÖRE ÖNERİLER</Eyebrow>
+      {q.data.suggestions.map(s => (
+        <Card key={s.category.code} radius={22} style={{ padding: 15, gap: 6 }}>
+          <Text style={type(14, 700)}>{s.category.name}{s.urgency === 'case' ? ' · açık kayıt var' : ''}</Text>
+          <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>{s.reason}</Text>
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>
+            {s.noMatch ? s.openRequest?.note : `${s.providers.length} onaylı uzman${s.providers[0]?.authorization.validUntil ? ` (onay en erken ${s.providers.map(p => p.authorization.validUntil).filter(Boolean).sort()[0]} tarihine kadar)` : ''}`}
+            {s.leftOutExpiredApproval ? ` · Onay süresi dolan ${s.leftOutExpiredApproval} uzman eşleştirilmedi.` : ''}
+          </Text>
+          <PrimaryButton testID={`suggest-${s.category.code}`} label={s.noMatch ? 'Açık talep oluştur' : 'Uzmanları gör, talep aç'} glow={false} height={40} size={12.5} onPress={() => onOpen(s.category.code)} />
+        </Card>
+      ))}
+    </View>
+  );
+}
+
+type OpsRow = { id: string; title: string; responsible: string; waitingDays: number; nextAction: string; record: { type: string; id: string } };
+type Ops = { lists: Record<'openRequests' | 'lateAppointments' | 'rejectedReports' | 'expiringApprovals' | 'openComplaints', OpsRow[]> };
+const OPS_TR: Record<keyof Ops['lists'], string> = { openRequests: 'Açık talepler', lateAppointments: 'Geciken randevular', rejectedReports: 'Revizyon bekleyen raporlar', expiringApprovals: 'Biten / bitmek üzere onaylar', openComplaints: 'Açık şikâyetler' };
+
+/** Marketplace reviewer's five work lists: who waits, how long, what comes next, and the record to open. Complaints can be decided here. */
+export function MarketOps() {
+  const { call } = useSession();
+  const q = useApi<Ops>('/admin/marketplace/operations');
+  const [resolution, setResolution] = useState(''); const [error, setError] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  const resolve = async (id: string) => { setBusy(true); setError(null); try { await call('POST', `/admin/marketplace/complaints/${id}/resolve`, { resolution }); setResolution(''); q.reload(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } };
+  return (
+    <View testID="market-ops" style={{ gap: 8 }}>
+      {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
+      {!q.data && q.loading ? <Loading /> : null}
+      {q.data ? (Object.keys(OPS_TR) as (keyof Ops['lists'])[]).map(k => (
+        <Card key={k} radius={22} style={{ padding: 15, gap: 6 }}>
+          <Eyebrow>{OPS_TR[k].toUpperCase()} · {q.data!.lists[k].length}</Eyebrow>
+          {q.data!.lists[k].length === 0 ? <Text style={type(12, 400, { color: C.t3 })}>Bekleyen kayıt yok.</Text> : null}
+          {q.data!.lists[k].map(r => (
+            <View key={r.id} style={{ gap: 2, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 6 }}>
+              <Text style={type(13, 600, { lh: 1.35 })}>{r.title}</Text>
+              <Text style={type(11.5, 400, { color: C.t2, lh: 1.4 })}>Bekleyen: {r.responsible} · {r.waitingDays} gündür</Text>
+              <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>Sıradaki adım: {r.nextAction}</Text>
+              {k === 'openComplaints' ? (
+                <View style={{ gap: 6 }}>
+                  <Field label="Karar gerekçesi" testID={`ops-resolution-${r.id}`} value={resolution} onChangeText={setResolution} multiline />
+                  <GhostButton testID={`ops-resolve-${r.id}`} label="Karara bağla" height={36} size={12} disabled={busy || resolution.trim().length < 10} onPress={() => resolve(r.id)} />
+                </View>
+              ) : null}
+            </View>
+          ))}
+        </Card>
+      )) : null}
+      {error ? <ErrorBox message={error} /> : null}
+    </View>
+  );
+}

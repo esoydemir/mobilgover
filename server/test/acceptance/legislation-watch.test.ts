@@ -102,6 +102,25 @@ describe('daily scan and review queue', () => {
     expect((await staff().get('/admin/legislation/overview')).status).toBe(403);
   });
 
+  it('the desk filters the queue by source, sector, status, text, date state, effective window and person', async () => {
+    const n = async (qs: string) => ((await admin().get(`/admin/legislation/changes${qs}`)).body as unknown[]).length;
+    expect(await n('?source=resmi_gazete')).toBe(1);
+    expect(await n('?source=mevzuat')).toBe(0);
+    expect(await n('?area=food_safety')).toBe(1);
+    expect(await n('?area=gas_safety')).toBe(0);
+    expect(await n('?status=pending')).toBe(1);
+    expect(await n('?status=applied')).toBe(0);
+    expect(await n('?q=LPG')).toBe(1);
+    expect(await n('?q=zzzbulunmaz')).toBe(0);
+    expect(await n('?dateStatus=known')).toBe(1);
+    expect(await n('?dateStatus=unclear')).toBe(0);
+    expect(await n(`?effectiveFrom=${addDays(today, -1)}&effectiveTo=${addDays(today, 1)}`)).toBe(1);
+    expect(await n(`?effectiveFrom=${addDays(today, 5)}`)).toBe(0);
+    expect(await n(`?reviewer=${platform.reviewer.id}`)).toBe(0);
+    expect((await admin().get('/admin/legislation/changes?status=bogus')).status).toBe(422);
+    expect((await staff().get('/admin/legislation/changes?source=resmi_gazete')).status).toBe(403);
+  });
+
   it('an unrelated source outage records the error per source, retries, keeps the last good data and recovers', async () => {
     const lastOk = (await admin().get('/admin/legislation/overview')).body.sources.find((s: any) => s.code === 'resmi_gazete').last_success_at;
     src.down = true;

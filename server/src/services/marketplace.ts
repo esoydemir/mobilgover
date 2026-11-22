@@ -185,7 +185,7 @@ export async function reviewQueue(tx: Tx, p: Principal) {
  */
 export async function providersFor(tx: Tx, categoryCode: string, f: { q?: string; city?: string; district?: string; minCredentials?: number; reviewedOnly?: boolean } = {}) {
   const rows = (await tx.query(
-    `SELECT pp.id, pp.display_name, pp.headline, pp.city, pp.district,
+    `SELECT pp.id, pp.display_name, pp.headline, pp.city, pp.district, a.valid_until AS auth_valid_until,
             (SELECT count(*)::int FROM professional_verifications v WHERE v.profile_id = pp.id AND v.status = 'verified' AND v.kind = 'credential') AS verified_credentials,
             (SELECT count(*)::int FROM service_reviews sr JOIN service_jobs j ON j.id = sr.job_id WHERE sr.provider_profile_id = pp.id AND sr.show_on_profile AND j.status = 'accepted') AS reviewed_jobs,
             (SELECT round(avg((sr.quality + sr.timeliness + sr.communication) / 3.0), 1)::float FROM service_reviews sr JOIN service_jobs j ON j.id = sr.job_id

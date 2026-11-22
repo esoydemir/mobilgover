@@ -6,6 +6,7 @@ import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Loading } from '../components/states';
 import { Chevron, Pill, PrimaryButton, Tap } from '../components/ui';
 import { fmtDateTime } from '../features/dates';
+import { ServiceSuggestions } from '../features/ServiceExtras';
 import { C, tint, type } from '../theme';
 
 type Req = { id: string; title: string; category_name: string; status: string; open_quotes: number; job_status: string | null; created_at: string };
@@ -22,6 +23,7 @@ export default function ServicesRoute() {
     <Screen title="Hizmet talepleri" titleEn="Service requests" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       <PrimaryButton testID="service-new" label="Yeni hizmet talebi" onPress={() => router.push('/service/new')} />
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Ödeme bu aşamada uygulama dışında yapılır. Uzman sıralamasında ücretli öne çıkarma yoktur ve ticari tercih uygunsuzluğun önemini etkilemez.</Text>
+      <ServiceSuggestions onOpen={code => router.push({ pathname: '/service/new', params: { category: code } })} />
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
       {q.data?.length === 0 ? <Empty title="Henüz talep yok" /> : null}

@@ -13,7 +13,7 @@ type Overview = { companies: { real: number; demo: number }; users: number; rule
 type AuditItem = { id: number; companyName: string | null; scope: string; occurredAt: string; actorName: string; eventType: string; entityType: string; reason: string | null; payload?: { code?: string; version?: number } };
 type PUser = { id: string; displayName: string; email: string | null; roles: string[] };
 
-const RULE_TR: Record<string, string> = { draft: 'taslak', in_review: 'incelemede', approved: 'onaylı', published: 'yayında', retired: 'emekli' };
+const RULE_TR: Record<string, string> = { draft: 'taslak', in_review: 'incelemede', approved: 'onaylı', published: 'yayında', retired: 'emekli', rejected: 'reddedildi', withdrawn: 'geri çekildi' };
 export const PLATFORM_ROLE_TR: Record<string, string> = { rule_author: 'Kural yazarı', rule_reviewer: 'Kural inceleyici', platform_admin: 'Platform yöneticisi', marketplace_reviewer: 'Pazar yeri inceleyicisi', network_moderator: 'Ağ moderatörü' };
 const EVENT_TR: Record<string, string> = { 'platform.role_granted': 'Platform rolü verildi', 'platform.role_revoked': 'Platform rolü kaldırıldı', 'rule.approved': 'Kural onaylandı', 'rule.published': 'Kural yayınlandı',
   'rule.area_reviewed': 'Alan incelemesi', 'rule.submitted': 'Kural incelemeye gönderildi', 'rule.drafted': 'Kural taslağı yazıldı', 'pro.verification_decided': 'Uzman belgesi karara bağlandı' };

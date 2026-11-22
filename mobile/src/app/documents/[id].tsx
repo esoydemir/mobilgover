@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap, shortWhy } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
 import { ExtractionCard, QrCard } from '../../features/Group4';
@@ -22,6 +22,9 @@ type Version = { id: string; version: number; valid_from: string | null; valid_u
 type Origin = { requestId: string; requestTitle: string; requestStatus: string; jobStatus: string; siteName: string; providerName: string; taskId: string | null; taskTitle: string | null; taskDueAt: string | null; taskStatus: string | null };
 type DocDetail = { id: string; docType: string; title: string; issuer: string | null; documentNo: string | null; siteId: string | null; siteName: string | null; equipmentName: string | null;
   issuerCheck: IssuerCheck; status: string; expiring: boolean; notYetValid: boolean; currentVersionId: string | null; validFrom: string | null; validUntil: string | null; expiryWarningDays: number;
+  endKind?: 'dated' | 'none' | 'unknown'; infoNeeded?: boolean; reviewOn?: string | null; keepPurpose?: string | null;
+  latestRejection?: { version: number; reason: string } | null; stillValid?: { version: number; validUntil: string | null; remainingDays: number | null } | null;
+  satisfiesObligations?: { ref: string; name: string; purpose: string }[];
   maxUploadBytes: number; shares: { id: string; site_id: string; site_name: string }[]; versions: Version[];
   permissions: { write: boolean; review: boolean; share: boolean }; origin: Origin | null;
   uses: { id: string; kind: string; kindLabel: string; name: string; purpose: string; createdBy: string }[] };
@@ -60,6 +63,13 @@ export default function DocumentRoute() {
           <Card style={{ gap: 6 }}>
             <Eyebrow>DURUM VE GEÇERLİLİK</Eyebrow>
             <Text testID="doc-status-note" style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{STATUS_NOTE[d.status]}</Text>
+            {d.endKind === 'none' ? <Text testID="doc-end-none" style={type(12.5, 600, { color: C.t1, lh: 1.45 })}>Bu belgenin bitiş tarihi yok; süre aşımı uyarısı üretilmez.</Text> : null}
+            {d.infoNeeded ? <Text testID="doc-end-unknown" style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Bitiş tarihi henüz bilinmiyor. İnceleyen kişi belgeden okuyup yazana ya da “bitişi yok” diyene kadar bilgi tamamlama listesinde kalır.</Text> : null}
+            {d.reviewOn ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Gözden geçirme tarihi: {fmtDay(d.reviewOn)} (bitişten ayrıdır)</Text> : null}
+            {d.keepPurpose ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Saklanma amacı: {d.keepPurpose}</Text> : null}
+            {d.satisfiesObligations?.length ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Karşıladığı yükümlülük: {d.satisfiesObligations.map(o => o.name).join(', ')}</Text> : <Text style={type(12, 400, { color: C.t3, lh: 1.45 })}>Şu an hiçbir yükümlülüğü karşılamak için kullanılmıyor.</Text>}
+            {d.latestRejection ? <Text testID="doc-latest-rejection" style={type(12.5, 600, { color: C.crit, lh: 1.45 })}>{`Son sürüm (${d.latestRejection.version}) reddedildi: ${d.latestRejection.reason}`}</Text> : null}
+            {d.stillValid ? <Text testID="doc-still-valid" style={type(12.5, 500, { color: C.t1, lh: 1.45 })}>{`Geçerli olan: sürüm ${d.stillValid.version}${d.stillValid.remainingDays !== null ? ` · ${d.stillValid.remainingDays} gün kaldı` : ' · süresiz'}.`}</Text> : null}
             {d.issuerCheck ? <Text testID="doc-issuer-line" style={type(12, 600, { color: C.t1, lh: 1.45 })}>{issuerLine(d.issuerCheck)}</Text> : null}
             {d.currentVersionId ? (
               <Text style={type(13, 500, { lh: 1.5 })}>İncelenen sürüme göre {fmtDay(d.validFrom)} – {fmtDay(d.validUntil)}. Bitişe {d.expiryWarningDays} gün kala ve bitince yöneticilere hatırlatma gider.</Text>
@@ -270,7 +280,7 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <PrimaryButton testID={`doc-review-ok-${v.version}`} label={busy ? 'Kaydediliyor…' : 'İncelendi'} glow={false} height={40} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5 || !isDay(until)}
               onPress={() => run(() => call('POST', `${base}/review`, { decision: 'verified', notes: notes.trim(), validUntil: until || null }), 'Kurum içi incelendi', 'Resmî doğrulama değildir; kurumla doğruladıysan ayrıca kaydet.')} />
-            <GhostButton testID={`doc-review-reject-${v.version}`} label="Reddet" height={40} size={12.5} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 5}
+            <GhostButton testID={`doc-review-reject-${v.version}`} label="Reddet" height={40} size={12.5} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(() => call('POST', `${base}/review`, { decision: 'rejected', notes: notes.trim() }), 'Belge reddedildi', 'Yükleyene bildirildi.')} />
             <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
           </View>

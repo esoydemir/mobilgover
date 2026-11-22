@@ -1,0 +1,7 @@
+SENARYO 1 — TEK SEFERLIK — DB gh_acc1 — test saati: zamanlayici 23.11.2026 23:30 (tarama) → 25.11.2026 09:00 (yururluk) → 25.11.2026 23:30 (tekrar tarama); topup-window 14 gun x2 ve 45 gun x1 test saati 25.11.2026 09:00; API yeniden baslatildi
+SUBE BAZINDA: Emlak A: yeni_gorev=1 mevzuat_bildirimi=1 | Emlak B: yeni_gorev=0 mevzuat_bildirimi=0 | Market: yeni_gorev=0 mevzuat_bildirimi=0 | Elektrik: yeni_gorev=0 mevzuat_bildirimi=0
+TOPLAM: gorev=105 bildirim=1 yukumluluk=79 aday=5 tarama=2 | onceki toplam: gorev=66 bildirim=0 yukumluluk=77
+GOREVLER: 324195cc-1c72-4c24-b8ce-925d9f93f2fb vade=27.11.2026 10:00 sube=Emlak A — sözleşmeli portföy durum=open
+BILDIRIMLER: fe5b003c-25ee-4dae-8cb6-b1d42f58bf58 sube=Emlak A — sözleşmeli portföy alici=kabul.emlak-sahip.1795385143639@demo.goverhub.test
+DURUM: applied onaylayan_gerekce=Resmî kaynak (sentetik) okundu; yürürlük 25.11.2026; kapsam: yetki sözleşmesi yapan emlak şubeleri. Sıklık: tek seferlik (yönetici seçimi, ÖRNEK senaryo). uygulandi=2026-11-22 22:12:21.017947+00 | kural: EX-ESTATE-FILE-ONCE v1 published sablon={"at": "10:00", "on": "2026-11-27", "freq": "once", "basis": "example_scenario"}
+DENETIM: legislation.detected > legislation.proposal_saved > legislation.proposal_saved > legislation.drafted > legislation.approved > legislation.applied > legislation.applied_to_company > legislation.applied_to_company

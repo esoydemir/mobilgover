@@ -12,7 +12,7 @@ import { useApi } from '../../api/useApi';
 import { CameraIcon, WarnIcon } from '../../components/Icons';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, StaleNote } from '../../components/states';
-import { Card, Chevron, Eyebrow, GhostButton, PrimaryButton, Rise, SevPill, Tap } from '../../components/ui';
+import { Card, Chevron, Eyebrow, GhostButton, PrimaryButton, Rise, SevPill, Tap, shortWhy } from '../../components/ui';
 import { AssignCard } from '../../features/AssignCard';
 import { fmtDateTime } from '../../features/dates';
 import { bucketTasks, taskWindowPath } from '../../features/work';
@@ -106,11 +106,24 @@ export default function TaskDetailRoute() {
           <Text testID="task-outcome" style={type(15, 700, { color: t.outcome === 'nonconforming' ? C.crit : C.lime })}>
             {t.outcome === 'nonconforming' ? 'Yapıldı · sonuç uygunsuz' : 'Yapıldı · sonuç uygun'}
           </Text>
-          {t.reviewFlag ? <Text style={[type(12, 400, { color: C.warn }), { marginTop: 6 }]}>İnceleme gerekiyor: kural sürümü değişti ({t.reviewFlag}).</Text> : null}
+          {t.reviewFlag ? <Text style={[type(12, 400, { color: C.warn, lh: 1.45 }), { marginTop: 6 }]}>{t.reviewFlag === 'RULE_WITHDRAWN'
+            ? `İnceleme gerekiyor: bu işin kural sürümü geri çekildi${t.rule.statusReason ? ` — ${t.rule.statusReason}` : ''}. Yeni iş açılmayacak; bu işi tamamlamak veya bırakmak için yöneticinle karar ver.`
+            : 'İnceleme gerekiyor: kural sürümü değişti.'}</Text> : null}
           {t.nonconformity ? <PrimaryButton testID="open-ncr" label="Uygunsuzluğu aç" height={44} size={13.5} style={{ marginTop: 12 }} onPress={() => router.push(`/ncr/${t.nonconformity!.id}`)} /> : null}
         </Card>
       )}
       {t.status === 'cancelled' || t.status === 'missed' ? <ErrorBox message={t.status === 'cancelled' ? `Bu görev iptal edildi${t.statusReason ? `: ${t.statusReason}` : '.'}` : 'Bu görevin süresi geçti.'} /> : null}
+
+      {t.assignmentHistory.length ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+          <Eyebrow>SORUMLU GEÇMİŞİ</Eyebrow>
+          {[...t.assignmentHistory].reverse().map((h, i) => (
+            <Text key={i} testID={`task-assign-history-${i}`} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>
+              {`${fmtDateTime(h.at)} · ${h.previous?.name ?? 'atanmamıştı'} → ${h.current?.name ?? 'atama kaldırıldı'} · ${h.changedBy.name ?? 'yönetici'}${h.source === 'bulk' ? ' (toplu)' : h.source === 'series' ? ' (seri)' : ''}${h.reason ? ` · ${h.reason}` : ''}`}
+            </Text>
+          ))}
+        </Card>
+      ) : null}
 
       {role !== 'staff' && siteId ? <AssignCard key={`${t.assignee?.id}-${t.seriesResponsible?.id}`} t={t} siteId={siteId} onChanged={q.reload} /> : null}
 
@@ -137,12 +150,43 @@ export default function TaskDetailRoute() {
         </Card>
       ) : null}
 
-      {t.relatedDocuments?.length ? (
+      {t.relatedDocuments?.length || t.relatedDocumentsHidden ? (
         <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>İLGİLİ BELGELER</Eyebrow>
-          {t.relatedDocuments.map(d => (
-            <Text key={d.id} testID={`task-doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={type(12.5, 500, { color: C.info, lh: 1.45 })}>{d.title} · {d.purpose}</Text>
-          ))}
+          {(t.relatedDocuments ?? []).map(d => {
+            const v = d.latest;
+            const fileTxt = !v ? 'Dosya yok' : v.file === 'stored' ? `Dosya var (sürüm ${v.version}) — varlık teyidi` : 'Dosya yüklenmedi';
+            const revTxt = !v || v.file !== 'stored' ? null : v.review === 'unreviewed' ? 'İçerik incelenmedi' : v.review === 'verified' ? `İçerik incelendi: uygun · ${v.reviewedBy ?? ''}` : `İçerik incelendi: kabul edilmedi · ${v.reviewedBy ?? ''}`;
+            const next = d.canReview ? 'Sıradaki adım: belgeyi aç ve içeriği incele.'
+              : d.reviewBlockedReason === 'uploader' ? 'Bu sürümü sen yükledin; içeriği başka bir yetkili incelemelidir.'
+              : d.reviewBlockedReason === 'no_permission' ? 'İçeriği incelemek için belge inceleme yetkisi gerekir; yöneticine ilet.' : null;
+            return (
+              <View key={d.id} testID={`task-doc-card-${d.id}`} style={{ gap: 3 }}>
+                <Text testID={`task-doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={type(12.5, 600, { color: C.info, lh: 1.45 })}>{d.title} · {d.purpose}</Text>
+                <Text testID={`task-doc-file-${d.id}`} style={type(12, 400, { color: C.t2, lh: 1.45 })}>{fileTxt}</Text>
+                {revTxt ? <Text testID={`task-doc-review-${d.id}`} style={type(12, 500, { color: v?.review === 'verified' ? C.info : v?.review === 'rejected' ? C.crit : C.warn, lh: 1.45 })}>{revTxt}</Text> : null}
+                {next ? <Text testID={`task-doc-next-${d.id}`} style={type(12, 400, { color: C.t2, lh: 1.45 })}>{next}</Text> : null}
+                {d.canReview ? <GhostButton testID={`task-doc-review-btn-${d.id}`} label="İçeriği incele" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/documents/${d.id}`)} /> : null}
+              </View>
+            );
+          })}
+          {t.relatedDocumentsHidden ? (
+            <Text testID="task-doc-hidden" style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu kontrole {t.relatedDocumentsHidden} belge bağlı; içeriğini görme yetkin yok. Sen yalnız dosyaların var olduğunu teyit edersin; içeriği yetkili yönetici belge kasasında inceler.</Text>
+          ) : null}
+          {t.documentHistory?.length ? (
+            <View testID="task-doc-history" style={{ gap: 2, marginTop: 4 }}>
+              <Text style={type(11, 600, { color: C.t3 })}>BELGE GEÇMİŞİ</Text>
+              {t.documentHistory.map((h, i) => (
+                <Text key={i} style={type(11.5, 400, { color: C.t2, lh: 1.4 })}>{fmtDateTime(h.at)} · {h.actor} · {h.title}{h.version ? ` · sürüm ${h.version}` : ''} · {h.action}</Text>
+              ))}
+            </View>
+          ) : null}
+        </Card>
+      ) : role !== 'staff' ? (
+        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+          <Eyebrow>İLGİLİ BELGELER</Eyebrow>
+          <Text testID="task-doc-none" style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Bu kontrole bağlı belge yok. Belgeyi kasaya ekle; belgenin sayfasında “Nerede kullanılıyor” bölümünden bu kontrolü seç.</Text>
+          <GhostButton testID="task-doc-add" label="Belge kasasına ekle" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push('/documents/new' as never)} />
         </Card>
       ) : null}
 
@@ -318,6 +362,9 @@ function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
         <Eyebrow>NEDEN GEREKLİ</Eyebrow>
         <Text testID="task-why" style={type(13, 600, { lh: 1.4 })}>{t.rule.title ?? t.title}</Text>
         {t.rule.summary ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{t.rule.summary}</Text> : null}
+        {t.why?.text ? <Text testID="task-why-text" style={type(12.5, 500, { color: C.t1, lh: 1.5 })}>{t.why.text}</Text> : null}
+        {t.why?.obligationId && role !== 'staff' ? <GhostButton testID="task-why-open" label="Yanıtı ve kaynağı aç" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/obligation/${t.why!.obligationId}`)} /> : null}
+        {t.basis?.note ? <Text testID="task-basis-note" style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>{t.basis.note}</Text> : null}
         <Text testID="task-legal" style={type(11.5, 500, { color: t.legalBasis?.length ? C.t2 : C.warn, lh: 1.45 })}>
           {t.legalBasis?.length ? t.legalBasis.map(p => `${p.source_title}${p.issuer ? ` (${p.issuer})` : ''} · ${p.ref}${p.is_example ? ' · ÖRNEK KAYNAK' : ''}`).join(' · ')
             : 'Doğrulanmış yasal dayanak kaydı yok (örnek kural); bu görev yasal zorunluluk olarak sunulmaz.'}
@@ -482,7 +529,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
       <Card>
         <Eyebrow>AÇIKLAMA {r.requiredWhen === 'nonconforming' ? '· SONUÇ UYGUNSUZSA ZORUNLU' : '· ZORUNLU'}</Eyebrow>
         <View style={{ marginTop: 10 }}><Field testID="note-text" value={note} onChangeText={setNote} multiline placeholder="Ne gördün, ne yaptın?" /></View>
-        <GhostButton testID="note-save" label="Notu kaydet" disabled={note.trim().length < 3} style={{ marginTop: 10 }} onPress={() => { onAdd('not', `${path}/evidence`, { kind: 'note', text: note.trim() }); setNote(''); }} />
+        <GhostButton testID="note-save" label="Notu kaydet" disabled={note.trim().length < 3} why={shortWhy(note, 3, 'Not')} style={{ marginTop: 10 }} onPress={() => { onAdd('not', `${path}/evidence`, { kind: 'note', text: note.trim() }); setNote(''); }} />
       </Card>
     );
   }

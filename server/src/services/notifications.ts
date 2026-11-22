@@ -12,6 +12,8 @@ export type NotificationInput = {
   kind: string; entityType: string; entityId: string; title: string; body: string; dedupeKey: string;
   /** Do not notify the person who caused the event. */
   except?: string | null;
+  /** Structured content (what changed / which branch / by when / link) for screens that render it. */
+  meta?: Record<string, unknown> | null;
 };
 
 export async function notify(tx: Tx, n: NotificationInput): Promise<number> {
@@ -28,9 +30,9 @@ export async function notify(tx: Tx, n: NotificationInput): Promise<number> {
   let created = 0;
   for (const u of active) {
     const r = await tx.query(
-      `INSERT INTO notifications (company_id, site_id, user_id, kind, entity_type, entity_id, title, body, dedupe_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (user_id, dedupe_key) DO NOTHING`,
-      [n.companyId, n.siteId, u, n.kind, n.entityType, n.entityId, n.title, n.body, n.dedupeKey]);
+      `INSERT INTO notifications (company_id, site_id, user_id, kind, entity_type, entity_id, title, body, dedupe_key, meta)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (user_id, dedupe_key) DO NOTHING`,
+      [n.companyId, n.siteId, u, n.kind, n.entityType, n.entityId, n.title, n.body, n.dedupeKey, n.meta ? JSON.stringify(n.meta) : null]);
     created += r.rowCount ?? 0;
   }
   return created;
@@ -73,7 +75,7 @@ export async function siteManagers(tx: Tx, companyId: string, siteId: string): P
 /** Inbox for one company. Items the user can no longer open (role or site changed, reassigned) are left out. */
 export async function listNotifications(tx: Tx, p: Principal, companyId: string, limit = 50) {
   const rows = (await tx.query(
-    `SELECT n.id, n.kind, n.entity_type, n.entity_id, n.title, n.body, n.created_at, n.read_at, n.site_id, n.dedupe_key,
+    `SELECT n.id, n.kind, n.entity_type, n.entity_id, n.title, n.body, n.created_at, n.read_at, n.site_id, n.dedupe_key, n.meta,
             nc.owner_id AS ncr_owner, nc.site_id AS ncr_site,
             EXISTS (SELECT 1 FROM ncr_actions a WHERE a.ncr_id = nc.id AND a.owner_id = $2) AS ncr_action_owner
        FROM notifications n
@@ -91,6 +93,8 @@ export async function listNotifications(tx: Tx, p: Principal, companyId: string,
     if (r.entity_type === 'training_assignment' || r.entity_type === 'training_course') return true; // re-checked when opened
     if (r.entity_type === 'access_grant') return p.grants.some(g => g.companyId === companyId);
     if (r.entity_type === 'task') return can(p, 'task.read', { companyId, siteId: r.site_id, assigneeId: p.userId }).ok;
+    // A batch or release notice about tasks: the person it is addressed to may always read it (it points to their own list, not to one task).
+    if (r.entity_type === 'task_batch') return can(p, 'task.read', { companyId, siteId: r.site_id, assigneeId: p.userId }).ok;
     if (r.entity_type === 'site_tasks') return can(p, 'task.assign', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'service_request') return can(p, 'service.request', { companyId, siteId: r.site_id }).ok;
     if (r.entity_type === 'document') return can(p, 'document.read', { companyId, siteId: r.site_id }).ok;
@@ -215,4 +219,43 @@ export async function scanDeadlines(db: Db, now = new Date()) {
     });
   }
   return { created };
+}
+
+
+/**
+ * Outward delivery (push, e-mail, SMS) of notifications that are already in the inbox. The inbox row is the record; delivery is a
+ * separate state: a failed send is retried with growing delays and stops after MAX_ATTEMPTS (kept as "failed", never silently dropped).
+ * A row is claimed with FOR UPDATE SKIP LOCKED and marked delivered in the same transaction, so concurrent runs or a retry after
+ * success never send the same notification twice. A crash between the send and the commit can resend it (at-least-once, stated).
+ * Reading the inbox never depends on delivery.
+ */
+export type DeliveryChannel = { send(n: { id: string; userId: string; title: string; body: string; kind: string; meta: unknown }): Promise<void> };
+export const MAX_DELIVERY_ATTEMPTS = 5;
+const backoffMs = (attempt: number) => Math.min(60_000 * 2 ** (attempt - 1), 6 * 3_600_000);
+
+export async function deliverPending(db: Db, channel: DeliveryChannel, now = new Date()) {
+  const companies = await db.system(async tx => (await tx.query<{ id: string }>(`SELECT id FROM companies`)).rows.map(r => r.id));
+  const out = { sent: 0, failed: 0, gaveUp: 0 };
+  for (const companyId of companies) {
+    await db.tenant(companyId, async tx => {
+      const rows = (await tx.query(
+        `SELECT id, user_id, title, body, kind, meta, delivery_attempts FROM notifications
+          WHERE company_id = $1 AND delivered_at IS NULL AND delivery_attempts < $3 AND (next_attempt_at IS NULL OR next_attempt_at <= $2::timestamptz)
+          ORDER BY created_at LIMIT 100 FOR UPDATE SKIP LOCKED`, [companyId, now.toISOString(), MAX_DELIVERY_ATTEMPTS])).rows;
+      for (const r of rows) {
+        try {
+          await channel.send({ id: r.id, userId: r.user_id, title: r.title, body: r.body, kind: r.kind, meta: r.meta });
+          await tx.query(`UPDATE notifications SET delivered_at = $2, delivery_error = NULL, next_attempt_at = NULL WHERE id = $1`, [r.id, now.toISOString()]);
+          out.sent++;
+        } catch (e) {
+          const attempts = r.delivery_attempts + 1;
+          const last = attempts >= MAX_DELIVERY_ATTEMPTS;
+          await tx.query(`UPDATE notifications SET delivery_attempts = $2, delivery_error = $3, next_attempt_at = $4 WHERE id = $1`,
+            [r.id, attempts, String((e as Error).message).slice(0, 300), last ? null : new Date(now.getTime() + backoffMs(attempts)).toISOString()]);
+          out.failed++; if (last) out.gaveUp++;
+        }
+      }
+    });
+  }
+  return out;
 }

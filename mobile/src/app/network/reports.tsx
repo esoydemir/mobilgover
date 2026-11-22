@@ -5,7 +5,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, GhostButton } from '../../components/ui';
+import { Card, Eyebrow, GhostButton, shortWhy } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { REPORT_REASONS } from '../../features/network';
 import { useUi } from '../../state/app';
@@ -52,7 +52,7 @@ function Decision({ d, reload }: { d: OnMe; reload: () => void }) {
         <View style={{ gap: 6 }}>
           <Field label="İtiraz gerekçen" testID={`appeal-reason-${d.id}`} value={reason} onChangeText={setReason} multiline />
           {error ? <ErrorBox message={error} /> : null}
-          <GhostButton testID={`appeal-send-${d.id}`} label="İtiraz et (bir kez)" height={38} size={12} disabled={reason.trim().length < 10}
+          <GhostButton testID={`appeal-send-${d.id}`} label="İtiraz et (bir kez)" height={38} size={12} disabled={reason.trim().length < 10} why={shortWhy(reason, 10, 'Gerekçe')}
             onPress={async () => { setError(null); try { await call('POST', `/network/reports/${d.id}/appeal`, { reason: reason.trim() }); showToast('İtiraz gönderildi', 'İlk kararı veren dışında bir moderatör inceler.'); reload(); } catch (e) { setError(errorText(e)); } }} />
         </View>
       )}

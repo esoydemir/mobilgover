@@ -10,7 +10,7 @@ import { DOC_STATUS, DOC_TYPE, fmtDay, issuerLine, type IssuerCheck } from '../f
 import { C, type } from '../theme';
 
 type Doc = { id: string; docType: string; title: string; siteName: string | null; equipmentName: string | null; status: string; validUntil: string | null; versionCount: number;
-  pendingReview: boolean; expiring: boolean; sharedReadOnly: boolean; issuerCheck: IssuerCheck;
+  pendingReview: boolean; expiring: boolean; endKind?: 'dated' | 'none' | 'unknown'; infoNeeded?: boolean; latestRejection?: { version: number; reason: string } | null; sharedReadOnly: boolean; issuerCheck: IssuerCheck;
   serviceOrigin: { requestTitle: string; taskTitle: string | null; siteName: string; providerName: string } | null };
 
 /** Document vault: licences, certificates, reports. An upload is valid only after someone else reviewed it. */
@@ -25,7 +25,7 @@ export default function DocumentsRoute() {
       <PrimaryButton testID="doc-new" label="Belge ekle" onPress={() => router.push('/documents/new')} />
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Durumlar ayrı tutulur: inceleme bekliyor, kurum içi incelendi, düzenleyen kurumdan doğrulandı, reddedildi, süresi doldu. Yükleme ya da kurum içi inceleme resmî geçerlilik doğrulaması değildir; GoverHub kurumu kendisi sorgulamaz.</Text>
       <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-        {([[null, 'Tümü'], ['expiring', 'Yakında bitecek'], ['expired', 'Süresi doldu'], ['pending_review', 'İnceleme bekliyor'], ['rejected', 'Reddedildi'], ['no_file', 'Eksik (dosya yok)']] as const).map(([k, l]) =>
+        {([[null, 'Tümü'], ['expiring', 'Yakında bitecek'], ['expired', 'Süresi doldu'], ['pending_review', 'İnceleme bekliyor'], ['rejected', 'Reddedildi'], ['no_file', 'Eksik (dosya yok)'], ['info_needed', 'Bilgi tamamlama']] as const).map(([k, l]) =>
           <FilterChip key={k ?? 'all'} testID={`doc-filter-${k ?? 'all'}`} label={l} px={11} active={filter === k} onPress={() => setFilter(k)} />)}
       </View>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
@@ -39,6 +39,8 @@ export default function DocumentsRoute() {
               <Pill label={st[0]} fg={st[1]} bg={st[2]} />
               {d.expiring ? <Pill label="SÜRESİ YAKLAŞIYOR" fg={C.warn} bg={C.chip} /> : null}
               {d.pendingReview && d.status !== 'unreviewed' ? <Pill label="YENİ SÜRÜM İNCELEMEDE" fg={C.warn} bg={C.chip} /> : null}
+              {d.endKind === 'none' ? <Pill label="SÜRESİZ" fg={C.t2} bg={C.chip} /> : null}
+              {d.infoNeeded ? <Pill label="TARİH BİLİNMİYOR" fg={C.warn} bg={C.chip} /> : null}
               {d.sharedReadOnly ? <Pill label="PAYLAŞILDI · YALNIZ OKUMA" fg={C.t2} bg={C.chip} /> : null}
             </View>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -50,6 +52,7 @@ export default function DocumentsRoute() {
               {d.status === 'internally_reviewed' || d.status === 'issuer_verified' || d.status === 'expired' ? ` · geçerlilik sonu ${fmtDay(d.validUntil)}` : ''}
             </Text>
             {d.serviceOrigin ? <Text testID={`doc-origin-${d.id}`} style={type(11, 500, { color: C.info, lh: 1.4 })}>Servis raporu · {d.serviceOrigin.siteName} · {d.serviceOrigin.taskTitle ? `görev: ${d.serviceOrigin.taskTitle} · ` : ''}talep: {d.serviceOrigin.requestTitle}</Text> : null}
+            {d.latestRejection ? <Text testID={`doc-rejection-${d.id}`} style={type(11, 500, { color: C.crit, lh: 1.4 })}>Son sürüm reddedildi: {d.latestRejection.reason}</Text> : null}
             {d.issuerCheck ? <Text testID={`doc-issuer-line-${d.id}`} style={type(11, 400, { color: C.t3, lh: 1.4 })}>{issuerLine(d.issuerCheck)}</Text> : null}
           </Tap>
         );

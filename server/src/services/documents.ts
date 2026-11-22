@@ -14,7 +14,7 @@ import { notify, siteManagers } from './notifications';
  * those dates. Nothing here checks a document with the issuing authority.
  */
 export const DOC_TYPES = ['business_license', 'food_registration', 'calibration_certificate', 'maintenance_report',
-  'training_certificate', 'health_certificate', 'insurance', 'contract', 'other'] as const;
+  'training_certificate', 'health_certificate', 'insurance', 'contract', 'pest_report', 'signature_circular', 'other'] as const;
 export type DocType = typeof DOC_TYPES[number];
 
 /** Reminder window before a verified document runs out (example policy). */
@@ -31,7 +31,7 @@ export const EXPIRY_WARNING_DAYS = 30;
  */
 export type DocStatus = 'no_file' | 'file_pending' | 'unreviewed' | 'rejected' | 'internally_reviewed' | 'issuer_verified' | 'expired';
 
-type VersionRow = { id: string; version: number; review_status: 'unreviewed' | 'verified' | 'rejected'; valid_from: string | null; valid_until: string | null;
+type VersionRow = { id: string; version: number; end_kind?: 'dated' | 'none' | 'unknown'; review_status: 'unreviewed' | 'verified' | 'rejected'; valid_from: string | null; valid_until: string | null;
   file_status: string | null; issuer_check_method?: string | null };
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
@@ -47,7 +47,7 @@ export function issuerCheckOf(v: any) {
     recordedAt: v.issuer_checked_at as string, queriedByApp: false } : null;
 }
 
-export function documentStatus(versions: VersionRow[], today: string): { status: DocStatus; current: VersionRow | null; pending: VersionRow | null;
+export function documentStatus(versions: VersionRow[], today: string, warnDays = EXPIRY_WARNING_DAYS): { status: DocStatus; current: VersionRow | null; pending: VersionRow | null;
   expiring: boolean; notYetValid: boolean } {
   const sorted = [...versions].sort((a, b) => b.version - a.version);
   const current = sorted.find(v => v.review_status === 'verified') ?? null;
@@ -56,7 +56,7 @@ export function documentStatus(versions: VersionRow[], today: string): { status:
   const flags = { expiring: false, notYetValid: false };
   if (current) {
     if (current.valid_until && current.valid_until < today) return { status: 'expired', current, pending, ...flags };
-    flags.expiring = !!current.valid_until && current.valid_until <= addDays(today, EXPIRY_WARNING_DAYS);
+    flags.expiring = !!current.valid_until && current.valid_until <= addDays(today, warnDays);
     flags.notYetValid = !!current.valid_from && current.valid_from > today;
     return { status: current.issuer_check_method ? 'issuer_verified' : 'internally_reviewed', current, pending, ...flags };
   }
@@ -81,16 +81,17 @@ async function keepers(tx: Tx, companyId: string, siteId: string | null): Promis
      AND site_id IS NULL AND role IN ('owner','hq_manager')`, [companyId])).rows.map(r => r.user_id);
 }
 
-const VERSIONS_SQL = `SELECT v.id, v.document_id, v.version, v.valid_from::text AS valid_from, v.valid_until::text AS valid_until, v.notes, v.review_status,
+const VERSIONS_SQL = `SELECT v.id, v.document_id, v.version, v.end_kind, v.valid_from::text AS valid_from, v.valid_until::text AS valid_until, v.notes, v.review_status,
      v.reviewed_by, v.reviewed_at, v.review_notes, v.uploaded_by, v.uploaded_at, uu.display_name AS uploaded_by_name, ru.display_name AS reviewed_by_name,
      v.issuer_check_method, v.issuer_check_ref, v.issuer_check_notes, v.issuer_checked_at, iu.display_name AS issuer_checked_by_name,
      e.id AS evidence_id, e.status AS file_status, e.mime, e.size_bytes, e.declared_sha256, e.rejection_reason AS file_rejection
    FROM document_versions v JOIN users uu ON uu.id = v.uploaded_by LEFT JOIN users ru ON ru.id = v.reviewed_by LEFT JOIN users iu ON iu.id = v.issuer_checked_by
    LEFT JOIN LATERAL (SELECT * FROM evidence x WHERE x.document_version_id = v.id ORDER BY x.created_at DESC LIMIT 1) e ON true`;
 
-export type DocFilter = 'expiring' | 'expired' | 'pending_review' | 'rejected' | 'no_file';
+export type DocFilter = 'expiring' | 'expired' | 'pending_review' | 'rejected' | 'no_file' | 'info_needed';
 /** Vault filters: soon to run out, ran out, waiting for review (also a newer version on a valid document), rejected, missing (no file uploaded yet). */
-export function matchesFilter(d: { status: DocStatus; expiring: boolean; pendingReview: boolean; latestRejected?: boolean }, f: DocFilter) {
+export function matchesFilter(d: { status: DocStatus; expiring: boolean; pendingReview: boolean; latestRejected?: boolean; infoNeeded?: boolean }, f: DocFilter) {
+  if (f === 'info_needed') return !!d.infoNeeded;
   if (f === 'expiring') return d.expiring && d.status !== 'expired';
   if (f === 'expired') return d.status === 'expired';
   if (f === 'pending_review') return d.pendingReview;
@@ -117,18 +118,43 @@ async function listOut(tx: Tx, p: Principal, companyId: string, docs: any[]) {
   for (const id of new Set(docs.map(d => d.service_job_id).filter(Boolean) as string[])) origins.set(id, await serviceOrigin(tx, id));
   return docs.map(d => {
     const vs = versions.filter(v => v.document_id === d.id);
-    const st = documentStatus(vs, today);
+    const st = documentStatus(vs, today, d.remind_days ?? EXPIRY_WARNING_DAYS);
     return { id: d.id, docType: d.doc_type, title: d.title, issuer: d.issuer, documentNo: d.document_no, siteId: d.site_id, siteName: d.site_name,
       equipmentId: d.equipment_id, equipmentName: d.equipment_name, status: st.status, expiring: st.expiring, notYetValid: st.notYetValid,
       sharedReadOnly: !can(p, 'document.read', { companyId, siteId: d.site_id }).ok,
       validUntil: st.current?.valid_until ?? null, validFrom: st.current?.valid_from ?? null, versionCount: vs.length, pendingReview: !!st.pending || st.status === 'unreviewed',
       latestRejected: [...vs].sort((a, b) => b.version - a.version)[0]?.review_status === 'rejected',
+      ...datesView(vs, st.current, d),
       issuerCheck: issuerCheckOf(st.current),
       serviceOrigin: d.service_job_id ? origins.get(d.service_job_id) ?? null : null };
   });
 }
 
-export type CreateDocument = { docType: DocType; title: string; siteId: string | null; equipmentId: string | null; issuer: string | null; documentNo: string | null };
+const nameOf = async (tx: Tx, id: string) => (await tx.query<{ display_name: string }>(`SELECT display_name FROM users WHERE id = $1`, [id])).rows[0]?.display_name ?? null;
+
+/**
+ * The date state of a document, never guessed from its title or type:
+ *  dated   the document has an end date          none    the document has no end (e.g. a signature circular)
+ *  unknown nobody has read the date off it yet   -> it goes to the "information to complete" list
+ * The review date is its own optional date and never replaces the end.
+ * If the newest version was rejected, what still holds is said separately: the older verified version's remaining validity.
+ */
+function datesView(vs: any[], current: any, d: any) {
+  const sorted = [...vs].sort((a, b) => b.version - a.version);
+  const latest = sorted[0] ?? null;
+  const basis = current ?? latest;
+  const endKind = (basis?.end_kind ?? 'unknown') as 'dated' | 'none' | 'unknown';
+  const rejected = latest && latest.review_status === 'rejected' ? latest : null;
+  const days = (u: string) => Math.round((Date.parse(`${u}T00:00:00Z`) - Date.parse(`${day(new Date())}T00:00:00Z`)) / 86400_000);
+  return {
+    endKind, infoNeeded: !!basis && endKind === 'unknown', reviewOn: d.review_on ? String(d.review_on).slice(0, 10) : null,
+    latestRejection: rejected ? { version: rejected.version, reason: rejected.review_notes, at: rejected.reviewed_at } : null,
+    stillValid: rejected && current ? { version: current.version, validUntil: current.valid_until, endKind: current.end_kind, remainingDays: current.valid_until ? days(current.valid_until) : null } : null,
+  };
+}
+
+export type CreateDocument = { docType: DocType; title: string; siteId: string | null; equipmentId: string | null; issuer: string | null; documentNo: string | null;
+  keepPurpose?: string | null; responsibleId?: string | null; remindDays?: number | null; remindUserId?: string | null; reviewOn?: string | null };
 
 export async function createDocument(tx: Tx, p: Principal, companyId: string, b: CreateDocument) {
   let siteId = b.siteId;
@@ -141,12 +167,44 @@ export async function createDocument(tx: Tx, p: Principal, companyId: string, b:
   if (siteId && !(await tx.query(`SELECT 1 FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rowCount) throw invalid('Şube bulunamadı.');
   if (!can(p, 'document.write', { companyId, siteId }).ok) throw forbidden(siteId ? 'Bu şubede belge ekleme yetkin yok.' : 'İşletme geneli belgeyi işletme sahibi ya da merkez yöneticisi ekler.');
   if (b.title.trim().length < 3) throw invalid('Belgeye bir ad ver.');
+  for (const u of [b.responsibleId, b.remindUserId]) await assertMember(tx, companyId, siteId, u);
   const d = (await tx.query<{ id: string }>(
-    `INSERT INTO documents (company_id, site_id, equipment_id, doc_type, title, issuer, document_no, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-    [companyId, siteId, b.equipmentId, b.docType, b.title.trim(), b.issuer?.trim() || null, b.documentNo?.trim() || null, p.userId])).rows[0]!;
+    `INSERT INTO documents (company_id, site_id, equipment_id, doc_type, title, issuer, document_no, created_by, keep_purpose, responsible_id, remind_days, remind_user_id, review_on)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+    [companyId, siteId, b.equipmentId, b.docType, b.title.trim(), b.issuer?.trim() || null, b.documentNo?.trim() || null, p.userId,
+     b.keepPurpose?.trim() || null, b.responsibleId ?? null, b.remindDays ?? null, b.remindUserId ?? null, b.reviewOn ?? null])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.created', entityType: 'document', entityId: d.id,
     payload: { docType: b.docType, title: b.title.trim(), siteId, equipmentId: b.equipmentId } });
   return { id: d.id };
+}
+
+/** A responsible person or addressee must be an active member whose membership covers the document's site (company-wide: owner / HQ). */
+async function assertMember(tx: Tx, companyId: string, siteId: string | null, userId: string | null | undefined) {
+  if (!userId) return;
+  const ok = (await tx.query(`SELECT 1 FROM memberships WHERE user_id = $1 AND company_id = $2 AND status = 'active' AND (site_id IS NULL OR site_id = $3)`, [userId, companyId, siteId])).rowCount;
+  if (!ok) throw invalid('Bu kişi bu belgenin kapsamında etkin üye değil.');
+}
+
+/** Reminder window, addressee, responsible person, purpose and review date: settings that never touch the file or its dates. */
+export async function updateDocumentSettings(tx: Tx, p: Principal, companyId: string, id: string,
+  b: { keepPurpose?: string | null; responsibleId?: string | null; remindDays?: number | null; remindUserId?: string | null; reviewOn?: string | null }) {
+  const d = await loadDoc(tx, p, companyId, id, 'document.write');
+  for (const u of [b.responsibleId, b.remindUserId]) await assertMember(tx, companyId, d.site_id, u);
+  const keep = (k: keyof typeof b, col: string) => (k in b ? b[k] ?? null : d[col]);
+  await tx.query(`UPDATE documents SET keep_purpose = $2, responsible_id = $3, remind_days = $4, remind_user_id = $5, review_on = $6 WHERE id = $1`,
+    [id, keep('keepPurpose', 'keep_purpose'), keep('responsibleId', 'responsible_id'), keep('remindDays', 'remind_days'), keep('remindUserId', 'remind_user_id'), keep('reviewOn', 'review_on')]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.settings_changed', entityType: 'document', entityId: id, payload: b });
+  return { ok: true };
+}
+
+/** Archive = kept for the record, out of lists and reminders. It does not delete anything; versions and files stay. */
+export async function archiveDocument(tx: Tx, p: Principal, companyId: string, id: string, reason: string) {
+  const d = await loadDoc(tx, p, companyId, id, 'document.write');
+  if (d.archived_at) throw conflict('DOCUMENT_ARCHIVED', 'Belge zaten arşivde.');
+  if (reason.trim().length < 5) throw invalid('Arşivleme nedenini yaz.');
+  await tx.query(`UPDATE documents SET archived_at = clock_timestamp() WHERE id = $1`, [id]);
+  await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.archived', entityType: 'document', entityId: id, payload: { reason: reason.trim() } });
+  return { ok: true };
 }
 
 async function loadDoc(tx: Tx, p: Principal, companyId: string, id: string, action: 'document.read' | 'document.write' | 'document.review') {
@@ -160,7 +218,8 @@ async function loadDoc(tx: Tx, p: Principal, companyId: string, id: string, acti
 export async function getDocument(tx: Tx, p: Principal, companyId: string, id: string) {
   const d = await loadDoc(tx, p, companyId, id, 'document.read');
   const versions = (await tx.query(`${VERSIONS_SQL} WHERE v.document_id = $1 ORDER BY v.version DESC`, [id])).rows;
-  const st = documentStatus(versions, day(new Date()));
+  const st = documentStatus(versions, day(new Date()), d.remind_days ?? EXPIRY_WARNING_DAYS);
+  const uses = await documentUses(tx, id);
   const review = can(p, 'document.review', { companyId, siteId: d.site_id }).ok;
   const write = can(p, 'document.write', { companyId, siteId: d.site_id }).ok;
   const shares = d.site_id ? [] : (await tx.query(`SELECT sh.id, sh.site_id, s.name AS site_name, sh.granted_at, u.display_name AS granted_by_name FROM document_shares sh
@@ -172,8 +231,14 @@ export async function getDocument(tx: Tx, p: Principal, companyId: string, id: s
     issuerCheck: issuerCheckOf(st.current),
     currentVersionId: st.current?.id ?? null, validFrom: st.current?.valid_from ?? null, validUntil: st.current?.valid_until ?? null,
     origin: await serviceOrigin(tx, d.service_job_id),
-    shares, maxUploadBytes: MAX_UPLOAD_BYTES.value, uses: await documentUses(tx, id),
-    expiryWarningDays: EXPIRY_WARNING_DAYS,
+    shares, maxUploadBytes: MAX_UPLOAD_BYTES.value, uses,
+    expiryWarningDays: d.remind_days ?? EXPIRY_WARNING_DAYS,
+    ...datesView(versions, st.current, d),
+    keepPurpose: d.keep_purpose, remindDays: d.remind_days, archivedAt: d.archived_at,
+    responsible: d.responsible_id ? { id: d.responsible_id, name: await nameOf(tx, d.responsible_id) } : null,
+    remindUser: d.remind_user_id ? { id: d.remind_user_id, name: await nameOf(tx, d.remind_user_id) } : null,
+    // Kept apart: what the document is kept for, and which obligations it is used to satisfy right now.
+    satisfiesObligations: uses.filter(u => u.kind === 'obligation').map(u => ({ ref: u.ref, name: u.name, purpose: u.purpose })),
     versions: versions.map(v => ({ ...v, isLatest: v.version === versions[0]?.version,
       canRecordIssuerCheck: review && v.review_status === 'verified' && !v.issuer_check_method,
       canRetryUpload: write && v.file_status === 'pending_upload' && v.uploaded_by === p.userId,
@@ -196,7 +261,7 @@ export async function serviceOrigin(tx: Tx, jobId: string | null) {
     taskId: r.task_id, taskTitle: r.task_title, taskDueAt: r.task_due_at, taskStatus: r.task_status } : null;
 }
 
-export type VersionInput = { validFrom: string | null; validUntil: string | null; notes: string | null; file: { mime: string; sha256: string; sizeBytes: number } };
+export type VersionInput = { validFrom: string | null; validUntil: string | null; endKind?: 'none' | 'unknown'; notes: string | null; file: { mime: string; sha256: string; sizeBytes: number } };
 
 /**
  * A new version: dates as the uploader reads them from the document, and the file (registered with
@@ -206,19 +271,20 @@ export async function addVersion(tx: Tx, p: Principal, companyId: string, id: st
   const d = await loadDoc(tx, p, companyId, id, 'document.write');
   if (d.archived_at) throw conflict('DOCUMENT_ARCHIVED', 'Arşivlenmiş belgeye sürüm eklenmez.');
   if (b.validFrom && b.validUntil && b.validUntil < b.validFrom) throw invalid('Geçerlilik bitişi başlangıçtan önce olamaz.');
+  if (b.validUntil && b.endKind === 'none') throw invalid('Bitiş tarihi verilmişse “bitiş tarihi yok” seçilemez.');
   if (!ALLOWED_MIME.includes(b.file.mime)) throw invalid(`Dosya türü kabul edilmiyor: ${b.file.mime}`);
   if (!/^[0-9a-f]{64}$/.test(b.file.sha256)) throw invalid('sha256 64 karakterlik onaltılık özet olmalı.');
   await tx.query(`SELECT 1 FROM documents WHERE id = $1 FOR UPDATE`, [id]);
   const next = (await tx.query<{ n: number }>(`SELECT COALESCE(max(version), 0) + 1 AS n FROM document_versions WHERE document_id = $1`, [id])).rows[0]!.n;
   const v = (await tx.query<{ id: string }>(
-    `INSERT INTO document_versions (company_id, document_id, version, valid_from, valid_until, notes, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [companyId, id, next, b.validFrom, b.validUntil, b.notes?.trim() || null, p.userId])).rows[0]!;
+    `INSERT INTO document_versions (company_id, document_id, version, valid_from, valid_until, end_kind, notes, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    [companyId, id, next, b.validFrom, b.validUntil, b.validUntil ? 'dated' : (b.endKind ?? 'unknown'), b.notes?.trim() || null, p.userId])).rows[0]!;
   const ev = (await tx.query<{ id: string }>(
     `INSERT INTO evidence (company_id, document_version_id, kind, status, mime, declared_sha256, size_bytes, created_by)
      VALUES ($1,$2,'document','pending_upload',$3,$4,$5,$6) RETURNING id`,
     [companyId, v.id, b.file.mime, b.file.sha256, b.file.sizeBytes, p.userId])).rows[0]!;
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'document.version_added', entityType: 'document', entityId: id,
-    payload: { versionId: v.id, version: next, validFrom: b.validFrom, validUntil: b.validUntil, evidenceId: ev.id, sha256: b.file.sha256 } });
+    payload: { versionId: v.id, version: next, validFrom: b.validFrom, validUntil: b.validUntil, endKind: b.validUntil ? 'dated' : (b.endKind ?? 'unknown'), evidenceId: ev.id, sha256: b.file.sha256 } });
   await notify(tx, { companyId, siteId: d.site_id, userIds: await keepers(tx, companyId, d.site_id), except: p.userId, kind: 'doc_review_needed',
     entityType: 'document', entityId: id, dedupeKey: `doc_review_needed:${v.id}`,
     title: 'Yeni belge sürümü incelemeni bekliyor', body: `${d.title} · sürüm ${next}. Yüklenmiş olması geçerli olduğu anlamına gelmez.` });
@@ -230,7 +296,7 @@ export async function addVersion(tx: Tx, p: Principal, companyId: string, id: st
  * corrects) the dates as printed on the document. Rejected versions stay in the history.
  */
 export async function reviewVersion(tx: Tx, p: Principal, companyId: string, id: string, versionId: string,
-  b: { decision: 'verified' | 'rejected'; notes: string; validFrom?: string | null; validUntil?: string | null }) {
+  b: { decision: 'verified' | 'rejected'; notes: string; validFrom?: string | null; validUntil?: string | null; endKind?: 'none' | 'unknown' }) {
   const d = await loadDoc(tx, p, companyId, id, 'document.review');
   const v = (await tx.query(`${VERSIONS_SQL} WHERE v.id = $1 AND v.document_id = $2 FOR UPDATE OF v`, [versionId, id])).rows[0];
   if (!v) throw notFound('Sürüm');
@@ -241,10 +307,12 @@ export async function reviewVersion(tx: Tx, p: Principal, companyId: string, id:
   const validFrom = b.validFrom !== undefined ? b.validFrom : v.valid_from;
   const validUntil = b.validUntil !== undefined ? b.validUntil : v.valid_until;
   if (validFrom && validUntil && validUntil < validFrom) throw invalid('Geçerlilik bitişi başlangıçtan önce olamaz.');
-  await tx.query(`UPDATE document_versions SET review_status = $2, reviewed_by = $3, reviewed_at = clock_timestamp(), review_notes = $4, valid_from = $5, valid_until = $6
-     WHERE id = $1`, [versionId, b.decision, p.userId, b.notes.trim(), validFrom, validUntil]);
+  if (validUntil && b.endKind === 'none') throw invalid('Bitiş tarihi verilmişse “bitiş tarihi yok” seçilemez.');
+  const endKind = validUntil ? 'dated' : (b.endKind ?? (v.end_kind === 'dated' ? 'unknown' : v.end_kind));
+  await tx.query(`UPDATE document_versions SET review_status = $2, reviewed_by = $3, reviewed_at = clock_timestamp(), review_notes = $4, valid_from = $5, valid_until = $6, end_kind = $7
+     WHERE id = $1`, [versionId, b.decision, p.userId, b.notes.trim(), validFrom, validUntil, endKind]);
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: b.decision === 'verified' ? 'document.version_verified' : 'document.version_rejected',
-    entityType: 'document', entityId: id, payload: { versionId, version: v.version, notes: b.notes.trim(), validFrom, validUntil,
+    entityType: 'document', entityId: id, payload: { versionId, version: v.version, notes: b.notes.trim(), validFrom, validUntil, endKind,
       datesChanged: validFrom !== v.valid_from || validUntil !== v.valid_until } });
   await notify(tx, { companyId, siteId: d.site_id, userIds: [v.uploaded_by], except: p.userId, kind: b.decision === 'verified' ? 'doc_verified' : 'doc_rejected',
     entityType: 'document', entityId: id, dedupeKey: `doc_reviewed:${versionId}`,
@@ -262,18 +330,19 @@ export async function scanDocumentExpiry(db: Db, now = new Date()) {
   let created = 0;
   for (const companyId of companies) {
     created += await db.tenant(companyId, async tx => {
-      const docs = (await tx.query(`SELECT id, site_id, title FROM documents WHERE company_id = $1 AND archived_at IS NULL`, [companyId])).rows;
+      const docs = (await tx.query(`SELECT id, site_id, title, remind_days, remind_user_id FROM documents WHERE company_id = $1 AND archived_at IS NULL`, [companyId])).rows;
       let c = 0;
       for (const d of docs) {
         const vs = (await tx.query(`${VERSIONS_SQL} WHERE v.document_id = $1`, [d.id])).rows;
-        const st = documentStatus(vs, today);
+        const st = documentStatus(vs, today, d.remind_days ?? EXPIRY_WARNING_DAYS);
         if (!st.current || (!st.expiring && st.status !== 'expired')) continue;
         // A renewal already uploaded and waiting: still announce, the old one is what counts until reviewed.
         const expired = st.status === 'expired';
-        c += await notify(tx, { companyId, siteId: d.site_id, userIds: await keepers(tx, companyId, d.site_id),
+        // The chosen addressee if there is one; otherwise the people who keep this document. A document with no end never gets here.
+        c += await notify(tx, { companyId, siteId: d.site_id, userIds: d.remind_user_id ? [d.remind_user_id] : await keepers(tx, companyId, d.site_id),
           kind: expired ? 'doc_expired' : 'doc_expiring', entityType: 'document', entityId: d.id,
           dedupeKey: `${expired ? 'doc_expired' : 'doc_expiring'}:${st.current.id}:${st.current.valid_until}`,
-          title: expired ? 'Belgenin süresi doldu' : `Belgenin süresi ${EXPIRY_WARNING_DAYS} gün içinde doluyor`,
+          title: expired ? 'Belgenin süresi doldu' : `Belgenin süresi ${d.remind_days ?? EXPIRY_WARNING_DAYS} gün içinde doluyor`,
           body: `${d.title} · geçerlilik sonu ${st.current.valid_until}${st.pending ? ' · yeni sürüm incelemede' : ''}` });
       }
       return c;
@@ -365,15 +434,43 @@ export async function linkDocument(tx: Tx, p: Principal, companyId: string, id: 
   }
 }
 
-/** Documents a check uses (by its template or its equipment), readable by this person. */
+/**
+ * Documents a check uses (by its template, its equipment or its obligation), with what a person at the task needs to know:
+ * is a file there (presence), has anyone reviewed its CONTENT, and may this person do that review. A person who cannot read a document
+ * only learns that one exists (hidden), never its name or content.
+ */
 export async function documentsForTask(tx: Tx, p: Principal, companyId: string, t: { template_code: string; equipment_id: string | null; rule_code?: string | null }) {
   const rows = (await tx.query(`SELECT DISTINCT d.id, d.site_id, d.title, l.purpose, l.link_kind FROM document_links l JOIN documents d ON d.id = l.document_id
      WHERE l.company_id = $1 AND l.removed_at IS NULL AND d.archived_at IS NULL
        AND ((l.link_kind = 'task_template' AND l.ref = $2) OR (l.link_kind = 'equipment' AND l.ref = $3) OR (l.link_kind = 'obligation' AND l.ref = $4))`,
     [companyId, t.template_code, t.equipment_id ?? '', t.rule_code ?? ''])).rows;
-  const out = [];
-  for (const r of rows) if (await canReadDoc(tx, p, companyId, r)) out.push({ id: r.id, title: r.title, purpose: r.purpose, kind: r.link_kind });
-  return out;
+  const documents = []; let hidden = 0;
+  const readable: string[] = [];
+  for (const r of rows) {
+    if (!(await canReadDoc(tx, p, companyId, r))) { hidden++; continue; }
+    readable.push(r.id);
+    const v = (await tx.query(`${VERSIONS_SQL} WHERE v.document_id = $1 ORDER BY v.version DESC LIMIT 1`, [r.id])).rows[0];
+    const file: 'none' | 'pending' | 'stored' = !v ? 'none' : v.file_status === 'stored' ? 'stored' : 'pending';
+    const canReview = !!v && file === 'stored' && v.review_status === 'unreviewed' && can(p, 'document.review', { companyId, siteId: r.site_id }).ok && v.uploaded_by !== p.userId;
+    documents.push({ id: r.id, title: r.title, purpose: r.purpose, kind: r.link_kind,
+      latest: v ? { version: v.version as number, file, uploadedBy: v.uploaded_by_name as string, review: v.review_status as 'unreviewed' | 'verified' | 'rejected',
+        reviewedBy: (v.reviewed_by_name as string | null) ?? null, reviewedAt: v.reviewed_at ? new Date(v.reviewed_at).toISOString() : null } : null,
+      canReview, reviewBlockedReason: !v || file !== 'stored' || v.review_status !== 'unreviewed' ? null
+        : v.uploaded_by === p.userId ? 'uploader' : !can(p, 'document.review', { companyId, siteId: r.site_id }).ok ? 'no_permission' : null });
+  }
+  return { documents, hidden, history: await documentHistory(tx, companyId, readable) };
+}
+
+const DOC_EVENT_TR: Record<string, string> = { 'document.created': 'belgeyi oluşturdu', 'document.version_added': 'dosya yükledi', 'document.version_verified': 'içeriği inceledi: uygun',
+  'document.version_rejected': 'içeriği inceledi: kabul etmedi', 'document.use_added': 'belgeyi bu kontrole bağladı', 'document.issuer_checked': 'veren kurumda doğruladı' };
+/** Who did what, for which version, to the documents a check uses. Only for documents the reader may read. */
+async function documentHistory(tx: Tx, companyId: string, docIds: string[]) {
+  if (!docIds.length) return [];
+  const rows = (await tx.query(`SELECT a.occurred_at, a.event_type, a.entity_id, a.payload, u.display_name AS actor, d.title
+      FROM audit_events a LEFT JOIN users u ON u.id = a.actor_id JOIN documents d ON d.id::text = a.entity_id
+     WHERE a.company_id = $1 AND a.entity_type = 'document' AND a.entity_id = ANY($2::text[]) AND a.event_type = ANY($3::text[]) ORDER BY a.seq`, [companyId, docIds, Object.keys(DOC_EVENT_TR)])).rows;
+  return rows.map(r => ({ at: new Date(r.occurred_at).toISOString(), actor: (r.actor as string | null) ?? 'sistem', documentId: r.entity_id as string, title: r.title as string,
+    action: DOC_EVENT_TR[r.event_type] as string, version: (r.payload?.version as number | undefined) ?? null, note: (r.payload?.notes as string | undefined) ?? null }));
 }
 
 /** What a document can be tied to: checks in use at its site(s), equipment of its site, obligations. */

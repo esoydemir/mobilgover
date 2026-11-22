@@ -6,9 +6,9 @@ import { addDays, dayKey, startOfDay } from './dates';
  * The home cards, the risk centre and the task list all use this file, so a number on a card is always the
  * length of the list it opens (same data, same filter).
  */
-export type TaskFilter = 'today' | 'todo' | 'critical' | 'late' | 'upcoming' | 'service' | 'done';
+export type TaskFilter = 'today' | 'todo' | 'critical' | 'late' | 'upcoming' | 'service' | 'done' | 'unassigned';
 /** Yapılacaklar · Kritik · Yaklaşan · Servis bekleyenler · Tamamlananlar (+ Bugün, Gecikmiş for the home cards). */
-export const TASK_FILTERS: [TaskFilter, string][] = [['today', 'Bugün'], ['todo', 'Yapılacaklar'], ['critical', 'Kritik'], ['late', 'Gecikmiş'], ['upcoming', 'Yaklaşan'], ['service', 'Servis bekleyen'], ['done', 'Tamamlanan']];
+export const TASK_FILTERS: [TaskFilter, string][] = [['today', 'Bugün'], ['todo', 'Yapılacaklar'], ['critical', 'Kritik'], ['late', 'Gecikmiş'], ['upcoming', 'Yaklaşan'], ['unassigned', 'Atanmamış'], ['service', 'Servis bekleyen'], ['done', 'Tamamlanan']];
 /** What each list means, shown above it, so a count is never unexplained. */
 export const FILTER_NOTE: Record<TaskFilter, string> = {
   today: 'Bugün son tarihi olan görevler.',
@@ -18,6 +18,7 @@ export const FILTER_NOTE: Record<TaskFilter, string> = {
   upcoming: 'Yarından sonrası için planlanmış kontroller.',
   service: 'Uzman ya da servis talebi açılmış, talebi sürmekte olan görevler (talep tamamlanınca ya da iptal edilince çıkar).',
   done: 'Kayıt ve kanıtlarıyla tamamlanan görevler.',
+  unassigned: 'Henüz kimseye atanmamış açık görevler (tarihi ne olursa olsun). Yöneticiler için; çalışan yalnız kendine atananı görür.',
 };
 export const isTaskFilter = (v: unknown): v is TaskFilter => TASK_FILTERS.some(([k]) => k === v);
 
@@ -47,6 +48,7 @@ export function bucketTasks(rows: TaskRow[], now = new Date()): Record<TaskFilte
     todo: all.filter(t => t.status === 'open'),
     critical: all.filter(t => (t.status === 'open' || t.status === 'missed') && (new Date(t.due_at) < now || (t.severity === 'critical' && dayKey(new Date(t.due_at)) === key))),
     service: all.filter(t => t.status === 'open' && (t.open_services ?? 0) > 0),
+    unassigned: all.filter(t => t.status === 'open' && !t.assignee_id),
     upcoming: all.filter(t => t.status === 'open' && new Date(t.due_at) >= addDays(today, 1)),
     done: all.filter(t => t.status === 'done').reverse(),
   };

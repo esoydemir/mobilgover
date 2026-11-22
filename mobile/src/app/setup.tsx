@@ -6,7 +6,8 @@ import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import { EnvBadge } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
-import { GhostButton, PrimaryButton } from '../components/ui';
+import { GhostButton, PrimaryButton, missingWhy } from '../components/ui';
+import { ActivityPicker } from '../features/ActivityPicker';
 import { EquipmentEditor } from '../features/EquipmentEditor';
 import { Invitations } from '../features/Invitations';
 import { ProfileQuestions } from '../features/ProfileQuestions';
@@ -14,7 +15,7 @@ import { goRoot } from '../state/app';
 import { C, tint, type } from '../theme';
 import { dayKey } from '../features/dates';
 
-const STEPS = ['İşletme', 'Profil', 'Ekipman', 'Görevler'];
+const STEPS = ['İşletme', 'Faaliyet', 'Profil', 'Ekipman', 'Görevler'];
 
 /** First-run setup: business → profile answers → equipment → first week of tasks. */
 export default function SetupRoute() {
@@ -49,7 +50,7 @@ export default function SetupRoute() {
           <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Pilot kapsamı: yemek hazırlayan tek şubeli kafe/restoran. Sen işletme sahibi olarak eklenirsin.</Text>
           <Field label="İşletme adı" testID="setup-name" value={name} onChangeText={setName} placeholder="ör. Moda Kafe" />
           <Field label="Şube adı" testID="setup-site" value={siteName} onChangeText={setSiteName} placeholder="ör. Moda" />
-          <PrimaryButton testID="setup-create" label={busy ? 'Oluşturuluyor…' : 'Oluştur'} disabled={busy || name.trim().length < 2 || siteName.trim().length < 2}
+          <PrimaryButton testID="setup-create" label={busy ? 'Oluşturuluyor…' : 'Oluştur'} disabled={busy || name.trim().length < 2 || siteName.trim().length < 2} why={missingWhy([[name.trim().length < 2, 'işletme adı (en az 2 karakter)'], [siteName.trim().length < 2, 'şube adı (en az 2 karakter)']])}
             onPress={() => run(async () => { await createCompany(name.trim(), siteName.trim()); setStep(1); })} />
           <GhostButton label="Hizmet sağlayıcıyım (uzman profili)" onPress={() => router.push('/pro')} />
           <GhostButton label="Çıkış yap" onPress={logout} />
@@ -58,33 +59,43 @@ export default function SetupRoute() {
 
       {step === 1 && (
         <>
-          <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 })}>İşletmeni tanıyalım</Text>
-          <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Yalnızca yükümlülükleri belirleyen sorular. Emin değilsen "Bilmiyorum" de; o konu "bilgi eksik" olarak kalır, asla "uygulanmaz" sayılmaz.</Text>
-          <ProfileQuestions submitLabel="Kaydet ve devam et" onSaved={() => setStep(2)} />
+          <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 })}>Ne iş yapıyorsun?</Text>
+          <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Faaliyet kodunu (NACE) seç ve onayla. Bundan sonra hangi kuralların sana uygulanacağı bu cevaba ve şube sorularına göre belirlenir.</Text>
+          <ActivityPicker onContinue={() => setStep(2)} />
         </>
       )}
 
       {step === 2 && (
         <>
-          <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 })}>Ekipmanlar</Text>
-          <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Sıcaklık kontrolleri her soğutucu için ayrı oluşturulur. Ölçüm yaptığın termometreyi de ekle.</Text>
-          <EquipmentEditor />
-          <PrimaryButton testID="setup-equipment-next" label="Devam et" onPress={() => setStep(3)} />
+          <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 })}>İşletmeni tanıyalım</Text>
+          <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Yalnızca yükümlülükleri belirleyen sorular. Emin değilsen "Bilmiyorum" de; o konu "bilgi eksik" olarak kalır, asla "uygulanmaz" sayılmaz.</Text>
+          <ProfileQuestions submitLabel="Kaydet ve devam et" onSaved={() => setStep(3)} />
         </>
       )}
 
       {step === 3 && (
         <>
+          <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 })}>Ekipmanlar</Text>
+          <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Sıcaklık kontrolleri her soğutucu için ayrı oluşturulur. Ölçüm yaptığın termometreyi de ekle.</Text>
+          <EquipmentEditor />
+          <PrimaryButton testID="setup-equipment-next" label="Devam et" onPress={() => setStep(4)} />
+        </>
+      )}
+
+      {step === 4 && (
+        <>
           <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 })}>İlk haftanın görevleri</Text>
           <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>Uygulanan yükümlülüklerden bugünden itibaren 7 günlük görev oluşturulur. Tekrar çalıştırmak mükerrer görev üretmez.</Text>
-          {generated !== null ? <Text style={type(15, 600, { color: C.lime })}>{generated} görev oluşturuldu.</Text> : null}
+          {generated !== null ? <Text style={type(15, 600, { color: C.lime })}>{generated} görev hazır.</Text> : null}
           <PrimaryButton testID="setup-generate" label={busy ? 'Oluşturuluyor…' : generated === null ? 'Görevleri oluştur' : 'Ana sayfaya git'} disabled={busy}
             onPress={() => run(async () => {
               if (generated !== null) { goRoot('/'); return; }
               const today = new Date();
               const r = await call<{ created: number }>('POST', `/companies/${company!.id}/tasks/generate`,
                 { siteId, fromDay: dayKey(today), toDay: dayKey(new Date(today.getTime() + 6 * 86400_000)) });
-              setGenerated(r.created);
+              // Görevler profil/ekipman adımlarında zaten oluşmuş olabilir: "0 oluşturuldu" demek yanlış olur, hazır olanı say.
+              const open = await call<unknown[]>('GET', `/companies/${company!.id}/tasks?siteId=${siteId}&status=open`);
+              setGenerated(Math.max(r.created, open.length));
             })} />
         </>
       )}

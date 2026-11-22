@@ -1,0 +1,280 @@
+# Çok sektörlü uyum — ilk akış (21 Kasım 2026)
+
+Kapsam: işletmenin kayıt ekranından başlayıp çalışanın görevi kanıtla tamamlamasına kadar çalışan tek akış.
+Tüm kurallar **ÖRNEK**tir; hukuki dayanak doğrulanmış değildir.
+
+## Akış
+
+1. Sahip kayıt ekranında işletmeyi açar (`POST /companies`).
+2. **Faaliyet** adımı (yeni): NACE kodu veya faaliyet adıyla arar, seçer, "Doğru, işletmemin faaliyeti bu" ile onaylar (`GET /nace`, `POST /companies/:id/activity`).
+   - Katalog: `server/src/domain/nace.ts`, sürüm `nace-rev2-tr/starter-1`, kaynak TÜİK NACE Rev.2. **Başlangıç alt kümesidir (10 sınıf)**, tam sınıflama değildir; ekranda da böyle yazar.
+   - Onaylanan koddan yalnızca `activity.food_preparation` türetilir; kaynak referansı ve notu kayda yazılır ("Onaylanan faaliyet kodlarından türetildi: 56.10").
+   - Katalogda olmayan kod tahmin edilmez: kod saklanır, `activity.nace_needs_review` denetim kaydı düşer, hiçbir şey türetilmez; bağlı yükümlülükler "bilgi eksik" kalır, asla "uygulanmaz" olmaz.
+3. Şube soruları: A şubesi `storage.cold = Evet`, B şubesi `Hayır` (mevcut profil soruları).
+4. Mevcut kural motoru EX-COLD-CHAIN'i A için "uygulanır", B için "uygulanmaz" yapar; görev A'da soğutucu başına doğar.
+5. Yönetici "Bunu neden yapmam gerekiyor?" ekranında kuralı, eşleşen cevapları (Türkçe etiketle) ve cevabın kaynağını (NACE 56.10) görür.
+6. Yönetici görevi çalışana atar; çalışan kendi hesabında yalnızca onu görür, ölçüm + fotoğraf ekler, tamamlar.
+7. Kapanmış kayıt yeniden açıldığında çalışan, kanıt ve dayanak kural görünür.
+8. Sonradan eklenen şube onaylı faaliyeti devralır; soğuk depo cevaplanana kadar görev doğmaz ("bilgi eksik").
+
+## Ölçüm tanımı
+
+"1 görev" = EX-COLD-CHAIN için, bir şubedeki **bir soğutucu**, **bir günlük periyot**. Kural günlük olduğu için 14 günlük ufukta aynı soğutucuya 15 kayıt vardır; ölçüt "bugünkü periyot"tur.
+
+## Testler
+
+`server/test/acceptance/multi-sector-flow.test.ts` — hepsi public API'den gider, hiçbir görev/fact elle eklenmez:
+
+- A: bugünkü periyotta 1 görev; B: 0 görev, 0 bildirim, karar `not_applicable`.
+- Aynı profil (faaliyet + soğuk depo) iki kez daha kaydedilince A'da görev sayısı değişmez.
+- Emlak ofisi (68.31): `food_preparation=false`, soğutucu olsa bile 0 soğuk ürün görevi, hiçbir yükümlülük `applies` değil.
+- Bilinmeyen kod (99.99): kod saklanır, inceleme istenir, yükümlülük `not_applicable` olmaz.
+- Kanıtsız tamamlama reddedilir; kanıtlı tamamlama sonrası kayıt çalışanı, kanıtı, ölçümü ve kural sürümünü gösterir.
+
+## İkinci dilim (22 Kasım)
+
+- **Soru grupları (GH-01):** Katalogdaki her sınıf bir soru grubu açar (`food`, `installation`); `GET /companies/:id/profile-questions` genel sorulara o grupların sorularını ekler. Emlak ofisi yalnız il/ilçe/çalışan sorusunu görür; elektrik dükkânı montaj sorusunu görür, soğuk depo sorusunu görmez. Tanınmayan kod hiçbir şeyi gizlemez (tüm sorular açık).
+- **Elektrik dükkânı senaryosu:** yeni ÖRNEK kural `EX-ELEC-INSTALL` (iyi uygulama, `activity.onsite_installation`), `ensureSectorRules` ile yayımlanır. Satışla başlayınca görev yok; montaj sonradan "Evet" olunca yalnız montaj görevi başlar, eski karar kayıtları silinmez, tekrar kayıt mükerrer üretmez. Kural ölçüm değil kontrol listesi + fotoğraf ister: motor, limit tanımlamayan ölçümü reddediyor ve limit uydurmadım.
+- **İki şubeli zincir:** B'ye sonradan soğuk depo eklenince yalnız B'de görev başlar, A aynı kalır, karar geçmişinde "uygulanmaz → uygulanır" görünür.
+- **Eski müşteri:** `GET /companies/:id/activity` faaliyet yoksa `missing: true` döner; profil ekranı kartı bunu görevlere dokunmadan ister.
+- **B-16:** Ekran alt başlıkları (İngilizce) kaldırıldı; "eksik bilgi" satırlarında teknik anahtar yerine Türkçe etiket (`mobile/src/features/factLabels.ts`).
+- **B-02:** Atama listesinde ad yoksa veya e-postadan türetilmişse e-posta da gösterilir.
+- Test: `multi-sector-flow.test.ts` 19/19.
+
+## Üçüncü dilim · GH-03 mevzuat masası ve B-13 (22 Kasım)
+
+Zaten vardı (yeniden yazılmadı; `docs/MEVZUAT_TAKIBI.md`): günlük zamanlanmış Resmî Gazete/Mevzuat alımı, ilk okuma = taban, aynı yayın tek kayıt, kaçırılan gün tamamlama, kaynak hatası ≠ "değişiklik yok", belirsiz yürürlüğün gerekçeyle çözülmesi, eski/yeni metin yan yana, etki önizlemesi, onaylı değişikliğin yürürlük gününde yalnız kapsamdaki şubelere uygulanması, yürürlükten kaldırma.
+
+Eksik olan ve bu dilimde eklenen:
+- **Üç ayrı karar (B-13), hem durum geçişinde hem ekranda** — migrasyon `030`, `rules.ts`:
+  - **İade** (`POST /admin/rule-versions/:id/return`): incelemedeki veya onaylı (yayımlanmamış) sürüm taslağa döner; önceki alan onayları sayılmaz, yeniden onay gerekir (`AREA_REVIEW_MISSING`). Yazar kendi kuralını iade edemez.
+  - **Ret** (`…/reject`): gerekçeli, terminal; reddedilen sürüm yayımlanamaz, yeniden gönderilemez, iade edilemez.
+  - **Geri çekme** (`…/withdraw`): yayımlanmış sürüm `withdrawn` olur. Etkilenen her şubeye gerekçeli yeni `needs_review` kararı eklenir (eskiler silinmez); ileri tarihli açık işler gerekçeyle iptal edilir; vadesi gelmiş açık işler `RULE_WITHDRAWN` ile incelemeye işaretlenir; tamamlanmış işler kaydını ve kural sürümünü korur, görev ayrıntısı kural durumunu ve gerekçeyi gösterir; yöneticilere şube/sürüm başına bir düzeltme bildirimi gider; yeni iş üretilmez.
+  - Üçünde de gerekçe zorunlu ve en az 10 karakter; yönetim ekranında düğmeler gerekçe yazılana kadar pasif, "Reddedilen" ve "Geri çekilen" sekmeleri var.
+- **Masa süzgeçleri:** kuyruk kaynağa, sektöre, duruma, metne (belge/madde/başlık), tarih durumuna, yürürlük aralığına ve kararı veren/taslağı hazırlayan kişiye göre süzülür (sunucuda); ekranda kaynak, arama ve "tarihi belirsiz" süzgeci var.
+- Testler: `rule-lifecycle-decisions.test.ts` (7), `legislation-watch.test.ts` (+1 süzgeç testi, 17/17).
+
+Hâlâ açık (GH-03): Resmî Gazete mükerrer sayı/ek ayrımı ayrı alan olarak tutulmuyor (yalnız `doc_ref` içinde sayı var); metin özeti/hash yalnız birleştirilmiş mevzuat belgelerinde (`legislation_documents`) saklanıyor; "geri çekmede işletmeye düzeltme bildirimi" yalnız yöneticilere gidiyor; masaüstü ekranı ayrı bir düzen değil, mevcut yönetim ekranı süzgeçle genişletildi ve tarayıcıda görülmedi; zamanlayıcı iş günlüğü kanıtı bu oturumda yeniden üretilmedi (mevcut test `legislationTick` ile sınıyor).
+
+## Dördüncü dilim · GH-04 görev ve bildirim (22 Kasım)
+
+Zaten vardı: yalnız atanmışı gören çalışan, şube kapsamlı yönetici, tekil/toplu atama + önizleme (sayı onayı), seri sorumlusu, yeniden atama listesi (pasif üyenin açık işleri), geciken iş bildirimi, aynı olay için tekrar bildirim üretmeyen `dedupe_key`.
+
+Eksik olan ve eklenen (migrasyon `031`, `services/task-assignment.ts`):
+- **Atama bildirimi yoktu.** Artık atanan kişi tek bildirim alır; gövde sabit sırayla **Ne değişti? / Hangi şubemi etkiliyor? / Ne zamana kadar ne yapmalıyım?** (+ gerekli kanıt) cevaplar, `meta` içinde kayıt bağlantısı (`link`) taşır. **Duyuru anı (`announcedAt`) ile görevin başlangıç günü (`startsAt`) ayrı alandır.** Görevi kaybeden kişi de bilgilendirilir. Toplu atamada şube başına tek özet bildirim.
+- **Aynı sürüm tekrar gönderilmez:** durum değişmediyse (aynı kişiye aynı atama) ne geçmiş satırı ne bildirim üretilir.
+- **Atama geçmişi:** `task_assignment_log` (önceki, yeni, değiştiren, tekil/seri/toplu, gerekçe); `GET tasks/:id` → `assignmentHistory`; görev ekranında "Sorumlu geçmişi". Denetim kaydına `previousAssigneeId` eklendi.
+- **Listeler:** `GET /companies/:id/tasks?bucket=today|upcoming|overdue|unassigned` (sunucuda, İstanbul günü). Bugün/yaklaşan/geciken ayrık; atanmamış açık işler tarihten bağımsız ayrı liste. Uygulamada "Atanmamış" süzgeci eklendi.
+- **Toplu önizleme:** şube başına en erken/en geç son tarih ve gerekli kanıt türleri (kişi ve şube adı zaten vardı).
+- **Teslim ve yeniden deneme:** `notifications.delivered_at / delivery_attempts / next_attempt_at`; `deliverPending(db, channel)` başarısız gönderimi artan bekleme ile yeniden dener (en çok 5), başarıdan sonra bir daha göndermez, vazgeçince hata kayıtta kalır. Gelen kutusu teslimden bağımsızdır.
+- **Okundu ≠ tamamlandı:** okumak görevi tamamlamaz, tamamlamak okunmamış bildirimi okundu yapmaz (testle).
+- Test: `task-notifications.test.ts` 12/12 (kabul: yönetici atar → çalışan bildirimden gider, kanıtla tamamlar → yönetici sonucu görür; başka şubeye bildirim gitmez; çevrimdışı tekrar gönderimde tek tamamlama; atama değişince önceki/yeni kişi).
+
+Hâlâ açık (GH-04):
+- **Gerçek bir dış kanal (push / e-posta / SMS) yok.** `deliverPending` bir kanal arayüzü ve yeniden deneme mantığıdır, testte sahte kanalla sınandı; hiçbir yere bağlı değil ve zamanlayıcıdan çağrılmıyor. Kanal seçimi ürün/altyapı kararıdır.
+- Teslim "en az bir kez": gönderim ile kayıt arasında süreç çökerse aynı bildirim bir kez daha gidebilir.
+- Seri sorumlusu (`applyToFuture`) ve yeni üretilen görevlerin varsayılan atanması bildirim/geçmiş satırı üretmez; yalnız ilk atama olayı bildirilir.
+- "Bugün/yaklaşan/geciken" mobilde hâlâ istemci tarafı gruplanıyor (aynı tanım, `features/work.ts`); sunucu süzgeci API'de var ama ekran onu kullanmıyor. Ekranlar tarayıcıda görülmedi.
+- Çevrimdışı eşitleme için mevcut `offline-sync.test.ts` (5 senaryo) ve yeni idempotency testi var; gerçek cihazda sınanmadı.
+- `backup-restore.test.ts` bu makinede `pg_dump` olmadığı için çalıştırılamadı (15 başarısız, hepsi `spawn pg_dump ENOENT` ve ilgili ortam hatası); yeni tablo yedek/geri yükleme kapsamında doğrulanmadı.
+
+## Beşinci dilim · GH-02 açıklanabilir yükümlülük (22 Kasım)
+
+Zaten vardı: `explain()` (kural, eşleşen yanıtlar, yanıtın kaynağı, karar geçmişi, dayanak hükümleri), kural sürümüne bağlı görev (eski dayanak görevde kalır), üç değerli karar (eksik yanıt asla "uygulanmaz" olmaz), zorunlu yükümlülükte gerekçeli "uygulanmaz" isteği ve ikinci kişi incelemesi, aynı dönem için tek görev.
+
+Eklenen (`domain/explain-text.ts`, `services/obligations.ts`, `services/tasks.ts`):
+- **Kullanıcı diliyle gerekçe:** `reasonText` — "Bu şubede soğukta saklanan ürün olduğunu belirttiniz." Motorun izinden (trace) üretilir, karar vermez. Eksik/onaysız yanıtta ne eksik olduğu ve "uygunluk verilmez" söylenir. Listede, açıklamada ve görev ayrıntısında (`why`) aynı metin.
+- **Kuralın tanımı (`definition`):** etiket (örnek / iyi uygulama ayrı), geçerlilik koşulları cümle olarak, uygulanmama koşulu ve düzeltme yolu, yürürlük başlangıç/bitiş, kontroller (sıklık, kanıt türleri).
+- **İnceleme durumu:** bekleyen "uygulanmaz" isteği varken `reviewStatus` "İnceleme sürüyor: yükümlülük geçerli, görevler devam ediyor" der; listede `reviewPending`.
+- **Kaynak sürümü değişince:** görevde `basis` — görevin açıldığı kural sürümü, sonradan yayımlanan sürüm ve notu; tamamlanan işin dayanağı ve gerekçesi değişmez.
+- Mobil: yükümlülük ekranında "Neden bu karar", "Kuralın tanımı", inceleme şeridi; görev ekranında gerekçe, "Yanıtı ve kaynağı aç", sürüm notu.
+- Test: `explainable-obligation.test.ts` 8/8 (kural v2 yayımlanır, tamamlanan işin v1 dayanağı yerinde; OCR onaysız değer çelişince karar "bilgi eksik").
+
+Hâlâ açık (GH-02):
+- **Sorumlu rol** kural modelinde yok (`responsibleRole: null`); görevi yönetici atar. Rol alanı eklemek kural şeması + inceleme akışı kararıdır.
+- **Coğrafya ve sektör** ayrı alan değil; yalnız koşul cümlelerinde (il, faaliyet) görünür. `scope` boş.
+- "Kaynak sürümü" burada **kural sürümü**; yasal kaynağın (Resmî Gazete) yeni sürümüyle eski hükmün karşılaştırması GH-03 masasında, göreve bağlanmadı. Test kuralları hükme bağlı olmadığı için yeni sürüm `cites: []`.
+- İşletmenin "uygulanır"a itirazı yalnız zorunlu yükümlülükte "uygulanmaz" isteği olarak var; "bilgi eksik" için ayrı bir düzeltme isteği ekranı yok (yanıtı doğrudan düzeltir).
+- Çelişki tanımı: doğrulanmamış OCR değeri onaylı yanıtın yerini alınca karar "bilgi eksik" olur. İki doğrulanmış kaynağın birbiriyle çelişmesi (şube/şirket) için ayrı kural yok; şube yanıtı şirketinkini geçer.
+- Ekranlar tarayıcıda görülmedi.
+
+## Altıncı dilim · GH-05 evrak kasası (22 Kasım)
+
+Zaten vardı: belge + sürüm + dosya, yükleyenden farklı kişi incelemesi ("yükleme geçerlilik değildir"), kurum içi inceleme ≠ düzenleyen doğrulaması, şirket belgesinin şubelere kopyasız paylaşımı (`document_shares`), kullanım bağlantıları (`document_links`: görev/ekipman/yükümlülük), bitişte tek uyarı, yenileme bekleyen sürüm geçerli saymaz, OCR önerisi + teyit, QR ve dosya erişiminin belge okuma hakkına bağlı olması.
+
+Eklenen (migrasyon `032`, `services/documents.ts`):
+- **Yeni türler:** `pest_report` (pest hizmet raporu), `signature_circular` (imza sirküleri); serbest tür `other`.
+- **Saklanma amacı ≠ yükümlülüğü karşılama:** belgede `keepPurpose`; hangi yükümlülüğü karşıladığı ayrı (`satisfiesObligations`, kullanım bağlantılarından). Biri diğerini değiştirmez.
+- **Üç tarih durumu:** sürümde `end_kind` = `dated` (bitişi var) / `none` (bitiş tarihi yok) / `unknown` (tarih henüz bilinmiyor). Ad veya türden süre türetilmez (testle: adında "1 yıl geçerli" yazan poliçe `unknown` kalır). Veritabanı tetikleyicisi bitiş tarihi varsa `dated` yapar; eski satırlar buna göre dolduruldu.
+- **Bilgi tamamlama listesi:** `GET documents?filter=info_needed`; inceleyen tarihi yazınca veya "bitişi yok" deyince çıkar.
+- **Gözden geçirme tarihi** (`review_on`) bitişten ayrı, isteğe bağlı.
+- **Hatırlatma aralığı ve muhatap:** belge başına `remindDays` (1–365, varsayılan 30) ve `remindUserId`; yalnız etkin ve kapsamı kapsayan üye seçilebilir; muhatap seçiliyse uyarı yalnız ona gider, yoksa belgeyi tutanlara. Eşikte ve bitişte birer uyarı (sürüm+tarih anahtarı), tekrar taramada yenisi çıkmaz.
+- **Yenileme kabulünde eski uyarı:** yeni sürüm doğrulanınca gelen kutusundaki eski uyarı "belge yenilendi" diye eski işaretlenir, yenisi için uyarı çıkmaz (testle).
+- **Bitişsiz belge:** süre aşımı uyarısı üretmez (10 yıl ilerisi taramada); `POST documents/:id/archive` (gerekçeli) listeden ve hatırlatmalardan çıkarır, sürümler ve dosyalar silinmez.
+- **Reddedilen son sürüm:** `latestRejection` (gerekçe görünür) ve `stillValid` (önceki doğrulanmış sürüm, kalan gün) ile `satisfiesObligations` ayrı gösterilir.
+- **Yetki kalkınca:** paylaşım geri alınınca veya üyelik pasifleşince liste, ayrıntı, dosya ve QR aynı anda kapanır (testle, dördü birlikte).
+- Mobil: yeni tür etiketleri, "Bilgi tamamlama" süzgeci, "Süresiz / Tarih bilinmiyor" rozetleri, ret gerekçesi, kalan geçerlilik, saklanma amacı.
+- Test: `document-vault-dates.test.ts` 9/9; mevcut belge ve QR testleri değişmeden geçti.
+
+Hâlâ açık (GH-05):
+- **Yenileme görevi** görev sistemine bağlı bir iş olarak açılmıyor; yenileme bugün uyarı + süzgeçle ("yakında bitecek / doldu") yürüyor. Görev motoru kural sürümüne bağlı olduğu için belge kaynaklı görev şema kararıdır.
+- **Özel evrak:** ayrı bir "yalnız şu kişiler" listesi yok; erişim rol/şube kapsamı ve şirket belgesi paylaşımıyla sınırlı. Kişi bazlı izin listesi eklemedik.
+- Belgeye ait ayarlar (amaç, sorumlu, hatırlatma, gözden geçirme) API'de (`POST documents/:id/settings`) ve oluşturmada var; mobilde bunları **düzenleyen ekran yok**, yalnız gösteriliyor.
+- Sorumlu kişi kaydediliyor ama ona ayrıca bildirim gitmiyor (yalnız muhatap).
+- Ekranlar tarayıcıda görülmedi.
+
+## Yedinci dilim — GH-06 GoverUp: ihtiyaçtan hizmet
+
+- **Öneri motoru** (`GET /companies/:id/service-suggestions?siteId=`): yalnız okur; talep açmaz, işletme verisi paylaşmaz, ücrete göre sıralamaz. Her öneri okunur bir gerekçe taşır ve dayanağı türüyle gösterilir: profil (soğukta saklama + soğutucu → soğutma servisi; LPG → gaz tesisatı kontrolü), kayıt (açık soğuk zincir / gaz uygunsuzluğu → "açık kayıt var", aciliyet yükselir), belge (kayıtlı soğutucuya ait incelenmiş ve geçerli bakım raporu yok), konum (il / ilçe). Yetki: `service.request` (personel soramaz, 403).
+- **Eşleşme:** onaylı ve süresi dolmamış yetkisi olan uzmanlar; her satırda onayın bitiş tarihi ve kalan gün. Onay süresi dolan uzman eşleştirilmez, **kaç uzmanın bu nedenle dışarıda kaldığı** söylenir (`leftOutExpiredApproval`).
+- **Eşleşen yoksa:** `noMatch` + `openRequest` — yalnız konum ve kategoriyle açık talep önerisi; işletme adının teklif kabulüne kadar paylaşılmadığı yazılı. Talep mevcut `POST service-requests` ile açılıyor (testle, 201).
+- **Şikâyet (iki taraf)** — yeni tablo `service_complaints` (033): işletme `POST companies/:id/jobs/:jobId/complaints`, uzman `POST pro/jobs/:jobId/complaints`; iş başına taraf başına bir açık şikâyet (ikincisi 409); karşı taraf bildirim alır ve `…/respond` ile yanıtlar (açan kendi şikâyetine yanıt veremez, 403); karar yalnız pazar yeri değerlendiricisinde (`POST admin/marketplace/complaints/:id/resolve`, gerekçeli, ikinci karar 409). Şikâyet **iş durumunu, rapor belgesinin incelemesini ve uygunsuzluğu değiştirmez** (testle: iş `scheduled`, `accepted_at` boş, uygunsuzluk durumu aynı). Açma, yanıt ve karar denetim zincirine yazılır (3 olay). Başka uzman veya yetkisiz personel 404.
+- **Randevu / revizyon (iki taraf):** mevcut market-depth ve followthrough testleriyle kapsanıyor (öneren onaylayamaz, karşı taraf onaylar; iptal gerekçeli; revizyon sürümlü). Bu dilimde değişmedi.
+- **Operasyon listeleri** (`GET admin/marketplace/operations`, yalnız pazar yeri değerlendiricisi): açık talepler, geciken randevular, revizyon bekleyen raporlar, biten/bitmek üzere (30 gün) onaylar, açık şikâyetler. Her satır **bekleyen kişi/taraf, bekleme günü, sıradaki adım ve kayda bağlantı** taşır (testle, tüm satırlarda dolu).
+- Mobil: hizmet talepleri ekranında "İhtiyacına göre öneriler"; iş ayrıntısında (işletme) ve uzman işinde "Şikâyet" kartı; yönetim ekranında "Çalışma listeleri" ve şikâyeti karara bağlama.
+- Test: `gh06-goverup.test.ts` 9/9. Tam sunucu paketi: 503 geçti, 33 atlandı, 1 paket ortam nedeniyle çalışmadı (`backup-restore`: geri yükleme veritabanı değişkenleri ve `pg_dump` yok).
+- Elle yapılan tek veritabanı değişikliği (zaman kaydırma, test içinde yazılı): bir uzmanın onay bitişi dünün tarihine, bir randevunun başlangıcı geçmişe çekildi. Talep, teklif, kabul, bildirim, şikâyet ve rapor akışı genel API ile yürüdü.
+
+Hâlâ açık (GH-06):
+- **Öneri sinyalleri dar:** yalnız iki kategori (soğutma, gaz) haritalı. Elektrik vb. "destek kategorisi" için hangi profil/kayıt sinyalinin hangi kategoriyi önerdiği ürün kararı; eklenmedi.
+- **Onay yenileme süreci** yok: biten onay için uzman yeniden başvurur, sistemde ayrı "yenileme isteği" akışı veya otomatik hatırlatma yok; liste yalnız gösterir.
+- **Şikâyet** için kanıt eki, süre sınırı (yanıt gecikirse otomatik yükseltme) ve karar sonucunda uzman onayını askıya alma bağlantısı yok; karar metin olarak kalır, onay işlemi ayrı karardır.
+- Operasyon listelerinden kayda tek dokunuşla geçiş yok (kayıt türü + kimlik veriliyor, ekran bağlantısı yok).
+- Mobil ekranlar tarayıcıda/cihazda görülmedi; yalnız `tsc` derlemesi geçti.
+
+## Sekizinci dilim — GH-07: cihazın düzelmesi ve ürünün akıbeti
+
+- **Ürün değerlendirmesi** (yeni tablo `ncr_product_assessments`, 034): etkilenen ürün/parti, miktar **ya da açık "miktar bilinmiyor" işareti** (ikisi birlikte veya ikisi de boş olamaz, veritabanı kısıtı + 422), alınan ilk önlem, değerlendiren kişi (şubede etkin üye), karar, gerekçe, kanıt bağlantıları (kaydın kendi kanıtları), karar veren ve zaman. API: `POST nonconformities/:id/product-assessments`, `…/:aid/decision`. Karar: bekletme, imha, yeniden işleme, tedarikçiye iade, kullanıma uygun, ürün etkisi yok. Karar tek seferliktir (ikincisi 409), gerekçe zorunludur; değerlendirilen kişiye bildirim gider.
+- **Cihaz düzeldi, ürün kararı açık kalabilir:** çalışan test: onarım, neden, etkinlik kontrolü tamam, vaka `awaiting_verification`; bağımsız doğrulayıcı kapatmayı deneyince `PRODUCT_DECISION_OPEN` (422), durum değişmez. Karar kaydedilince aynı doğrulayıcı kapatır.
+- **Yetkili değerlendirme:** "ürün etkisi yok" kararını yalnız kapanışı doğrulamaya yetkili kişi verebilir ve gerekçesi en az 20 karakterdir; diğer kararları atanan değerlendirici veya kaydı yöneten yetkili verir (personel 403).
+- **Ürün etkisi olmayan sektörlerde alan yok:** faaliyetinde yemek/içecek hazırlama bulunmayan şubede ayrıntıda `product: null`, `product.closureBlocker` yok, değerlendirme başlatma `PRODUCT_NOT_APPLICABLE` (422).
+- **Denetim dosyası:** kapanan vakada "Cihaz / düzeltme kararı ve adımları" ile "Ürün kararı" ayrı bloklar (JSON `sequence` ve `product`, PDF'te ayrı başlıklar); ürün olayları cihaz sırasına karışmaz. Açık vakada karar açıksa "KARAR AÇIK" yazar; bilinmeyen miktar "MİKTAR BİLİNMİYOR" görünür. Denetim zincirine açılış ve karar olayları yazılır.
+- Mobil: uygunsuzluk ayrıntısında "Ürün kararı" kartı (başlatma, miktar bilinmiyor işareti, karar ve gerekçe, kapatmayı engelleme notu); ürün etkisi olmayan şubede görünmez.
+- Test: `gh07-product-decision.test.ts` 9/9. Tam sunucu paketi: 512 geçti, 33 atlandı, 1 paket ortam nedeniyle çalışmadı (`backup-restore`).
+
+Hâlâ açık (GH-07) — **ürün kararı gerektiren karar noktası:**
+- **Karar (sahip onayı, 2026-11-22): gıda şubesinde soğuk zincir vakası ürün kararı olmadan kapanmaz.** Ya etkilenen ürün için değerlendirme + karar, ya da yetkili kişinin gerekçeli "ürün etkisi yok" kararı gerekir; hiç değerlendirme yoksa kapatma `PRODUCT_DECISION_OPEN` verir. Bu kuralla altı mevcut test (ncr-flow, followthrough, slice, audit-case-readable) kapanıştan önce `noProductEffect` yardımcısıyla yetkili değerlendirme kaydediyor.
+- Ürün etkisi tespiti yalnız "faaliyet: yemek/içecek hazırlama" + soğuk zincir tehlikesiyle haritalı; diğer sektörlerde ürün etkisi tanımı yazılmadı.
+- Karar sonradan değiştirilemez; yanlış karar için düzeltme/sürüm akışı yok (yeniden açma vakayı açar, kararı değil).
+- Kanıt bağlama yalnız mevcut kayıt kanıt kimlikleriyle; ürün fotoğrafı yüklemeyi mobil kartta sunmuyoruz.
+- Değerlendiren mobilde başlatan kişi olarak atanıyor; başka kişi seçimi API'de var, ekranda yok.
+- Ekranlar tarayıcıda görülmedi; yalnız `tsc` geçti.
+
+## Dokuzuncu dilim — B maddeleri (kısmi)
+
+Kapananlar (test: 523 geçti, 33 atlandı, 1 paket ortam nedeniyle çalışmadı; mobil ve sunucu `tsc` temiz):
+- **B-07** `b07-verifier-scope.test.ts` 3/3: kayıtla sınırlı dış doğrulayıcıda `/companies` şube listesi boş, ekip/profil/denetim dosyası 403, belge/görev/eğitim/QR boş, yalnız atanan vaka görünür. Düzeltilen sızıntılar: şube adları (`companies.ts`) ve eğitim kataloğu (`training.ts`). Mobil: izin dışı adres açıklama ekranı (B-05) gösterir.
+- **B-05** izin dışı sayfada "Bugün 0" yerine erişim açıklaması ve "Doğrulama kuyruğuma dön" (`_layout.tsx`); ekranda görülmedi.
+- **B-01** ve **B-15**: kod değişikliği gerekmedi, mevcut davranış testle kanıtlandı (`b15-roles-b01-login.test.ts` 4/4): pilotta demo kutusu 404 ve `/env`'de demo alanı yok, demoda normal giriş; platform yöneticisi moderasyon yapamaz, rol ancak gerekçeli atamayla gelir.
+- **B-11** `b11-pdf-pages.test.ts` 2/2: alt bilgi için fazladan boş sayfa açılıyordu ("Sayfa 1 / 1" ikinci sayfada); alt kenar boşluğu sıfırlanarak giderildi; kısa ve 4 sayfalık çıktıda numaralar 1..n, gerçek sayı.
+- **B-14** `b14-qr-bad-code.test.ts` 2/2: bozuk, kısa, yabancı bağlantılı veya yetkisiz kod aynı 404 mesajını verir; mobilde okunan ama GoverHub kodu olmayan içerik için mesaj ve "Yeniden okut".
+- **B-03** `PrimaryButton`/`GhostButton` `why` alanı: pasif düğmenin yanında eksik koşul yazılır ("Not en az 5 karakter olmalı (şu an 4)"); 31 not/gerekçe düğmesi ve 6 çok koşullu form bağlandı. Yalnız `tsc`; 4 ve 5 karakterle ekranda denenmedi.
+
+Açık (bu dilimde yapılmadı):
+- **B-10** taslak hatası: form durumu hata sonrası korunuyor, fakat sunucu genel "İstek alanları geçersiz." ve İngilizce `details` dönüyor; alana bağlı Türkçe mesaj yazılmadı.
+- **B-12** 320 px, **B-08** uzman profili açılışı/yeniden deneme: başlanmadı.
+- Ardından: üç açık ürün kararının öneri olarak yazılması, sınırlı kanıt doğrulamaları, altı uçtan uca senaryo ve final durum tablosu.
+
+## Onuncu dilim — kapsam sürümü, çıkmaz kapatma, emlak ofisi (22 Kasım)
+
+**Bugün ne görülüyor (kayıt → ekran).** Market: "yemek hazırlamıyorum, soğuk ürün satıyorum" → ana ekranda "Soğuk ürün satışı için ekipman bilgisi eksik" + "Dolap ekle"; dolap kaydedilince görev 0→1, profil yeniden kaydedilince 1, diğer şubede 0 (izole tur 8099, aynı görev kimliğiyle atama ve kanıtlı tamamlama). Elektrik dükkânı: satışla başlar, montaj görevi yok; sahada montaj eklenince yalnız montaj görevi başlar, eski karar kalır (`multi-sector-flow`, sunucu testi; ekran turu yapılmadı). Emlak ofisi: kendi örnek görevi `EX-ESTATE-FILES` (sözleşme ve yetki dosyası kontrolü); personel dolabı gıda görevi üretmez (`gh10-estate-office`, sunucu testi; ekran turu yapılmadı).
+
+**Sürüm farkı.** Tohum kural değişikliği yayımlanmış v1'i güncellemez. `ensureFoodScopeRevision`, normal inceleme/yayın akışıyla EX-COLD-CHAIN, EX-REPORT-DOC ve EX-REPORT-MEAS için v2 üretir; tamamlanmış görev v1'e bağlı kalır, yeni görev v2'den gelir (`gh07d`: kafe görevleri v1:15, v2:16). Tarayıcıda v1→v2 geçişi gösterilmedi; izole ortam baştan v2 ile kuruldu.
+
+**Atlanan 33 test.** 29'u `backup-restore` (yerelde `pg_dump` ve geri yükleme veritabanı yok; CI'da `TEST_RESTORE_*` tanımlı, orada koşar), 4'ü `assistant-real-model` ve `legislation-live-observation` (gerçek model / canlı kaynak anahtarı ister, bilerek atlanır).
+
+**Alan hatası mesajları (B-10), eksik koşul ipuçları (B-03), dış doğrulayıcı sayfaları (B-05/B-07), uzman alanı (B-08), 320 px (B-12), QR (B-14), İngilizce alt başlık (B-16)** izole turda ekrandan doğrulandı; kanıt `docs/kanit-f1-tur-market/`.
+
+(Bu bölümün "açık" listesi On birinci dilimde kapatıldı veya yeniden yazıldı.)
+
+## On birinci dilim — kapanış tablosu (22 Kasım)
+
+**Üç cümle.** Market sahibi uygulamayı açınca "Soğuk ürün satışı için ekipman bilgisi eksik" uyarısını ve "Dolap ekle"yi görür; dolabı oradan kaydedince soğuk ürün kontrolü görevi doğar, yönetici atar, çalışan kendi hesabında kanıtla tamamlar. Elektrikçi yalnız satış yaparken montaj görevi görmez; sahada montajı profiline ekleyince topraklama ölçümü görevi doğar ve çalışan kendi hesabında kontrol listesi ile fotoğrafla tamamlar. Emlakçı kendi "sözleşme ve yetki belgesi dosyası kontrolü" görevini ve neden çıktığını okur, belgeyi kasadan göreve bağlar ve çalışan tamamlar; personel buzdolabı gıda görevi üretmez. (Tüm kurallar ÖRNEKTİR.)
+
+**Ortamlar ve commit'ler.** 8099 (API 3077, veritabanı `gh_tour3`): elektrik ve emlak ekran turları. 8100 (API 3078, `gh_leg`, `server/scripts/synthetic-legislation-env.ts`): mevzuat masası, B-02, B-03, B-01 geçit gösterimi; kaynak SENTETİK (`sentetik.test`). Market turu önceki `gh_tour` veritabanındadır. 8091 ve 8094 bu işle **güncellenmedi**; 8091 `/api/env` cevabı `mode: demo` olduğu için pilot sayılmaz. Hiçbir ortama dağıtım yapılmadı.
+
+**Altı senaryo** (bu belgede böyle tanımlandı):
+
+| # | Senaryo | Kullanıcı ne yapabiliyor | Ortam · kanıt |
+|---|---|---|---|
+| 1 | Küçük market (yemek yok, soğuk ürün var) | Ana ekranda eksik ekipman uyarısı → "Dolap ekle" → görev 0→1, aynı cevap tekrar 1, diğer şubede 0; yönetici atar, çalışan tamamlar | 8099 `gh_tour` (önceki tur) · `kanit-f1-tur-market/00…43`, `gh07d-market-flow.test.ts` 11/11 |
+| 2 | Çok şubeli zincir | B şubesine soğuk depo eklenince yalnız B'de yeni görev; A aynı | `multi-sector-flow.test.ts` (sunucu); ekran: market turunda ikinci şube (Depo B) |
+| 3 | Elektrik dükkânı | Satışta montaj görevi yok; montaj "Evet" → görev; aynı cevap tekrar 1; çalışan tamamlar (kural v1) | 8099 `gh_tour3` · `kanit-f1-tur-market/50…59` |
+| 4 | Emlak ofisi | Kendi dosya kontrolü görevi, gerekçe okunur, belge kasasından göreve bağlı belge açılır, çalışan tamamlar; personel dolabı gıda görevi üretmez; aynı cevap tekrar 1 | 8099 `gh_tour3` · `kanit-f1-tur-market/60…70`, `gh10-estate-office.test.ts` |
+| 5 | Mevzuat masası v1→v2 (SENTETİK) | Sentetik yayın kuyruğa düşer; onaydan önce görev/bildirim/yükümlülük etkisi **sıfır**; onay sonrası yalnız eşleşen şube (Kadıköy Moda) v2 görevi ve bildirimi alır, LPG kullanmayan şube almaz; v1'de tamamlanan görev v1 dayanağını açar | 8100 `gh_leg` · `kanit-f1-mevzuat/01…12`; kayıtlar aşağıda |
+| 6 | Kapanmış vaka, ürün kararı düzeltme | Eski karar, gerekçe, karar sahibi görünür; kapalı vaka bir kez yeniden açılır | `kanit-f1-tur-market`, `gh07c-decision-correction.test.ts` 3/3 |
+
+**Senaryo 5 kayıt kimlikleri** (8100): değişiklik `0027bae1-9051-4238-9add-b1a2d4f26be4` (`pending` → `applied`); denetim zinciri `legislation.detected > proposal_saved > drafted > approved > rule.published > applied > applied_to_company`. EX-LPG-CHECK: v1 `retired`, v2 `published`. Görev `956ac5d2-4a81-4141-bd1d-d66da7a8f035` (Kadıköy Moda, **done**, şablon kural sürümü **v1**); görev `b1ba74aa-f862-428c-bee2-8869d4c9b332` (Kadıköy Moda, open, 01/01, kural sürümü **v2**). Onaydan önce (alan incelemesi tamam, onay yok): görev 80, bildirim 0, yükümlülük 24, LPG görevi A 1 / B 0; onaydan sonra: görev 80 (sabit), bildirim 2 (yalnız Kadıköy Moda), yükümlülük 25, B 0. v1 görevinde "Yanıtı ve kaynağı aç" → "Bu, geçmişte verilmiş bir karar. Şu an geçerli olan karar farklı. Güncel kararı aç." (v1 dayanağı hâlâ açılıyor).
+
+**Belgelenmiş zaman kaydırması (tek).** v2'nin ilk görevi bir sonraki dönemde (01/01) üretildiği için saatlik üretim fonksiyonu (`topUpAllSites`) 45 günlük pencereyle çalıştırıldı (`server/scripts/topup-window.ts`); başka hiçbir kayıt elle eklenmedi. Onaylayıcı `onay@` (rule_reviewer), alan uzmanı `alan-uzmani@`, yazar `yazar@`, tarama `yonetici@` (platform_admin).
+
+**Gerçek hukuki kararlardan ayrım.** Sentetik kaynaktan gelen kayıt `is_example = true`; "sentetik kaynak asla gerçek kurala dönüşmez" testi (`legislation-watch.test.ts`) ve ekranda "ÖRNEK — GERÇEK MEVZUAT DEĞİLDİR" etiketi var. Gerçek hukuki karar için hiçbir kayıt üretilmedi.
+
+**GH maddeleri**
+
+| Madde | Kodlandı | Sunucuda doğrulandı | Ekranda doğrulandı | Pilota dağıtıldı |
+|---|---|---|---|---|
+| GH-01 soru grupları (food, installation, brokerage) | evet | `multi-sector-flow`, `gh10-estate-office` | market, elektrik, emlak turları | hayır |
+| GH-02 açıklanabilir yükümlülük | evet | `explainable-obligation` 8/8 | görev "neden" kartı (elektrik, emlak), v1 dayanak ekranı | hayır |
+| GH-03 mevzuat masası | evet | `legislation-watch` | senaryo 5 (sentetik, 8100) | hayır |
+| GH-04 görev/bildirim | evet | `task-notifications` 12/12 | atama + çalışan görünümü (market, elektrik, emlak) | hayır |
+| GH-05 evrak kasası | evet | `documents-reviews`, `document-vault-dates` | emlak: belge oluştur, göreve bağla, görevden aç | hayır |
+| GH-06 GoverUp | evet | `gh06-goverup` | servis talebi → teklif → teslim kabul akışının son adımı (B-03 turu) | hayır |
+| GH-07 ürün kararı (a–d) | evet | `gh07*` | ProductCard, düzeltme, geçmiş (market turu) | hayır |
+
+**B maddeleri**
+
+| Madde | Kullanıcı ne yapabiliyor | Ekran kanıtı |
+|---|---|---|
+| B-01 | Pilotta demo kutusu yok. **8091 `mode: demo` olduğu için pilot sayılmaz**; salt okunur kontrolde ilk ekranda demo kutusu yok, kod adımına girilmedi (gerçek e-posta gönderir). Geçit koşulu (`mode==='demo' && dev_outbox`) 8100'de `/env` cevabı pilot gibi değiştirilerek (yalnız tarayıcıda) gösterildi: kod adımında düğme ve demo açıklaması yok | `kanit-f1-mevzuat/16, 17`, `b15-roles-b01-login.test.ts` |
+| B-02 | Atama listesi ad + rol gösterir ("Elif (personel)"); adı olmayan kullanıcıda e-posta | `kanit-f1-mevzuat/15` |
+| B-03 | "Teslim kabul et": 4 karakterde düğme kapalı + "(4/5)" ipucu; 5 karakterde açık, teslim kabul edildi. Ürün kararı düzeltme formunda "(şu an 4)" | `kanit-f1-mevzuat/13, 14`, `kanit-f1-tur-market/48` |
+| B-05 | İzin dışı sayfada erişim açıklaması + "Doğrulama kuyruğuma dön" | `kanit-f1-tur-market/47` |
+| B-07 | Dış doğrulayıcı `/team`'de ekip/şube görmez | `kanit-f1-tur-market/47`, `b07-verifier-scope` |
+| B-08 | Uzman hesabı `/profile` ve `/pro` açılır; işletmesiz hesapta açıklama + "Uzman alanını aç" | `kanit-f1-tur-market/45, 46` |
+| B-10 | Taslak hatası Türkçe, alan alan, doldurulan alan korunur | `kanit-f1-tur-market/44`, `b10-field-errors` |
+| B-11 | PDF fazladan boş sayfa yok | `b11-pdf-pages` (ekran yok) |
+| B-12 | 320 px: yatay sığma ve alt boşluk | `kanit-f1-tur-market` (market9 turu) |
+| B-13 | İade / ret / geri çekme | `rule-lifecycle-decisions` (ekran yok) |
+| B-14 | Bozuk QR mesajı + "Yeniden okut" | market9 turu, `b14-qr-bad-code` |
+| B-15 | Platform yöneticisi moderasyon yapamaz | `b15-roles-b01-login` (ekran yok) |
+| B-16 | 10 ekranda İngilizce alt başlık yok | `kanit-f1-tur-market/b-sonuclari-2.json` |
+| B-04, B-06, B-09 | **İşlenmedi:** bu depoda ve oturum notlarında tanımları yok; talimat metni gerekir | — |
+
+**Testler.** CI (93bed55): 576 geçti, 4 atlandı, 72 dosya geçti, 2 dosya atlandı (`assistant-real-model`, `legislation-live-observation`: anahtar/canlı kaynak ister). **`backup-restore.test.ts` CI'da 29/29 geçti, 0 atlandı** (yerelde `pg_dump` olmadığı için atlanır). Önceki "yedek/geri yükleme doğrulanmadı" notları bununla geçersizdir. Son commit'in CI sonucu PR'da.
+
+**Bu turda bulunan ve düzeltilen hatalar.** (1) `ensureFoodScopeRevision` her API açılışında kapsamı yeniden yayımlıyordu (jsonb anahtar sırası); içerikle karşılaştırılıyor, testi `gh10-estate-office.test.ts`. (2) Emlak kuralı elektrikçi/markette "bilgi eksik" görünüyordu ve hiç sorulmayan soruyu bekliyordu; `activity.brokerage` türetilmiş bilgisiyle "uygulanmaz" oldu. (3) `npm run migrate` Windows'ta sessizce hiçbir şey yapmıyordu; `pathToFileURL` ile düzeltildi.
+
+**Açık kalanlar (gizlenmiyor).**
+- **Çözülemeyen sorular:** EX-ELEC-INSTALL ve EX-LPG-CHECK (v1) sektör geçidi olmayan kurallardır; emlakçıda/elektrikçide "PROFİL EKSİK: 3 yükümlülük" satırı kalır ve bir kısmı o işletmeye hiç sorulmayan soruyu bekler. Çözüm yeni sürüm (v2) ve ürün kararı gerektirir; yapılmadı.
+- Emlak için belge dosyası içeriği ve servis ihtiyacı yok: yalnız görev + belge kaydı bağı. Personel (çalışan) bağlı belgeyi görmez (belge okuma yetkisi sahip/yönetici). Belge bağı manueldir (belge sayfasında "Nerede kullanılıyor"); görev ekranı bağlı belge yoksa bunu söyler ve kasaya gönderir.
+- B-04, B-06, B-09 işlenmedi; GH-04'te gerçek dış bildirim kanalı yok; mevzuat masası yalnız sentetik kaynakla sınandı.
+- Üç açık ürün kararı hâlâ öneri olarak bekliyor (benimsenmiş politika yok).
+
+## On ikinci dilim — profil eksik, emlak belgesi, çok sektörlü keşif (23 Kasım)
+
+Tüm kurallar, belgeler ve yayınlar ÖRNEK / SENTETİKTİR. Gerçek kural yayımlanmadı, hiçbir ortama dağıtım yapılmadı. Testteki 45 günlük üretim penceresi (`topup-window.ts`) önceki turda belgelendi; gerçek tarihte gerçekleşmiş iş değildir.
+
+**1 · "Profil eksik" sayacı.** Önceki: sektör geçidi olmayan v1 kuralları (EX-LPG-CHECK, EX-ELEC-INSTALL, EX-ESTATE-FILES) hiç sorulmayan soruyu bekleyip sayaçta sonsuza dek "bilgi eksik" kalıyordu. Şimdi: üç kural için v2 (normal taslak → alan incelemesi → onay [onaylayan ≠ yazar] → yayın), yeni türetilmiş bilgi `activity.installation_business`; v1 emekli (silinmez), tamamlanmış görevler v1 şablonuna bağlı kalır, açık olanlar "kural sürümü değişti" ile işaretlenir. Sayaç: market 6→5, elektrikçi 2→1, emlakçı 3→1; kalan her kalem gerçekten sorulan bir soruyu bekler (`gh11-profile-gaps`, 6 test). Ana ekran uyarısı doğru soruyu açar (`?focus=`), cevap sonrası sayaç düşer; aynı profili yeniden kaydetmek görev/bildirim çoğaltmaz. Kanıt: `docs/kanit-f1-profil/01…05`.
+
+**2 · Emlak belgesi.** Önceki: görev yükleyen/çalışan için "sözleşme içeriği doğru mu" gibi içerik iddiaları topluyordu; çalışan bağlı belgeyi göremiyor ve neden göremediğini bilmiyordu; görevden belge geçmişi görünmüyordu. Şimdi: EX-ESTATE-FILES v2 yalnız dosya VARLIĞINI teyit eder (`files_present`, `missing_noted`) ve "içeriğini incelemez, yetkili yönetici belge kasasında inceler" der. Görev ekranı belge başına dosya durumunu (varlık teyidi) ve içerik incelemesini (incelenmedi / uygun / kabul edilmedi) ayrı satırlarda gösterir; belgeyi göremeyen çalışan yalnız "N belge bağlı, içeriği görme yetkin yok" bilgisini alır; yükleyen "bu sürümü sen yükledin, başka yetkili incelemeli" görür; yetkili yönetici "İçeriği incele" ile belge kasasına gider. Görev geçmişi: kim, hangi sürüm, hangi işlem (yalnız belgeyi okuyabilene). Çalışan belge ve inceleme uçlarında 404 alır (`gh12-estate-document`, 6 test). Kanıt: `docs/kanit-f1-profil/11…13` (çalışan, yükleyen sahip, yetkili yönetici; sentetik PDF, her biri kendi oturumunda).
+
+**3 · Çok sektörlü mevzuat keşfi.** Önceki: Resmî Gazete taraması yalnız başlıkta gıda sözcüğü arıyordu; elektrik ve emlak yayınları "gıda güvenliği ifadesi yok" diye sessizce atlanıyordu. Şimdi: `sectorRelevance` — gıda, elektrik, emlak için açık sözcük = aday; yalnız genel sözcük (işyeri, denetim, yapı…) = BELİRSİZ, insana gider (kuyrukta "belirsiz eşleşme" etiketi, reddet/taslağa al); hiçbiriyle ilgisi yok = kapsam dışı, ATLANAN başlık ve nedeni taramada kaydedilir. Aşamalar ayrı ölçülür: kaynakta görülen → eşleşen aday / belirsiz / kapsam dışı → onay kuyruğuna yeni eklenen → şubeye uygulanan. Ölçüm (8100, sentetik): görülen 5; aday 3 (gıda LPG, elektrik, emlak), belirsiz 1, kapsam dışı 1; kuyruğa 4 yeni; tekrar taramada yeni 0, toplam aday 5 sabit; görev 144 / bildirim 25 / yükümlülük 25 onaydan önce DEĞİŞMEDİ. Şubeye uygulama aşaması bu turda yalnız önceki turdan gelen 1 kayıtta ölçülüdür; yeni 4 aday onaylanmadı (gerçek kural yayımı kapsam dışı). Ekranda topraklama ve sözleşme kontrolleri "ÖRNEK KONTROLLER" olarak görünür. `gh13-multi-sector-discovery` (4 test). Kanıt: `docs/kanit-f1-mevzuat/20…21`.
+
+**Açık kalanlar.** Başlık eşleşmesi gövde metnine bakmaz: başlığı genel ama içeriği elektrik/emlak olan yayın "belirsiz" olur ve insan okur (bilerek, sessiz atlama yok). Başka iş kolları için sözcük listesi yok. B-04/B-06/B-09 tanımsız, işlenmedi.
+
+## Bilinen sınırlar (gizlenmiyor)
+
+- Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 yalnız soğutma ve gaz kategorilerini haritaladı.
+- B-12 (320 px) ve B-16'nın EK-267 sayfa taraması tarayıcıda doğrulanmadı.
+
+- NACE kataloğu 12 sınıflık başlangıç alt kümesi; tam TÜİK listesi ve her sınıfın hangi yükümlülüğe bağlandığı ürün/hukuk kararıdır.
+- Katalog dışı kod için "inceleme" şu an denetim kaydı + "bilgi eksik" ile sınırlı; bir inceleme kuyruğu ekranı yok.
+- İki ÖRNEK sektör kuralı ölçüldü (EX-COLD-CHAIN, EX-ELEC-INSTALL); diğer sektör kuralları yazılmadı.
+- Fotoğraf yükleme ekran kanıtında tarayıcı dosya seçicisi sürülemediği için API ile yapıldı; ölçüm, atama ve tamamlama ekrandan yapıldı.
+- Kayıt ekranında ikinci şube eklemek için ayrı bir ekran akışı denenmedi; B şubesi API ile eklendi (`POST /companies/:id/sites`).
+- (Giderildi, on birinci dilim) `npm run migrate` Windows'ta sessizce hiçbir şey yapmıyordu (`import.meta.url === file://${argv[1]}` karşılaştırması `file:///C:/…` ile eşleşmez); testler `migrate()` fonksiyonunu doğrudan çağırdığı için etkilenmez.
+
+## Ekran kanıtı
+
+`docs/kanit-f1-cok-sektor/` — 01…08 (kayıt → faaliyet → şube soruları → A neden → atama → çalışan görünümü → tamamlama → B neden).

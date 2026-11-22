@@ -13,6 +13,8 @@ export class SyntheticSource {
   /** A reachable but unusable answer, to tell failure kinds apart: timeout, blocked (403), empty body, a PDF, a robot page. */
   fail: null | 'timeout' | 'blocked' | 'empty' | 'pdf' | 'robot' = null;
   calls: string[] = [];
+  /** Item ids whose text cannot be read (empty answer): the index lists them, the document fetch fails. */
+  unreadable = new Set<string>();
   readonly rg = 'https://sentetik.test/rg';
   readonly mv = 'https://sentetik.test/mv';
 
@@ -39,6 +41,7 @@ export class SyntheticSource {
     if (det) {
       for (const [, items] of this.days) {
         const it = items.find(x => x.id === det[1]);
+        if (it && this.unreadable.has(it.id)) return { status: 200, body: new Uint8Array(), contentType: 'text/html' };
         if (it) return html(`<html><body><div>Resmî Gazete</div><div>Sayı : ${it.sayi ?? 99001}</div><div>YÖNETMELİK</div><div>Sentetik Bakanlığından:</div><div>${it.title}</div>` +
           it.articles.map((a, i) => `<p>MADDE ${i + 1}- ${a}</p>`).join('') + `</body></html>`);
       }

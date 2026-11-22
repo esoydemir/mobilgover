@@ -6,7 +6,7 @@ import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { Empty, ErrorBox, Field, Loading } from '../components/states';
-import { Card, FilterChip, PrimaryButton, Tap } from '../components/ui';
+import { Card, FilterChip, PrimaryButton, Tap, shortWhy } from '../components/ui';
 import { fmtDateTime } from '../features/dates';
 import { REPORT_REASONS } from '../features/network';
 import { useUi } from '../state/app';
@@ -93,8 +93,8 @@ function AppealCard({ a, reload }: { a: Appeal; reload: () => Promise<void> }) {
           <Field label="Gerekçe (zorunlu)" testID={`appeal-notes-${a.id}`} value={notes} onChangeText={setNotes} multiline />
           {error ? <ErrorBox message={error} /> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <PrimaryButton testID={`appeal-overturn-${a.id}`} label="Kararı kaldır" glow={false} height={38} size={12} style={{ flex: 1 }} disabled={notes.trim().length < 10} onPress={() => go('overturned')} />
-            <PrimaryButton testID={`appeal-uphold-${a.id}`} label="Karar kalsın" glow={false} height={38} size={12} style={{ flex: 1 }} disabled={notes.trim().length < 10} onPress={() => go('upheld')} />
+            <PrimaryButton testID={`appeal-overturn-${a.id}`} label="Kararı kaldır" glow={false} height={38} size={12} style={{ flex: 1 }} disabled={notes.trim().length < 10} why={shortWhy(notes, 10, 'Not')} onPress={() => go('overturned')} />
+            <PrimaryButton testID={`appeal-uphold-${a.id}`} label="Karar kalsın" glow={false} height={38} size={12} style={{ flex: 1 }} disabled={notes.trim().length < 10} why={shortWhy(notes, 10, 'Not')} onPress={() => go('upheld')} />
           </View>
         </>
       )}

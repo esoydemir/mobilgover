@@ -7,10 +7,11 @@ import { useApi } from '../../api/useApi';
 import { GradientFill } from '../../components/Gradient';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading, StaleNote } from '../../components/states';
-import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton } from '../../components/ui';
+import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton, shortWhy } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { SEVERITY_LABEL } from '../../features/labels';
 import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, ServiceLinkCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
+import { ProductCard } from '../../features/ncr/ProductCard';
 import { HAZARDS, type NcrDetail } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -115,6 +116,7 @@ export default function NcrRoute() {
         <Callout tone="info" title="Etkinlik kontrolü" body={`${effectiveness.notes}${effectiveness.data?.measurement ? ` · yeni ölçüm ${effectiveness.data.measurement.value} ${effectiveness.data.measurement.unit ?? ''}${effectiveness.data.measurement.within ? ' (limit içinde)' : ''}` : ''} · ${effectiveness.done_by_name}, ${fmtDateTime(effectiveness.done_at)}`} />
       ) : null}
 
+      {n.product ? <ProductCard product={n.product} base={base} reload={q.reload} closed={n.status === 'closed'} /> : null}
       <VerificationCard n={n} base={base} reload={q.reload} />
       <ServiceLinkCard n={n} base={base} reload={q.reload} />
       {n.status !== 'closed' && n.permissions.serviceRequest ? (
@@ -136,7 +138,7 @@ function StepForm({ placeholder, label, onSave, testID }: { placeholder: string;
   return (
     <View style={{ gap: 10 }}>
       <Field testID={`${testID}-notes`} value={notes} onChangeText={setNotes} multiline placeholder={placeholder} />
-      <PrimaryButton testID={`${testID}-save`} label={label} disabled={notes.trim().length < 5} height={46} size={13}
+      <PrimaryButton testID={`${testID}-save`} label={label} disabled={notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')} height={46} size={13}
         onPress={() => { onSave(notes.trim()); setNotes(''); }} />
     </View>
   );

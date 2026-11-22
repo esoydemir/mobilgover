@@ -1,6 +1,7 @@
 import type { Tx } from '../db/pool';
 import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { assessEvidence, evidenceRequirementSchema, limitSchema, selectLimit, withinLimit, type EvidenceRequirement } from '../domain/evidence';
+import { reasonLines } from '../domain/explain-text';
 import { can, onlyAssignedTasks, type Principal } from '../domain/permissions';
 import { localDay, occurrences, type Recurrence } from '../domain/schedule';
 import { ALLOWED_MIME } from '../storage/local';
@@ -8,7 +9,11 @@ import { documentsForTask } from './documents';
 import { taskServiceReports } from './marketplace';
 import { appendAudit } from './audit';
 import { relatedCourses } from './training';
+import { randomUUID } from 'node:crypto';
+import { assignmentHistory, recordAssignments } from './task-assignment';
 import { createFromTask } from './nonconformities';
+import { FACTS } from '../domain/facts';
+import { currentFacts } from './profile';
 import { currentObligations, recomputeSite } from './obligations';
 
 /** Device clocks may drift a little; anything further in the future is rejected. */
@@ -68,6 +73,24 @@ export async function ensureDecisions(tx: Tx, companyId: string, siteId: string,
   if (!hasDecisions) await recomputeSite(tx, companyId, siteId, actorId, now);
 }
 
+/**
+ * What a rule's checks WOULD create at a site between two days (writes nothing): the due dates by the same calendar rules generateTasks uses.
+ * `firstDue` looks further ahead (a year) so a first check beyond the production window is still shown.
+ */
+export async function plannedOccurrences(tx: Tx, companyId: string, siteId: string, templates: { code: string; title: string; recurrence: any }[], fromDay: string, toDay: string) {
+  const site = (await tx.query(`SELECT * FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
+  if (!site) return [];
+  const closures = (await tx.query<{ day: string }>(`SELECT day FROM site_closures WHERE site_id = $1`, [siteId])).rows.map(r => r.day);
+  const cal = { timezone: site.timezone, openingDays: site.opening_days, closures };
+  const yearAhead = localDay(new Date(Date.parse(fromDay + 'T12:00:00Z') + 400 * 86_400_000), site.timezone);
+  return templates.map(t => {
+    if (!t.recurrence || t.recurrence.freq === 'unset') return { code: t.code, title: t.title, dueAt: [] as string[], firstDue: null as string | null, unset: true };
+    const inWindow = occurrences(t.recurrence as Recurrence, cal, fromDay, toDay).map(o => o.dueAt.toISOString());
+    const first = occurrences(t.recurrence as Recurrence, cal, fromDay, yearAhead)[0]?.dueAt.toISOString() ?? null;
+    return { code: t.code, title: t.title, dueAt: inWindow, firstDue: first, unset: false };
+  });
+}
+
 export async function topUpSite(tx: Tx, companyId: string, siteId: string, days = 14, actorId: string | null = null, now = new Date()) {
   const site = (await tx.query<{ timezone: string }>(`SELECT timezone FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
   if (!site) throw notFound('Şube');
@@ -88,7 +111,13 @@ async function loadTask(tx: Tx, p: Principal, companyId: string, taskId: string,
   return t;
 }
 
-export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { siteId?: string; from?: string; to?: string; status?: string }) {
+/**
+ * Open work split four ways for the task screens: overdue (deadline passed), today (still due today, Istanbul day), upcoming (later days),
+ * unassigned (nobody responsible, any date). A task appears in exactly one of overdue/today/upcoming; unassigned cuts across them.
+ */
+export type TaskBucket = 'today' | 'upcoming' | 'overdue' | 'unassigned';
+
+export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { siteId?: string; from?: string; to?: string; status?: string; bucket?: TaskBucket }) {
   const assignedOnly = onlyAssignedTasks(p, companyId);
   const r = await tx.query(
     `SELECT t.id, t.site_id, t.status, t.outcome, t.due_at, t.period_key, t.review_flag, t.assignee_id, t.equipment_id,
@@ -100,8 +129,13 @@ export async function listTasks(tx: Tx, p: Principal, companyId: string, q: { si
       WHERE t.company_id = $1 AND ($2::uuid IS NULL OR t.site_id = $2)
         AND ($3::timestamptz IS NULL OR t.due_at >= $3) AND ($4::timestamptz IS NULL OR t.due_at < $4)
         AND ($5::text IS NULL OR t.status = $5) AND (NOT $6 OR t.assignee_id = $7)
+        AND ($8::text IS NULL OR (t.status = 'open' AND CASE $8
+              WHEN 'overdue'    THEN t.due_at < now()
+              WHEN 'today'      THEN t.due_at >= now() AND (t.due_at AT TIME ZONE 'Europe/Istanbul')::date = (now() AT TIME ZONE 'Europe/Istanbul')::date
+              WHEN 'upcoming'   THEN (t.due_at AT TIME ZONE 'Europe/Istanbul')::date > (now() AT TIME ZONE 'Europe/Istanbul')::date
+              WHEN 'unassigned' THEN t.assignee_id IS NULL END))
       ORDER BY t.due_at, tt.title`,
-    [companyId, q.siteId ?? null, q.from ?? null, q.to ?? null, q.status ?? null, assignedOnly, p.userId]);
+    [companyId, q.siteId ?? null, q.from ?? null, q.to ?? null, q.status ?? null, assignedOnly, p.userId, q.bucket ?? null]);
   return r.rows.filter(t => can(p, 'task.read', { companyId, siteId: t.site_id, assigneeId: t.assignee_id }).ok);
 }
 
@@ -127,7 +161,34 @@ async function taskContext(tx: Tx, companyId: string, t: any) {
   const services = (await tx.query(
     `SELECT sr.id, sr.title, sr.status, sr.created_at FROM service_requests sr LEFT JOIN nonconformities n ON n.id = sr.ncr_id
       WHERE sr.company_id = $1 AND (sr.task_id = $2 OR n.task_id = $2) ORDER BY sr.created_at DESC`, [companyId, t.id])).rows;
-  return { legalBasis, lastCompletedAt: last, nextDueAt: next, services, hazardType: t.hazard_type };
+  return { legalBasis, basis: await basisInfo(tx, t), why: await taskWhy(tx, t), lastCompletedAt: last, nextDueAt: next, services, hazardType: t.hazard_type };
+}
+
+/**
+ * The basis the task was created under stays readable for good: the rule version and the source versions it cited. If the rule has a
+ * newer version since, say so and show what the newer one cites, so a finished task is never silently re-read against new text.
+ */
+async function basisInfo(tx: Tx, t: any) {
+  const rv = (await tx.query(`SELECT rv.id, rv.version, rv.status, rv.effective_from, rv.retired_at FROM task_templates tt JOIN rule_versions rv ON rv.id = tt.rule_version_id WHERE tt.id = $1`, [t.template_id])).rows[0];
+  const newer = (await tx.query(
+    `SELECT rv.id, rv.version, rv.effective_from, rv.provision_ids FROM rule_versions rv
+      WHERE rv.rule_id = $1 AND rv.version > $2 AND rv.status = 'published' ORDER BY rv.version DESC LIMIT 1`, [t.rule_id, rv.version])).rows[0] ?? null;
+  const cites = async (ids: string[]) => (await tx.query(
+    `SELECT p.ref, sv.version_label, sv.effective_from, ls.title AS source_title FROM provisions p JOIN source_versions sv ON sv.id = p.source_version_id
+       JOIN legal_sources ls ON ls.id = sv.source_id WHERE p.id = ANY($1)`, [ids])).rows;
+  return {
+    ruleVersion: rv.version, ruleStatus: rv.status, effectiveFrom: rv.effective_from,
+    newerVersion: newer ? { version: newer.version, effectiveFrom: newer.effective_from, cites: await cites(newer.provision_ids) } : null,
+    note: newer ? `Bu iş kuralın ${rv.version}. sürümüne göre açıldı; sonradan ${newer.version}. sürüm yayımlandı. Bu kaydın dayanağı değişmez.` : null,
+  };
+}
+
+/** The reason, in the person's words, for the obligation this task came from (the decision it was created under, not today's). */
+async function taskWhy(tx: Tx, t: any) {
+  const o = (await tx.query(`SELECT id, decision, trace FROM obligations WHERE id = $1`, [t.obligation_id])).rows[0];
+  if (!o) return null;
+  const lines = reasonLines(o.decision, o.trace);
+  return { obligationId: o.id, decision: o.decision, text: lines.text, statements: lines.matched };
 }
 
 /** Service reports of the task's linked services, only for people who may read the business's documents at the task's site. */
@@ -244,7 +305,8 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     id: t.id, siteId: t.site_id, status: t.status, outcome: t.outcome, dueAt: t.due_at, periodKey: t.period_key, reviewFlag: t.review_flag,
     title: t.title, instructions: t.instructions, severity: t.severity,
     equipment: t.equipment_id ? { id: t.equipment_id, name: t.equipment_name, type: t.equipment_type } : null,
-    rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example, title: t.obligation_title, summary: t.obligation_summary },
+    // A task keeps the rule version it was created under; if that version was later withdrawn, its status and reason travel with the record.
+    rule: { version: t.rule_version, kind: t.rule_kind, isExample: t.is_example, title: t.obligation_title, summary: t.obligation_summary, ...(await ruleVersionStatus(tx, t.obligation_id)) },
     ...(await taskContext(tx, companyId, t)),
     serviceReports,
     reportEvidence: canReadReports ? await reportEvidenceView(links, t, reqs, serviceReports as Awaited<ReturnType<typeof taskServiceReports>>) : null,
@@ -258,12 +320,14 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     measurements: c.measurements, evidence: c.evidence, nonconformity: ncr,
     completedBy: t.completed_by, completedAt: t.completed_at, statusReason: t.status_reason,
     assignee: t.assignee_id ? { id: t.assignee_id, name: await userName(tx, t.assignee_id) } : null,
+    assignmentHistory: await assignmentHistory(tx, companyId, taskId),
     // Who is responsible for this recurring check from now on (null = nobody set).
     seriesResponsible: await seriesResponsible(tx, companyId, t.site_id, t.template_code, t.equipment_id),
     canAssign: can(p, 'task.assign', { companyId, siteId: t.site_id }).ok,
     // Training that fits this check (by check, obligation or topic); reading it is optional.
     relatedTraining: await relatedCourses(tx, companyId, { hazard: t.hazard_type, templateCode: t.template_code, ruleCode: t.rule_code }),
-    relatedDocuments: await documentsForTask(tx, p, companyId, { template_code: t.template_code, equipment_id: t.equipment_id, rule_code: t.rule_code }),
+    ...await (async () => { const r = await documentsForTask(tx, p, companyId, { template_code: t.template_code, equipment_id: t.equipment_id, rule_code: t.rule_code });
+      return { relatedDocuments: r.documents, relatedDocumentsHidden: r.hidden, documentHistory: r.history }; })(),
   };
 }
 
@@ -283,7 +347,7 @@ async function seriesResponsible(tx: Tx, companyId: string, siteId: string, temp
 export async function assignableMembers(tx: Tx, p: Principal, companyId: string, siteId: string) {
   if (!can(p, 'task.assign', { companyId, siteId }).ok) throw forbidden();
   return (await tx.query(
-    `SELECT DISTINCT ON (u.id) u.id, u.display_name, m.role
+    `SELECT DISTINCT ON (u.id) u.id, u.display_name, u.email, m.role
        FROM memberships m JOIN users u ON u.id = m.user_id
       WHERE m.company_id = $1 AND m.status = 'active' AND (m.site_id IS NULL OR m.site_id = $2)
       ORDER BY u.id, m.role`, [companyId, siteId])).rows
@@ -306,9 +370,20 @@ export async function assignTask(tx: Tx, p: Principal, companyId: string, taskId
       [b.userId, companyId, t.site_id])).rowCount;
     if (!ok) throw invalid('Bu kişi bu şubede görev alamaz (etkin üye değil ya da başka şubede).');
   }
-  await tx.query(`UPDATE tasks SET assignee_id = $3, assigned_by = $4, assigned_at = now() WHERE id = $1 AND company_id = $2`,
-    [taskId, companyId, b.userId, p.userId]);
+  const batchKey = randomUUID();
+  const before: { id: string; site_id: string; assignee_id: string | null }[] = [{ id: t.id, site_id: t.site_id, assignee_id: t.assignee_id ?? null }];
+  // Unchanged = no new history row, no second announcement.
+  if ((t.assignee_id ?? null) !== b.userId) {
+    await tx.query(`UPDATE tasks SET assignee_id = $3, assigned_by = $4, assigned_at = now() WHERE id = $1 AND company_id = $2`, [taskId, companyId, b.userId, p.userId]);
+  }
   let alsoAssigned = 0;
+  if (b.applyToFuture) {
+    before.push(...(await tx.query<{ id: string; site_id: string; assignee_id: string | null }>(
+      `SELECT id, site_id, assignee_id FROM tasks
+        WHERE company_id = $1 AND site_id = $2 AND template_code = $3 AND equipment_id IS NOT DISTINCT FROM $4::uuid
+          AND status = 'open' AND due_at >= now() AND id <> $5 AND assignee_id IS DISTINCT FROM $6::uuid`,
+      [companyId, t.site_id, t.template_code, t.equipment_id, taskId, b.userId])).rows);
+  }
   if (b.applyToFuture) {
     await tx.query(`DELETE FROM task_assignment_defaults WHERE company_id = $1 AND site_id = $2 AND template_code = $3 AND equipment_id IS NOT DISTINCT FROM $4::uuid`,
       [companyId, t.site_id, t.template_code, t.equipment_id]);
@@ -322,8 +397,9 @@ export async function assignTask(tx: Tx, p: Principal, companyId: string, taskId
           AND status = 'open' AND due_at >= now() AND id <> $7 AND assignee_id IS DISTINCT FROM $5`,
       [companyId, t.site_id, t.template_code, t.equipment_id, b.userId, p.userId, taskId])).rowCount ?? 0;
   }
+  await recordAssignments(tx, { companyId, actorId: p.userId, newId: b.userId, before, source: b.applyToFuture ? 'series' : 'single', batchKey });
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'task.assigned', entityType: 'task', entityId: taskId,
-    payload: { assigneeId: b.userId, applyToFuture: b.applyToFuture, alsoAssigned } });
+    payload: { assigneeId: b.userId, previousAssigneeId: t.assignee_id ?? null, applyToFuture: b.applyToFuture, alsoAssigned } });
   return { assigneeId: b.userId, alsoAssigned, seriesResponsible: b.applyToFuture ? (b.userId ? { id: b.userId, name: await userName(tx, b.userId) } : null) : undefined };
 }
 
@@ -473,4 +549,66 @@ export async function completeTask(tx: Tx, p: Principal, companyId: string, task
     clientTime: clientCompletedAt ?? null, payload: { outcome, reasons: a.nonconforming, nonconformityId, reviewFlag,
       serviceReportBasis: basis.map(l => ({ documentId: l.document_id, versionId: l.document_version_id, version: l.version_number, sha256: l.file_sha256, relation: l.relation, caseId: l.case_id, serviceLinkId: l.service_link_id, basisNote: l.basis_note })) } });
   return { outcome, nonconformityId, reviewFlag, nonconformities: a.nonconforming };
+}
+
+async function ruleVersionStatus(tx: Tx, obligationId: string) {
+  const r = (await tx.query<{ status: string; status_reason: string | null; status_changed_at: string | null }>(
+    `SELECT rv.status, rv.status_reason, rv.status_changed_at FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id WHERE o.id = $1`, [obligationId])).rows[0];
+  return { status: r?.status ?? null, statusReason: r?.status_reason ?? null, statusChangedAt: r?.status_changed_at ?? null };
+}
+
+const EQUIP_TR: Record<string, { name: string; why: string }> = {
+  refrigerator: { name: 'Dolap', why: 'Soğuk ürün satışı için ekipman bilgisi eksik' },
+  freezer: { name: 'Derin dondurucu', why: 'Dondurulmuş ürün saklama için ekipman bilgisi eksik' },
+};
+
+export type Gap = { kind: 'equipment' | 'question' | 'conflict'; siteId: string; siteName: string; ruleCode: string; obligation: string; message: string; missing: string[];
+  equipmentType?: string; action: { kind: 'add_equipment' | 'answer_question'; label: string; equipmentType?: string; factKey?: string; siteId: string } };
+
+/**
+ * What stops an obligation from becoming work, said to the person with the direct action, so a new business is never left with "zero tasks, no explanation":
+ *  - equipment: the obligation applies but the site has no equipment of the type the check is made on ("Dolap ekle");
+ *  - question: the answer that decides applicability is missing (an unanswered question is asked, never read as "no");
+ *  - conflict: the answers disagree with what is registered (said "no cold storage" but a fridge is registered at a food site).
+ */
+export async function equipmentGaps(tx: Tx, companyId: string, siteIds: string[]): Promise<Gap[]> {
+  const out: Gap[] = [];
+  for (const siteId of siteIds) {
+    const site = (await tx.query<{ name: string }>(`SELECT name FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
+    if (!site) continue;
+    const facts = await currentFacts(tx, companyId, siteId);
+    // legal requirements are named before good practices when several obligations need the same thing
+    for (const o of (await currentObligations(tx, companyId, siteId)).sort((x, y) => Number(y.kind === 'legal_requirement') - Number(x.kind === 'legal_requirement'))) {
+      const meta = (await tx.query(`SELECT obligation_title, (SELECT code FROM rules WHERE id = rule_id) AS code FROM rule_versions WHERE id = $1`, [o.rule_version_id])).rows[0];
+      if (o.decision === 'needs_info') {
+        for (const key of (o.missing_facts as string[]) ?? []) {
+          const label = (FACTS as Record<string, { label: string }>)[key]?.label ?? key;
+          out.push({ kind: 'question', siteId, siteName: site.name, ruleCode: meta.code, obligation: meta.obligation_title, missing: [key],
+            message: `"${meta.obligation_title}" bu şubeye uygulanıp uygulanmadığını belirlemek için bir bilgi eksik: ${label}. Yanıtlanmayan soru "hayır" sayılmaz.`,
+            action: { kind: 'answer_question', label: `${label} sorusunu yanıtla`, factKey: key, siteId } });
+        }
+        continue;
+      }
+      if (o.decision !== 'applies') continue;
+      const templates = (await tx.query(`SELECT recurrence FROM task_templates WHERE rule_version_id = $1`, [o.rule_version_id])).rows;
+      for (const t of templates) {
+        const type = (t.recurrence as { perEquipmentType?: string }).perEquipmentType;
+        if (!type) continue;
+        const have = (await tx.query(`SELECT 1 FROM equipment WHERE company_id = $1 AND site_id = $2 AND type = $3 AND active LIMIT 1`, [companyId, siteId, type])).rowCount;
+        if (have || out.some(g => g.kind === 'equipment' && g.siteId === siteId && g.equipmentType === type)) continue;
+        const tr = EQUIP_TR[type] ?? { name: type, why: 'Ekipman bilgisi eksik' };
+        out.push({ kind: 'equipment', siteId, siteName: site.name, ruleCode: meta.code, obligation: meta.obligation_title, equipmentType: type, missing: [`equipment:${type}`],
+          message: `${tr.why}: "${meta.obligation_title}" bu şubeye uygulanıyor, ama kayıtlı ${tr.name.toLowerCase()} yok; kayıt eklenince görev oluşur.`,
+          action: { kind: 'add_equipment', label: `${tr.name} ekle`, equipmentType: type, siteId } });
+      }
+    }
+    // Conflict: stated "no cold storage" at a food business while a refrigerator is registered there.
+    if (facts['activity.food_business']?.value === true && facts['storage.cold']?.value === false
+        && (await tx.query(`SELECT 1 FROM equipment WHERE company_id = $1 AND site_id = $2 AND type IN ('refrigerator','freezer') AND active LIMIT 1`, [companyId, siteId])).rowCount) {
+      out.push({ kind: 'conflict', siteId, siteName: site.name, ruleCode: 'EX-COLD-CHAIN', obligation: 'Soğuk muhafaza sıcaklık kaydı', missing: ['storage.cold'],
+        message: 'Soğukta ürün saklamadığını belirttin ama bu şubede dolap kayıtlı. Hangisi doğru? Dolap yalnız personel içinse yanıtın kalabilir; ürün saklıyorsa "Soğuk depolama" yanıtını değiştir.',
+        action: { kind: 'answer_question', label: 'Soğuk depolama yanıtını gözden geçir', factKey: 'storage.cold', siteId } });
+    }
+  }
+  return out;
 }

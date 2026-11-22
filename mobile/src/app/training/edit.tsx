@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, shortWhy } from '../../components/ui';
 import { LINK_KIND, LINK_OPTIONS } from '../../features/training';
 import { useUi } from '../../state/app';
 import { C, type } from '../../theme';
@@ -90,7 +90,7 @@ export default function TrainingEditRoute() {
         {quiz.length < 10 ? <GhostButton testID="tr-add-q" label="Soru ekle" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => setQuiz(qs => [...qs, { q: '', options: ['', ''], answer: 0 }])} /> : null}
       </Card>
       {error ? <ErrorBox message={error} /> : null}
-      <PrimaryButton testID="tr-save" label={busy ? 'Kaydediliyor…' : 'Taslağı kaydet'} disabled={busy || title.trim().length < 3} onPress={save} />
+      <PrimaryButton testID="tr-save" label={busy ? 'Kaydediliyor…' : 'Taslağı kaydet'} disabled={busy || title.trim().length < 3} why={shortWhy(title, 3, 'Başlık')} onPress={save} />
     </Screen>
   );
 }

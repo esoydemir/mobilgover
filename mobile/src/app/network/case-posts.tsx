@@ -6,7 +6,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { Empty, ErrorBox, Field, Loading } from '../../components/states';
-import { Card, GhostButton, PrimaryButton, Tap } from '../../components/ui';
+import { Card, GhostButton, PrimaryButton, Tap, shortWhy } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
@@ -50,7 +50,7 @@ function Row({ r, reload }: { r: Row; reload: () => void }) {
       {r.status !== 'withdrawn' ? (mode === 'withdraw' ? (
         <View style={{ gap: 6 }}>
           <Field label="Geri çekme gerekçesi" testID={`case-withdraw-reason-${r.id}`} value={reason} onChangeText={setReason} />
-          <GhostButton testID={`case-withdraw-${r.id}`} label="Ağdan geri çek" color={C.crit} border={tint.crit(0.35)} height={40} size={12} disabled={reason.trim().length < 10}
+          <GhostButton testID={`case-withdraw-${r.id}`} label="Ağdan geri çek" color={C.crit} border={tint.crit(0.35)} height={40} size={12} disabled={reason.trim().length < 10} why={shortWhy(reason, 10, 'Gerekçe')}
             onPress={() => run(() => call('POST', `/companies/${company!.id}/network/case-posts/${r.id}/withdraw`, { reason: reason.trim() }), 'Geri çekildi; ağdan erişim kapandı.')} />
         </View>
       ) : <Text testID={`case-withdraw-open-${r.id}`} onPress={() => setMode('withdraw')} style={type(12, 600, { color: C.crit })}>Geri çek</Text>) : null}

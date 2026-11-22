@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { factLabels } from '../../features/factLabels';
 import { useState } from 'react';
 import { errorText } from '../../api/client';
 import { Text, View } from 'react-native';
@@ -6,7 +7,7 @@ import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading } from '../../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, shortWhy } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
 import { C, tint, type } from '../../theme';
@@ -21,10 +22,14 @@ type Explanation = {
   rule: { code: string; version: number; status: string; kind: string; isExample: boolean; title: string; summary: string; effectiveFrom: string; ambiguityNote: string | null; label: string };
   provisions: { ref: string; excerpt: string; version_label: string; source_title: string; issuer: string; is_example: boolean }[];
   matchedFacts: Record<string, { value: unknown; source: string; verification: string; recordedAt: string } | null>;
+  factOrigins?: Record<string, { sourceRef: string | null; note: string | null }>;
+  reasonText?: string;
+  reviewStatus?: { state: 'in_review' | 'needs_info' | 'none'; text: string | null };
+  definition?: { label: string; appliesWhen: string[]; notApplicableWhen: string; effectiveFrom: string; effectiveTo: string | null; responsibleRole: string | null; checks: { code: string; title: string; frequency: string; evidence: string[] }[] };
   history: { id: string; decision: string; decided_by: string; decided_at: string }[];
 };
 
-const RULE_STATUS: Record<string, string> = { draft: 'taslak', in_review: 'incelemede', approved: 'onaylı', published: 'yayında', retired: 'yürürlükten kalktı' };
+const RULE_STATUS: Record<string, string> = { draft: 'taslak', in_review: 'incelemede', approved: 'onaylı', published: 'yayında', retired: 'yürürlükten kalktı', rejected: 'reddedildi', withdrawn: 'geri çekildi' };
 const fmt = (v: unknown) => (v === true ? 'Evet' : v === false ? 'Hayır' : Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? '—' : String(v));
 
 /** "Why does this apply to me?" — matched facts, source provision, rule version. */
@@ -70,17 +75,40 @@ export default function ObligationRoute() {
           <View style={{ borderWidth: 1, borderColor: e.rule.isExample ? tint.warn(0.3) : C.bd, borderRadius: 16, padding: 13 }}>
             <Text style={type(12.5, 600, { color: e.rule.isExample ? C.warn : C.t1 })}>{e.rule.label}</Text>
           </View>
+          {e.reviewStatus?.text ? (
+            <View testID="obligation-review-status" style={{ borderWidth: 1, borderColor: tint.warn(0.3), borderRadius: 16, padding: 13 }}>
+              <Text style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>{e.reviewStatus.text}</Text>
+            </View>
+          ) : null}
+          {e.reasonText ? (
+            <Card>
+              <Eyebrow>NEDEN BU KARAR</Eyebrow>
+              <Text testID="obligation-reason" style={type(13, 500, { color: C.t1, lh: 1.5 })}>{e.reasonText}</Text>
+            </Card>
+          ) : null}
+          {e.definition ? (
+            <Card>
+              <Eyebrow>KURALIN TANIMI</Eyebrow>
+              {e.definition.appliesWhen.map((c, i) => <Text key={i} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>• {c}</Text>)}
+              <Text style={type(12, 400, { color: C.t3, lh: 1.45 })}>{e.definition.notApplicableWhen}</Text>
+              {e.definition.checks.map(c => <Text key={c.code} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>{c.title} · {c.frequency}{c.evidence.length ? ` · kanıt: ${c.evidence.join(', ')}` : ''}</Text>)}
+              <Text style={type(11.5, 400, { color: C.t3 })}>Yürürlük: {e.definition.effectiveFrom}{e.definition.effectiveTo ? ` – ${e.definition.effectiveTo}` : ''} · Sorumlu rol kuralda tanımlı değil; görevi yönetici atar.</Text>
+            </Card>
+          ) : null}
           <Card>
             <Eyebrow>EŞLEŞEN İŞLETME BİLGİLERİ</Eyebrow>
             <View style={{ gap: 9, marginTop: 12 }}>
               {Object.entries(e.matchedFacts).map(([k, f]) => (
-                <View key={k} style={{ flexDirection: 'row', gap: 10 }}>
-                  <Text style={[type(12.5, 600), { flex: 1 }]}>{k}</Text>
-                  <Text style={type(12.5, 500, { color: f ? C.t1 : C.warn })}>{f ? `${fmt(f.value)} · ${f.verification === 'expert_verified' ? 'uzman doğruladı' : f.source === 'ocr' && f.verification === 'unverified' ? 'OCR, onaysız' : 'beyan'}` : 'bilinmiyor'}</Text>
+                <View key={k} style={{ gap: 3 }}>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <Text style={[type(12.5, 600), { flex: 1 }]}>{e.conditionFacts?.find(c => c.key === k)?.label ?? k}</Text>
+                    <Text style={type(12.5, 500, { color: f ? C.t1 : C.warn })}>{f ? `${fmt(f.value)} · ${f.verification === 'expert_verified' ? 'uzman doğruladı' : f.source === 'ocr' && f.verification === 'unverified' ? 'OCR, onaysız' : 'beyan'}` : 'bilinmiyor'}</Text>
+                  </View>
+                  {e.factOrigins?.[k]?.note ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{e.factOrigins[k]!.note}</Text> : null}
                 </View>
               ))}
             </View>
-            {e.obligation.missingFacts.length ? <Text style={[type(12, 500, { color: C.warn }), { marginTop: 10 }]}>Eksik bilgi: {e.obligation.missingFacts.join(', ')}. Eksik bilgi "uygulanmaz" sayılmaz.</Text> : null}
+            {e.obligation.missingFacts.length ? <Text style={[type(12, 500, { color: C.warn }), { marginTop: 10 }]}>Eksik bilgi: {factLabels(e.obligation.missingFacts)}. Eksik bilgi "uygulanmaz" sayılmaz.</Text> : null}
           </Card>
           <Card>
             <Eyebrow>KAYNAK HÜKÜM</Eyebrow>
@@ -256,9 +284,9 @@ function ReviewCard({ e, onDone }: { e: Explanation; onDone: (newId: string) => 
         <>
           <Field label="İnceleme notu (neye baktın?)" testID="review-notes" value={notes} onChangeText={setNotes} multiline />
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <PrimaryButton testID="review-approve" label="Onayla" glow={false} height={42} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5}
+            <PrimaryButton testID="review-approve" label="Onayla" glow={false} height={42} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(async () => { const x = await call<{ obligationId: string }>('POST', `${base}/review`, { decision: 'approved', notes: notes.trim() }); showToast('Bilgiler doğrulandı', 'Kural motoru yeniden karar verdi: uygulanmaz.'); onDone(x.obligationId); })} />
-            <GhostButton testID="review-reject" label="Reddet" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 5}
+            <GhostButton testID="review-reject" label="Reddet" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(async () => { await call('POST', `${base}/review`, { decision: 'rejected', notes: notes.trim() }); showToast('İstek reddedildi', 'Yükümlülük sürüyor.'); onDone(e.obligation.id); })} />
           </View>
         </>

@@ -6,10 +6,10 @@ import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { ErrorBox, ExampleBadge, Field, Loading, SectionLabel } from '../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton } from '../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, missingWhy, shortWhy } from '../components/ui';
 import { addDays, fmtDate, fmtDateTime } from '../features/dates';
 import { Invitations } from '../features/Invitations';
-import { AppointmentCard, MessageThread } from '../features/ServiceExtras';
+import { AppointmentCard, ComplaintCard, MessageThread } from '../features/ServiceExtras';
 import { goRoot } from '../state/app';
 import { TYPE_LABEL, fileMeta, fmtSize, pickFile, uploadReportBytes, type Picked } from '../features/files';
 import { QUOTE_STATUS, RISK_LABEL, credentialLabel } from '../features/labels';
@@ -143,6 +143,9 @@ function MyProfessionalArea() {
   };
   if (me.loading && me.data === null && !me.error) return <Screen title="Uzman alanı" titleEn="Professional"><Loading /></Screen>;
 
+  // B-08: a failed load is not "no profile": show the error with a retry instead of the create form.
+  if (me.error && me.data === null) return <Screen title="Uzman alanı" titleEn="Professional"><ErrorBox message={me.error} onRetry={() => { void me.reload(); }} /></Screen>;
+
   if (!me.data) {
     return (
       <Screen title="Uzman alanı" titleEn="Professional">
@@ -151,7 +154,7 @@ function MyProfessionalArea() {
         <Field label="Kısa tanım" value={form.headline} onChangeText={v => setForm(f => ({ ...f, headline: v }))} placeholder="ör. Soğutma teknisyeni" />
         <Field label="Şehir" value={form.city} onChangeText={v => setForm(f => ({ ...f, city: v }))} />
         {error ? <ErrorBox message={error} /> : null}
-        <PrimaryButton testID="pro-create" label="Profili aç" disabled={form.displayName.trim().length < 2}
+        <PrimaryButton testID="pro-create" label="Profili aç" disabled={form.displayName.trim().length < 2} why={shortWhy(form.displayName, 2, 'Görünen ad')}
           onPress={() => act(() => call('POST', '/pro/profile', { kind: 'individual', displayName: form.displayName.trim(), headline: form.headline, city: form.city, bio: '' }), 'Profil açıldı')} />
       </Screen>
     );
@@ -255,7 +258,7 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
           <Field label="Garanti" testID="q-war" value={f.warrantyText} onChangeText={set('warrantyText')} />
           <Field label="Teslim edilecek çıktı" testID="q-deliv" value={f.deliverable} onChangeText={set('deliverable')} placeholder="ör. Servis raporu, öncesi/sonrası sıcaklık ölçümü" />
           {error ? <ErrorBox message={error} /> : null}
-          <PrimaryButton testID="quote-submit" label="Teklifi gönder (3 gün geçerli)" height={46} size={13} disabled={f.deliverable.trim().length < 3}
+          <PrimaryButton testID="quote-submit" label="Teklifi gönder (3 gün geçerli)" height={46} size={13} disabled={f.deliverable.trim().length < 3} why={shortWhy(f.deliverable, 3, 'Teslim edilecek çıktı')}
             onPress={async () => {
               setError(null);
               try {
@@ -320,13 +323,14 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
   return (
     <View testID={`pro-job-${j.id}`}><Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
       {j.status === 'scheduled' ? <AppointmentCard provider jobId={j.id} editable /> : null}
+      <ComplaintCard provider jobId={j.id} />
       <Text style={type(14.5, 600)}>{j.title}</Text>
       <Text style={type(12, 400, { color: C.t2 })}>{j.company_name} · {j.site_name}</Text>
       <Text testID="pro-job-status" style={type(12, 600, { color: j.status === 'accepted' ? C.lime : C.warn })}>{({ scheduled: 'Planlandı', checked_in: 'Giriş yapıldı', report_submitted: 'Rapor gönderildi, teslim kabulü bekleniyor', accepted: 'İşletme teslim kabul etti', disputed: 'İşletme itiraz etti', revision_requested: 'İşletme revizyon istedi: yeni rapor gönder', cancelled: 'İşletme işi iptal etti' } as Record<string, string>)[j.status] ?? j.status}</Text>
       {j.status === 'scheduled' ? (
         <>
           <Field label="İşletmenin gösterdiği giriş kodu" testID="pro-code" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={8} />
-          <GhostButton testID="pro-checkin" label="Giriş yap" disabled={code.length !== 8} onPress={() => run(() => call('POST', `/pro/jobs/${j.id}/check-in`, { code }))} />
+          <GhostButton testID="pro-checkin" label="Giriş yap" disabled={code.length !== 8} why={`Giriş kodu 8 haneli olmalı (şu an ${code.length}).`} onPress={() => run(() => call('POST', `/pro/jobs/${j.id}/check-in`, { code }))} />
           <Text style={type(11, 400, { color: C.t3 })}>Giriş yalnızca yerinde bulunduğunu kaydeder; işin yapıldığını kanıtlamaz.</Text>
         </>
       ) : null}
@@ -335,7 +339,7 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
           <Field label={j.status === 'revision_requested' ? 'Revize hizmet raporu (önceki sürüm saklanır)' : 'Hizmet raporu'} testID="pro-report" value={report} onChangeText={setReport} multiline placeholder="Ne yapıldı, hangi ölçümler alındı, hangi parçalar kullanıldı?" />
           <GhostButton testID="pro-report-file" label={file ? `Seçildi: ${file.name} · ${TYPE_LABEL[file.mime] ?? file.mime} · ${fmtSize(file.bytes.length)}` : 'Rapor dosyası ekle (PDF/JPEG/PNG)'} height={38} size={12} style={{ alignSelf: 'flex-start' }} onPress={pickReport} />
           <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Dosya işletmenin belge kasasına İnceleme bekliyor olarak düşer; işletme teslimi kabul etse bile dosyayı ayrıca inceler.</Text>
-          <GhostButton testID="pro-report-submit" label={pending ? 'Dosyayı yeniden yükle' : 'Raporu gönder'} disabled={!pending && report.trim().length < 20} onPress={sendReport} />
+          <GhostButton testID="pro-report-submit" label={pending ? 'Dosyayı yeniden yükle' : 'Raporu gönder'} disabled={!pending && report.trim().length < 20} why={pending ? undefined : shortWhy(report, 20, 'Rapor metni')} onPress={sendReport} />
         </>
       ) : null}
       {j.business_note ? <Text style={type(12, 400, { color: C.t2 })}>İşletmenin notu: {j.business_note}</Text> : null}
