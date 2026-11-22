@@ -11,6 +11,7 @@ type Node = { kind: string; result: 'true' | 'false' | 'unknown'; children?: Nod
 /** What a yes/no answer means, said back to the person. A fact without an entry falls back to "label: value". */
 const STATEMENT: Record<string, { yes: string; no: string }> = {
   'activity.food_preparation': { yes: 'Bu şubede yemek veya içecek hazırladığınızı belirttiniz.', no: 'Bu şubede yemek veya içecek hazırlamadığınızı belirttiniz.' },
+  'activity.food_business': { yes: 'Faaliyetiniz gıda ürünü hazırlama veya satışı olarak kayıtlı.', no: 'Faaliyetiniz gıda ürünü hazırlama veya satışı değil.' },
   'storage.cold': { yes: 'Bu şubede soğukta saklanan ürün olduğunu belirttiniz.', no: 'Bu şubede soğukta saklanan ürün olmadığını belirttiniz.' },
   'utility.lpg': { yes: 'Bu şubede LPG / tüp gaz kullandığınızı belirttiniz.', no: 'Bu şubede LPG / tüp gaz kullanmadığınızı belirttiniz.' },
   'service.delivery': { yes: 'Bu şubede paket servis yaptığınızı belirttiniz.', no: 'Bu şubede paket servis yapmadığınızı belirttiniz.' },

@@ -12,6 +12,8 @@ import { relatedCourses } from './training';
 import { randomUUID } from 'node:crypto';
 import { assignmentHistory, recordAssignments } from './task-assignment';
 import { createFromTask } from './nonconformities';
+import { FACTS } from '../domain/facts';
+import { currentFacts } from './profile';
 import { currentObligations, recomputeSite } from './obligations';
 
 /** Device clocks may drift a little; anything further in the future is rejected. */
@@ -534,4 +536,59 @@ async function ruleVersionStatus(tx: Tx, obligationId: string) {
   const r = (await tx.query<{ status: string; status_reason: string | null; status_changed_at: string | null }>(
     `SELECT rv.status, rv.status_reason, rv.status_changed_at FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id WHERE o.id = $1`, [obligationId])).rows[0];
   return { status: r?.status ?? null, statusReason: r?.status_reason ?? null, statusChangedAt: r?.status_changed_at ?? null };
+}
+
+const EQUIP_TR: Record<string, { name: string; why: string }> = {
+  refrigerator: { name: 'Dolap', why: 'Soğuk ürün satışı için ekipman bilgisi eksik' },
+  freezer: { name: 'Derin dondurucu', why: 'Dondurulmuş ürün saklama için ekipman bilgisi eksik' },
+};
+
+export type Gap = { kind: 'equipment' | 'question' | 'conflict'; siteId: string; siteName: string; ruleCode: string; obligation: string; message: string; missing: string[];
+  equipmentType?: string; action: { kind: 'add_equipment' | 'answer_question'; label: string; equipmentType?: string; factKey?: string; siteId: string } };
+
+/**
+ * What stops an obligation from becoming work, said to the person with the direct action, so a new business is never left with "zero tasks, no explanation":
+ *  - equipment: the obligation applies but the site has no equipment of the type the check is made on ("Dolap ekle");
+ *  - question: the answer that decides applicability is missing (an unanswered question is asked, never read as "no");
+ *  - conflict: the answers disagree with what is registered (said "no cold storage" but a fridge is registered at a food site).
+ */
+export async function equipmentGaps(tx: Tx, companyId: string, siteIds: string[]): Promise<Gap[]> {
+  const out: Gap[] = [];
+  for (const siteId of siteIds) {
+    const site = (await tx.query<{ name: string }>(`SELECT name FROM sites WHERE id = $1 AND company_id = $2`, [siteId, companyId])).rows[0];
+    if (!site) continue;
+    const facts = await currentFacts(tx, companyId, siteId);
+    for (const o of await currentObligations(tx, companyId, siteId)) {
+      const meta = (await tx.query(`SELECT obligation_title, (SELECT code FROM rules WHERE id = rule_id) AS code FROM rule_versions WHERE id = $1`, [o.rule_version_id])).rows[0];
+      if (o.decision === 'needs_info') {
+        for (const key of (o.missing_facts as string[]) ?? []) {
+          const label = (FACTS as Record<string, { label: string }>)[key]?.label ?? key;
+          out.push({ kind: 'question', siteId, siteName: site.name, ruleCode: meta.code, obligation: meta.obligation_title, missing: [key],
+            message: `"${meta.obligation_title}" bu şubeye uygulanıp uygulanmadığını belirlemek için bir bilgi eksik: ${label}. Yanıtlanmayan soru "hayır" sayılmaz.`,
+            action: { kind: 'answer_question', label: `${label} sorusunu yanıtla`, factKey: key, siteId } });
+        }
+        continue;
+      }
+      if (o.decision !== 'applies') continue;
+      const templates = (await tx.query(`SELECT recurrence FROM task_templates WHERE rule_version_id = $1`, [o.rule_version_id])).rows;
+      for (const t of templates) {
+        const type = (t.recurrence as { perEquipmentType?: string }).perEquipmentType;
+        if (!type) continue;
+        const have = (await tx.query(`SELECT 1 FROM equipment WHERE company_id = $1 AND site_id = $2 AND type = $3 AND active LIMIT 1`, [companyId, siteId, type])).rowCount;
+        if (have || out.some(g => g.kind === 'equipment' && g.siteId === siteId && g.equipmentType === type)) continue;
+        const tr = EQUIP_TR[type] ?? { name: type, why: 'Ekipman bilgisi eksik' };
+        out.push({ kind: 'equipment', siteId, siteName: site.name, ruleCode: meta.code, obligation: meta.obligation_title, equipmentType: type, missing: [`equipment:${type}`],
+          message: `${tr.why}: "${meta.obligation_title}" bu şubeye uygulanıyor, ama kayıtlı ${tr.name.toLowerCase()} yok; kayıt eklenince görev oluşur.`,
+          action: { kind: 'add_equipment', label: `${tr.name} ekle`, equipmentType: type, siteId } });
+      }
+    }
+    // Conflict: stated "no cold storage" at a food business while a refrigerator is registered there.
+    if (facts['activity.food_business']?.value === true && facts['storage.cold']?.value === false
+        && (await tx.query(`SELECT 1 FROM equipment WHERE company_id = $1 AND site_id = $2 AND type IN ('refrigerator','freezer') AND active LIMIT 1`, [companyId, siteId])).rowCount) {
+      out.push({ kind: 'conflict', siteId, siteName: site.name, ruleCode: 'EX-COLD-CHAIN', obligation: 'Soğuk muhafaza sıcaklık kaydı', missing: ['storage.cold'],
+        message: 'Soğukta ürün saklamadığını belirttin ama bu şubede dolap kayıtlı. Hangisi doğru? Dolap yalnız personel içinse yanıtın kalabilir; ürün saklıyorsa "Soğuk depolama" yanıtını değiştir.',
+        action: { kind: 'answer_question', label: 'Soğuk depolama yanıtını gözden geçir', factKey: 'storage.cold', siteId } });
+    }
+  }
+  return out;
 }

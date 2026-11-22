@@ -10,7 +10,7 @@ import { canonical, sha256 } from '../domain/hashchain';
 import { can, type Principal } from '../domain/permissions';
 import { verifyCompanyChain } from '../services/audit';
 import { readContent, uploadContent } from '../services/evidence';
-import { addSite, board, relate } from '../services/board';
+import { addSite, board, gapsFor, relate } from '../services/board';
 import { bulkAssignApply, bulkAssignPreview } from '../services/bulk-assign';
 import * as depth from '../services/market-depth';
 import * as qr from '../services/qr';
@@ -35,6 +35,7 @@ import { loadPrincipal } from '../services/principal';
 import * as mk from '../services/marketplace';
 import * as sops from '../services/service-ops';
 import * as pdec from '../services/product-decisions';
+import { fieldIssues, invalidMessage } from './zod-tr';
 import * as docs from '../services/documents';
 import * as verifiers from '../services/verifiers';
 import * as training from '../services/training';
@@ -122,7 +123,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
 
   app.setErrorHandler((err: any, _req, reply) => {
     if (err instanceof AppError) return reply.code(err.status).send({ error: { code: err.code, message: err.message, details: err.details } });
-    if (err instanceof z.ZodError) return reply.code(422).send({ error: { code: 'INVALID', message: 'İstek alanları geçersiz.', details: err.issues } });
+    if (err instanceof z.ZodError) { const fields = fieldIssues(err); return reply.code(422).send({ error: { code: 'INVALID', message: invalidMessage(fields), details: fields } }); }
     if (err.code === '23505') return reply.code(409).send({ error: { code: 'DUPLICATE', message: 'Bu kayıt zaten var.' } });
     if (err.code === 'P0001') return reply.code(409).send({ error: { code: 'INTEGRITY_GUARD', message: 'Kayıt koruması bu değişikliğe izin vermiyor.', details: err.message } });
     if (err.code === '42501') return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Kayıt bulunamadı.' } });
@@ -629,6 +630,11 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const b = z.object({ key: z.string().max(60), decision: z.enum(['dismissed', 'restored']), reason: z.string().max(1000), replacement: z.string().max(500).nullable().default(null) }).parse(req.body);
     return mutate(req, reply, companyId, tx => decideSuggestion(tx, req.principal, companyId, id, b));
   });
+  app.get('/companies/:companyId/gaps', async req => {
+    const companyId = company(req);
+    const q = z.object({ siteId: uuid.optional() }).parse(req.query);
+    return db.tenant(companyId, tx => gapsFor(tx, req.principal, companyId, q.siteId));
+  });
   app.get('/companies/:companyId/board', async req => {
     const companyId = company(req);
     const q = z.object({ siteId: uuid.optional(), from: z.iso.datetime({ offset: true }).optional(), to: z.iso.datetime({ offset: true }).optional(),
@@ -723,6 +729,12 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     const { id, aid } = z.object({ id: uuid, aid: uuid }).parse(req.params);
     const b = z.object({ decision: z.enum(pdec.PRODUCT_DECISIONS), rationale: z.string().max(4000), evidenceIds: z.array(uuid).max(10).default([]) }).parse(req.body);
     return mutate(req, reply, companyId, tx => pdec.decideAssessment(tx, req.principal, companyId, id, aid, b));
+  });
+  app.post('/companies/:companyId/nonconformities/:id/product-assessments/:aid/correction', async (req, reply) => {
+    const companyId = company(req);
+    const { id, aid } = z.object({ id: uuid, aid: uuid }).parse(req.params);
+    const b = z.object({ decision: z.enum(pdec.PRODUCT_DECISIONS), rationale: z.string().max(4000), reason: z.string().max(2000), evidenceIds: z.array(uuid).max(10).default([]) }).parse(req.body);
+    return mutate(req, reply, companyId, tx => pdec.correctDecision(tx, req.principal, companyId, id, aid, b));
   });
   // ── Outside verifiers (limited, time-boxed, revocable) and what is waiting for verification ──
   app.get('/companies/:companyId/verifiers', async req => {

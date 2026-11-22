@@ -44,6 +44,8 @@ export function normalizeNace(raw: string): string | null {
   return `${digits.slice(0, 2)}.${digits.slice(2, 4)}`;
 }
 
+/** A class that opens the food questions deals with food product (prepares or sells it), whether or not it prepares food itself. */
+export const dealsWithFood = (e: NaceEntry) => (e.groups ?? []).includes('food');
 export const lookupNace = (code: string) => NACE.find(n => n.code === code) ?? null;
 
 const fold = (s: string) => s.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ı/g, 'i');

@@ -260,9 +260,9 @@ export async function previewImpact(tx: Tx, p: Principal, id: string) {
 
 /** Synthetic business profiles used to preview a draft before publishing. Not real businesses. */
 export const SAMPLE_PROFILES: { key: string; label: string; facts: Record<string, unknown>; equipment: string[] }[] = [
-  { key: 'cafe_cold', label: 'Kafe · soğuk depo var · LPG yok', facts: { 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 6, 'site.province': 'İstanbul' }, equipment: ['refrigerator', 'thermometer'] },
-  { key: 'restaurant_lpg', label: 'Lokanta · soğuk depo ve LPG var · paket servis', facts: { 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': true, 'service.delivery': true, 'staff.count': 14, 'site.province': 'Ankara' }, equipment: ['refrigerator', 'freezer', 'thermometer'] },
-  { key: 'kiosk', label: 'Büfe · hazırlama yok · soğutucu yok', facts: { 'activity.food_preparation': false, 'storage.cold': false, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 2, 'site.province': 'İzmir' }, equipment: [] },
+  { key: 'cafe_cold', label: 'Kafe · soğuk depo var · LPG yok', facts: { 'activity.food_business': true, 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 6, 'site.province': 'İstanbul' }, equipment: ['refrigerator', 'thermometer'] },
+  { key: 'restaurant_lpg', label: 'Lokanta · soğuk depo ve LPG var · paket servis', facts: { 'activity.food_business': true, 'activity.food_preparation': true, 'storage.cold': true, 'utility.lpg': true, 'service.delivery': true, 'staff.count': 14, 'site.province': 'Ankara' }, equipment: ['refrigerator', 'freezer', 'thermometer'] },
+  { key: 'kiosk', label: 'Büfe · hazırlama yok · soğutucu yok', facts: { 'activity.food_business': true, 'activity.food_preparation': false, 'storage.cold': false, 'utility.lpg': false, 'service.delivery': false, 'staff.count': 2, 'site.province': 'İzmir' }, equipment: [] },
   { key: 'unknown', label: 'Yeni işletme · profil eksik', facts: { 'activity.food_preparation': true }, equipment: [] },
 ];
 

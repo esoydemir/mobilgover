@@ -160,6 +160,42 @@ export async function ensureReportRules(db: Db) {
   });
 }
 
+/**
+ * Scope revision of the example cold-chain checks (v2). v1 applied only where food is prepared AND cold storage is kept, which left out a market that
+ * only sells chilled dairy. v2 applies to food businesses (prepare or sell food product) that keep product cold. This is a NEW rule version that goes
+ * through the normal draft, area review, approval and publish flow; the published v1 is never edited, tasks already done stay bound to v1.
+ * Limits stay EXAMPLE. Deployed databases receive it once through ensureFoodScopeRevision (seed/run.ts).
+ */
+const FOOD_SCOPE = { all: [{ fact: 'activity.food_business', op: 'eq', value: true }, { fact: 'storage.cold', op: 'eq', value: true }] };
+export const EXAMPLE_RULE_REVISIONS: { code: string; reason: string; apply: (v1: Omit<DraftInput, 'provisionIds'>) => Omit<DraftInput, 'provisionIds'> }[] = ['EX-COLD-CHAIN', 'EX-REPORT-DOC', 'EX-REPORT-MEAS'].map(code => ({
+  code, reason: 'Kapsam düzeltmesi: yalnız yemek hazırlayanlar değil, soğukta ürün saklayan gıda işletmeleri (ör. soğuk ürün satan market) de kapsanır.',
+  apply: v1 => ({ ...v1, condition: FOOD_SCOPE, changeReason: 'Kapsam düzeltmesi (v2): gıda faaliyeti + soğukta saklama; yemek hazırlama şartı kalktı. ÖRNEK kural.' }),
+}));
+
+/** Moves the example cold-chain checks from v1 to the scope revision through the normal review and publish flow, once. */
+export async function ensureFoodScopeRevision(db: Db) {
+  return db.system(async tx => {
+    const who = async (role: string, not?: string) => (await tx.query<{ user_id: string }>(
+      `SELECT user_id FROM platform_roles WHERE role = $1 AND ($2::uuid IS NULL OR user_id <> $2) ORDER BY user_id LIMIT 1`, [role, not ?? null])).rows[0]?.user_id;
+    const author = await who('rule_author'), reviewer = author ? await who('rule_reviewer', author) : undefined, admin = await who('platform_admin');
+    const specialist = (await tx.query<{ user_id: string }>(`SELECT user_id FROM reviewer_areas WHERE area = 'food_safety' LIMIT 1`)).rows[0]?.user_id;
+    if (!author || !reviewer || !admin) return [] as { code: string; from: number; to: number }[];
+    const moved: { code: string; from: number; to: number }[] = [];
+    for (const rev of EXAMPLE_RULE_REVISIONS) {
+      const cur = (await tx.query(`SELECT rv.version, rv.condition FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE r.code = $1 AND rv.status = 'published'`, [rev.code])).rows[0];
+      if (!cur || JSON.stringify(cur.condition) === JSON.stringify(FOOD_SCOPE)) continue;
+      const v1 = [...EXAMPLE_RULES, ...EXAMPLE_REPORT_RULES].find(r => r.code === rev.code)!;
+      const d = await createDraft(tx, principal(author, { platformRoles: ['rule_author'] }), { ...rev.apply(v1), changeReason: rev.apply(v1).changeReason, provisionIds: [] });
+      await submitForReview(tx, principal(author, { platformRoles: ['rule_author'] }), d.id);
+      for (const area of v1.requiredReviewAreas ?? []) if (specialist) await areaReview(tx, principal(specialist, { platformRoles: ['rule_reviewer'] }), d.id, area, 'approved', 'Kapsam düzeltmesi incelendi (ÖRNEK kural).');
+      await approve(tx, principal(reviewer, { platformRoles: ['rule_reviewer'] }), d.id, rev.reason);
+      await publish(tx, principal(admin, { platformRoles: ['platform_admin'] }), d.id, { allowExampleRules: true, reason: rev.reason });
+      moved.push({ code: rev.code, from: cur.version, to: d.version });
+    }
+    return moved;
+  });
+}
+
 export type DemoSeed = {
   companyId: string; siteId: string;
   users: Record<'author' | 'reviewer' | 'admin' | 'owner' | 'manager' | 'staff' | 'expert', { id: string; token: string }>;
@@ -240,7 +276,7 @@ export async function seedDemoCompany(db: Db, opts: { name?: string; isDemo?: bo
   // Owner declares the profile; staff count is left unanswered on purpose (shows "needs info").
   const ownerP = principal(owner.id, { memberships: [{ companyId: ids.companyId, siteId: null, role: 'owner' }] });
   await db.tenant(ids.companyId, async tx => {
-    for (const [key, value] of [['activity.food_preparation', true], ['storage.cold', true], ['utility.lpg', true], ['site.province', 'İstanbul']] as const) {
+    for (const [key, value] of [['activity.food_preparation', true], ['activity.food_business', true], ['storage.cold', true], ['utility.lpg', true], ['site.province', 'İstanbul']] as const) {
       await recordFact(tx, ownerP, ids.companyId, { siteId: ids.siteId, key, value, source: 'user_declared', verification: 'user_confirmed' });
     }
     await recomputeSite(tx, ids.companyId, ids.siteId, owner.id);

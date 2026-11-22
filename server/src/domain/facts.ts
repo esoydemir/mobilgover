@@ -16,6 +16,7 @@ export type FactDef = {
 
 export const FACTS = {
   'activity.food_preparation': { type: 'boolean', label: 'Yemek / içecek hazırlama', critical: true, level: 'site' },
+  'activity.food_business': { type: 'boolean', label: 'Gıda ürünü hazırlayan / satan faaliyet', critical: true, level: 'site' },
   'activity.nace_codes': { type: 'string[]', label: 'Faaliyet (NACE) kodları', critical: true, level: 'company' },
   'site.province': { type: 'string', label: 'İl', critical: true, level: 'site' },
   'site.district': { type: 'string', label: 'İlçe', critical: false, level: 'site' },
