@@ -186,6 +186,9 @@ export const EXAMPLE_RULE_REVISIONS: { code: string; reason: string; apply: (v1:
 }));
 
 /** Moves the example cold-chain checks from v1 to the scope revision through the normal review and publish flow, once. */
+/** Key order is not meaningful in jsonb; compare conditions by content so a restart never publishes the same scope again. */
+const canon = (v: unknown): string => Array.isArray(v) ? `[${v.map(canon).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`).join(',')}}` : JSON.stringify(v);
+
 export async function ensureFoodScopeRevision(db: Db) {
   return db.system(async tx => {
     const who = async (role: string, not?: string) => (await tx.query<{ user_id: string }>(
@@ -196,7 +199,7 @@ export async function ensureFoodScopeRevision(db: Db) {
     const moved: { code: string; from: number; to: number }[] = [];
     for (const rev of EXAMPLE_RULE_REVISIONS) {
       const cur = (await tx.query(`SELECT rv.version, rv.condition FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE r.code = $1 AND rv.status = 'published'`, [rev.code])).rows[0];
-      if (!cur || JSON.stringify(cur.condition) === JSON.stringify(FOOD_SCOPE)) continue;
+      if (!cur || canon(cur.condition) === canon(FOOD_SCOPE)) continue;
       const v1 = [...EXAMPLE_RULES, ...EXAMPLE_REPORT_RULES].find(r => r.code === rev.code)!;
       const d = await createDraft(tx, principal(author, { platformRoles: ['rule_author'] }), { ...rev.apply(v1), changeReason: rev.apply(v1).changeReason, provisionIds: [] });
       await submitForReview(tx, principal(author, { platformRoles: ['rule_author'] }), d.id);

@@ -47,4 +47,10 @@ describe('GH-10 emlak ofisi: kendi görevi', () => {
     const n = (await env.ownerDb.query(`SELECT count(*)::int AS n FROM tasks WHERE site_id = $1`, [r.body.siteId])).rows[0].n;
     expect(n).toBe(0);
   });
+  it('kapsam sürümü yeniden başlatmada tekrar yayımlanmaz (idempotent)', async () => {
+    const ver = async () => (await env.ownerDb.query(`SELECT max(rv.version)::int AS v FROM rule_versions rv JOIN rules r ON r.id = rv.rule_id WHERE r.code = 'EX-COLD-CHAIN'`)).rows[0].v as number;
+    const before = await ver();
+    expect(await ensureFoodScopeRevision(env.db)).toEqual([]);
+    expect(await ver()).toBe(before);
+  });
 });
