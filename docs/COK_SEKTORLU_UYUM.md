@@ -185,7 +185,71 @@ Açık (bu dilimde yapılmadı):
 
 **Alan hatası mesajları (B-10), eksik koşul ipuçları (B-03), dış doğrulayıcı sayfaları (B-05/B-07), uzman alanı (B-08), 320 px (B-12), QR (B-14), İngilizce alt başlık (B-16)** izole turda ekrandan doğrulandı; kanıt `docs/kanit-f1-tur-market/`.
 
-**Açık:** B-01 pilot giriş sayfası, B-02, mevzuat masası ekran turu, emlak için belge/hizmet ihtiyacı (yalnız görev var), gerçek hukuki karar ayrımı, v1→v2 tarayıcı gösterimi, push/PR/CI.
+(Bu bölümün "açık" listesi On birinci dilimde kapatıldı veya yeniden yazıldı.)
+
+## On birinci dilim — kapanış tablosu (22 Kasım)
+
+**Üç cümle.** Market sahibi uygulamayı açınca "Soğuk ürün satışı için ekipman bilgisi eksik" uyarısını ve "Dolap ekle"yi görür; dolabı oradan kaydedince soğuk ürün kontrolü görevi doğar, yönetici atar, çalışan kendi hesabında kanıtla tamamlar. Elektrikçi yalnız satış yaparken montaj görevi görmez; sahada montajı profiline ekleyince topraklama ölçümü görevi doğar ve çalışan kendi hesabında kontrol listesi ile fotoğrafla tamamlar. Emlakçı kendi "sözleşme ve yetki belgesi dosyası kontrolü" görevini ve neden çıktığını okur, belgeyi kasadan göreve bağlar ve çalışan tamamlar; personel buzdolabı gıda görevi üretmez. (Tüm kurallar ÖRNEKTİR.)
+
+**Ortamlar ve commit'ler.** 8099 (API 3077, veritabanı `gh_tour3`): elektrik ve emlak ekran turları. 8100 (API 3078, `gh_leg`, `server/scripts/synthetic-legislation-env.ts`): mevzuat masası, B-02, B-03, B-01 geçit gösterimi; kaynak SENTETİK (`sentetik.test`). Market turu önceki `gh_tour` veritabanındadır. 8091 ve 8094 bu işle **güncellenmedi**; 8091 `/api/env` cevabı `mode: demo` olduğu için pilot sayılmaz. Hiçbir ortama dağıtım yapılmadı.
+
+**Altı senaryo** (bu belgede böyle tanımlandı):
+
+| # | Senaryo | Kullanıcı ne yapabiliyor | Ortam · kanıt |
+|---|---|---|---|
+| 1 | Küçük market (yemek yok, soğuk ürün var) | Ana ekranda eksik ekipman uyarısı → "Dolap ekle" → görev 0→1, aynı cevap tekrar 1, diğer şubede 0; yönetici atar, çalışan tamamlar | 8099 `gh_tour` (önceki tur) · `kanit-f1-tur-market/00…43`, `gh07d-market-flow.test.ts` 11/11 |
+| 2 | Çok şubeli zincir | B şubesine soğuk depo eklenince yalnız B'de yeni görev; A aynı | `multi-sector-flow.test.ts` (sunucu); ekran: market turunda ikinci şube (Depo B) |
+| 3 | Elektrik dükkânı | Satışta montaj görevi yok; montaj "Evet" → görev; aynı cevap tekrar 1; çalışan tamamlar (kural v1) | 8099 `gh_tour3` · `kanit-f1-tur-market/50…59` |
+| 4 | Emlak ofisi | Kendi dosya kontrolü görevi, gerekçe okunur, belge kasasından göreve bağlı belge açılır, çalışan tamamlar; personel dolabı gıda görevi üretmez; aynı cevap tekrar 1 | 8099 `gh_tour3` · `kanit-f1-tur-market/60…70`, `gh10-estate-office.test.ts` |
+| 5 | Mevzuat masası v1→v2 (SENTETİK) | Sentetik yayın kuyruğa düşer; onaydan önce görev/bildirim/yükümlülük etkisi **sıfır**; onay sonrası yalnız eşleşen şube (Kadıköy Moda) v2 görevi ve bildirimi alır, LPG kullanmayan şube almaz; v1'de tamamlanan görev v1 dayanağını açar | 8100 `gh_leg` · `kanit-f1-mevzuat/01…12`; kayıtlar aşağıda |
+| 6 | Kapanmış vaka, ürün kararı düzeltme | Eski karar, gerekçe, karar sahibi görünür; kapalı vaka bir kez yeniden açılır | `kanit-f1-tur-market`, `gh07c-decision-correction.test.ts` 3/3 |
+
+**Senaryo 5 kayıt kimlikleri** (8100): değişiklik `0027bae1-9051-4238-9add-b1a2d4f26be4` (`pending` → `applied`); denetim zinciri `legislation.detected > proposal_saved > drafted > approved > rule.published > applied > applied_to_company`. EX-LPG-CHECK: v1 `retired`, v2 `published`. Görev `956ac5d2-4a81-4141-bd1d-d66da7a8f035` (Kadıköy Moda, **done**, şablon kural sürümü **v1**); görev `b1ba74aa-f862-428c-bee2-8869d4c9b332` (Kadıköy Moda, open, 01/01, kural sürümü **v2**). Onaydan önce (alan incelemesi tamam, onay yok): görev 80, bildirim 0, yükümlülük 24, LPG görevi A 1 / B 0; onaydan sonra: görev 80 (sabit), bildirim 2 (yalnız Kadıköy Moda), yükümlülük 25, B 0. v1 görevinde "Yanıtı ve kaynağı aç" → "Bu, geçmişte verilmiş bir karar. Şu an geçerli olan karar farklı. Güncel kararı aç." (v1 dayanağı hâlâ açılıyor).
+
+**Belgelenmiş zaman kaydırması (tek).** v2'nin ilk görevi bir sonraki dönemde (01/01) üretildiği için saatlik üretim fonksiyonu (`topUpAllSites`) 45 günlük pencereyle çalıştırıldı (`server/scripts/topup-window.ts`); başka hiçbir kayıt elle eklenmedi. Onaylayıcı `onay@` (rule_reviewer), alan uzmanı `alan-uzmani@`, yazar `yazar@`, tarama `yonetici@` (platform_admin).
+
+**Gerçek hukuki kararlardan ayrım.** Sentetik kaynaktan gelen kayıt `is_example = true`; "sentetik kaynak asla gerçek kurala dönüşmez" testi (`legislation-watch.test.ts`) ve ekranda "ÖRNEK — GERÇEK MEVZUAT DEĞİLDİR" etiketi var. Gerçek hukuki karar için hiçbir kayıt üretilmedi.
+
+**GH maddeleri**
+
+| Madde | Kodlandı | Sunucuda doğrulandı | Ekranda doğrulandı | Pilota dağıtıldı |
+|---|---|---|---|---|
+| GH-01 soru grupları (food, installation, brokerage) | evet | `multi-sector-flow`, `gh10-estate-office` | market, elektrik, emlak turları | hayır |
+| GH-02 açıklanabilir yükümlülük | evet | `explainable-obligation` 8/8 | görev "neden" kartı (elektrik, emlak), v1 dayanak ekranı | hayır |
+| GH-03 mevzuat masası | evet | `legislation-watch` | senaryo 5 (sentetik, 8100) | hayır |
+| GH-04 görev/bildirim | evet | `task-notifications` 12/12 | atama + çalışan görünümü (market, elektrik, emlak) | hayır |
+| GH-05 evrak kasası | evet | `documents-reviews`, `document-vault-dates` | emlak: belge oluştur, göreve bağla, görevden aç | hayır |
+| GH-06 GoverUp | evet | `gh06-goverup` | servis talebi → teklif → teslim kabul akışının son adımı (B-03 turu) | hayır |
+| GH-07 ürün kararı (a–d) | evet | `gh07*` | ProductCard, düzeltme, geçmiş (market turu) | hayır |
+
+**B maddeleri**
+
+| Madde | Kullanıcı ne yapabiliyor | Ekran kanıtı |
+|---|---|---|
+| B-01 | Pilotta demo kutusu yok. **8091 `mode: demo` olduğu için pilot sayılmaz**; salt okunur kontrolde ilk ekranda demo kutusu yok, kod adımına girilmedi (gerçek e-posta gönderir). Geçit koşulu (`mode==='demo' && dev_outbox`) 8100'de `/env` cevabı pilot gibi değiştirilerek (yalnız tarayıcıda) gösterildi: kod adımında düğme ve demo açıklaması yok | `kanit-f1-mevzuat/16, 17`, `b15-roles-b01-login.test.ts` |
+| B-02 | Atama listesi ad + rol gösterir ("Elif (personel)"); adı olmayan kullanıcıda e-posta | `kanit-f1-mevzuat/15` |
+| B-03 | "Teslim kabul et": 4 karakterde düğme kapalı + "(4/5)" ipucu; 5 karakterde açık, teslim kabul edildi. Ürün kararı düzeltme formunda "(şu an 4)" | `kanit-f1-mevzuat/13, 14`, `kanit-f1-tur-market/48` |
+| B-05 | İzin dışı sayfada erişim açıklaması + "Doğrulama kuyruğuma dön" | `kanit-f1-tur-market/47` |
+| B-07 | Dış doğrulayıcı `/team`'de ekip/şube görmez | `kanit-f1-tur-market/47`, `b07-verifier-scope` |
+| B-08 | Uzman hesabı `/profile` ve `/pro` açılır; işletmesiz hesapta açıklama + "Uzman alanını aç" | `kanit-f1-tur-market/45, 46` |
+| B-10 | Taslak hatası Türkçe, alan alan, doldurulan alan korunur | `kanit-f1-tur-market/44`, `b10-field-errors` |
+| B-11 | PDF fazladan boş sayfa yok | `b11-pdf-pages` (ekran yok) |
+| B-12 | 320 px: yatay sığma ve alt boşluk | `kanit-f1-tur-market` (market9 turu) |
+| B-13 | İade / ret / geri çekme | `rule-lifecycle-decisions` (ekran yok) |
+| B-14 | Bozuk QR mesajı + "Yeniden okut" | market9 turu, `b14-qr-bad-code` |
+| B-15 | Platform yöneticisi moderasyon yapamaz | `b15-roles-b01-login` (ekran yok) |
+| B-16 | 10 ekranda İngilizce alt başlık yok | `kanit-f1-tur-market/b-sonuclari-2.json` |
+| B-04, B-06, B-09 | **İşlenmedi:** bu depoda ve oturum notlarında tanımları yok; talimat metni gerekir | — |
+
+**Testler.** CI (93bed55): 576 geçti, 4 atlandı, 72 dosya geçti, 2 dosya atlandı (`assistant-real-model`, `legislation-live-observation`: anahtar/canlı kaynak ister). **`backup-restore.test.ts` CI'da 29/29 geçti, 0 atlandı** (yerelde `pg_dump` olmadığı için atlanır). Önceki "yedek/geri yükleme doğrulanmadı" notları bununla geçersizdir. Son commit'in CI sonucu PR'da.
+
+**Bu turda bulunan ve düzeltilen hatalar.** (1) `ensureFoodScopeRevision` her API açılışında kapsamı yeniden yayımlıyordu (jsonb anahtar sırası); içerikle karşılaştırılıyor, testi `gh10-estate-office.test.ts`. (2) Emlak kuralı elektrikçi/markette "bilgi eksik" görünüyordu ve hiç sorulmayan soruyu bekliyordu; `activity.brokerage` türetilmiş bilgisiyle "uygulanmaz" oldu. (3) `npm run migrate` Windows'ta sessizce hiçbir şey yapmıyordu; `pathToFileURL` ile düzeltildi.
+
+**Açık kalanlar (gizlenmiyor).**
+- **Çözülemeyen sorular:** EX-ELEC-INSTALL ve EX-LPG-CHECK (v1) sektör geçidi olmayan kurallardır; emlakçıda/elektrikçide "PROFİL EKSİK: 3 yükümlülük" satırı kalır ve bir kısmı o işletmeye hiç sorulmayan soruyu bekler. Çözüm yeni sürüm (v2) ve ürün kararı gerektirir; yapılmadı.
+- Emlak için belge dosyası içeriği ve servis ihtiyacı yok: yalnız görev + belge kaydı bağı. Personel (çalışan) bağlı belgeyi görmez (belge okuma yetkisi sahip/yönetici). Belge bağı manueldir (belge sayfasında "Nerede kullanılıyor"); görev ekranı bağlı belge yoksa bunu söyler ve kasaya gönderir.
+- B-04, B-06, B-09 işlenmedi; GH-04'te gerçek dış bildirim kanalı yok; mevzuat masası yalnız sentetik kaynakla sınandı.
+- Üç açık ürün kararı hâlâ öneri olarak bekliyor (benimsenmiş politika yok).
 
 ## Bilinen sınırlar (gizlenmiyor)
 

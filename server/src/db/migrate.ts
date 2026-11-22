@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -29,7 +30,7 @@ export async function migrate(ownerUrl: string, log: (m: string) => void = () =>
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const url = process.env.DATABASE_OWNER_URL;
   if (!url) throw new Error('DATABASE_OWNER_URL is required');
   await migrate(url, console.log);
