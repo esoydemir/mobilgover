@@ -47,7 +47,7 @@ const addDays = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') 
 
 // ───────────── Scanning ─────────────
 
-export type SourceResult = { source: SourceCode; ok: boolean; seen: number; docsRead: number; created: number; errors: string[]; errorKind: string | null; notes: string[] };
+export type SourceResult = { source: SourceCode; ok: boolean; seen: number; /** matched a supported sector */ selected: number; /** a person must classify */ uncertain: number; /** left out, with the reason */ skipped: { title: string; why: string }[]; docsRead: number; /** new candidates put in the approval queue (already known ones are not counted again) */ created: number; errors: string[]; errorKind: string | null; notes: string[] };
 
 async function ensureSources(tx: Tx, cfg: LegislationConfig) {
   for (const [code, base] of [['resmi_gazete', cfg.rgBase], ['mevzuat', cfg.mevzuatBase]] as const) {
@@ -117,12 +117,12 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
            last_error = CASE WHEN $3 THEN NULL ELSE $4 END, last_error_at = CASE WHEN $3 THEN last_error_at ELSE now() END,
            failures_in_row = CASE WHEN $3 THEN 0 ELSE failures_in_row + 1 END WHERE code = $1`,
         [code, out?.seen ?? 0, ok, errors.join(' | ').slice(0, 1500), errorKind, out?.docsRead ?? 0]);
-      results.push({ source: code, ok, seen: out?.seen ?? 0, docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
+      results.push({ source: code, ok, seen: out?.seen ?? 0, selected: out?.selected ?? 0, uncertain: out?.uncertain ?? 0, skipped: (out?.skipped ?? []).slice(0, 50), docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
     }
     const status = results.every(r => r.ok) ? 'ok' : results.some(r => r.ok) ? 'partial' : 'failed';
     await tx.query(`UPDATE legislation_scan_runs SET finished_at = now(), status = $2, results = $3 WHERE id = $1`, [start.runId, status, JSON.stringify(results)]);
     await appendAudit(tx, { companyId: null, actorId: o.actorId ?? null, eventType: 'legislation.scanned', entityType: 'legislation_scan', entityId: start.runId,
-      payload: { trigger: o.trigger, status, results: results.map(r => ({ source: r.source, ok: r.ok, seen: r.seen, docsRead: r.docsRead, created: r.created, errorKind: r.errorKind, errors: r.errors.slice(0, 3) })) } });
+      payload: { trigger: o.trigger, status, results: results.map(r => ({ source: r.source, ok: r.ok, seen: r.seen, selected: r.selected, uncertain: r.uncertain, skipped: r.skipped.length, docsRead: r.docsRead, created: r.created, errorKind: r.errorKind, errors: r.errors.slice(0, 3) })) } });
     return { runId: start.runId, status, results };
   });
 }
@@ -197,7 +197,8 @@ export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string
   const q: ChangeFilter = typeof f === 'string' ? { status: f } : f;
   const rows = (await tx.query(
     `SELECT c.id, c.source_code, c.change_type, c.scope_area, c.doc_ref, c.doc_title, c.article_ref, c.published_on, c.effective_from, c.date_status, c.status, c.is_example, c.apply_on, c.detected_at,
-            c.rule_version_id, (c.proposal IS NOT NULL) AS has_proposal, c.drafted_by, c.approved_by, c.rejected_by
+            c.rule_version_id, (c.proposal IS NOT NULL) AS has_proposal, c.drafted_by, c.approved_by, c.rejected_by,
+            c.suggestion->>'matchLevel' AS match_level, c.suggestion->'sectors' AS sectors
        FROM legislation_changes c
       WHERE ($1::text IS NULL OR c.status = $1)
         AND ($2::text IS NULL OR c.source_code = $2)

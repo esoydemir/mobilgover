@@ -140,12 +140,33 @@ export function parseEffective(clauses: string[], publishedOn: string | null): E
   return { status: 'unclear', date: null, note: `Yürürlük tarihi tek ve açık değil: ${joined.slice(0, 240)}` };
 }
 
-// ── Relevance (first scope: food safety for cafés and restaurants) ──
-const FOOD_TERMS = /gıda|hijyen|lokanta|restoran|kafe\b|yiyecek|i[çc]ecek|alerjen|soğuk zincir|bozulabilir|umumi hıfzıssıhha|yeme[\s-]*i[çc]me|tüketime sunulan|gıda i[şs]letme/i;
+// ── Relevance: which supported sector a publication may concern ──
+// Supported sectors: food service (café/restaurant/market), electrical installation, real-estate office. A title with a CLEAR sector
+// term is a candidate; a title with only a general term (workplace, building, consumer, contract…) is UNCERTAIN and goes to a person
+// (never silently dropped, never silently accepted); a title with neither is out of scope. Matching is on the title, so the reason
+// is always shown with the words it rests on. Nothing here decides a rule: a person reads and decides.
+export type Sector = 'food' | 'electrical' | 'estate';
+export const SECTOR_TR: Record<Sector, string> = { food: 'gıda güvenliği', electrical: 'Elektrik tesisatı', estate: 'Emlak ofisi' };
+const SECTOR_TERMS: Record<Sector, RegExp> = {
+  food: /gıda|hijyen|lokanta|restoran|kafe|yiyecek|i[çc]ecek|alerjen|soğuk zincir|bozulabilir|umumi hıfzıssıhha|yeme[\s-]*i[çc]me|tüketime sunulan|gıda i[şs]letme/i,
+  electrical: /elektrik|topraklama|kuvvetli akım|zayıf akım|yıldırım|paratoner|a[şs]ırı akım|elektrik tesis|[iİ]ç tesisat|ayd[ıi]nlatma tesis|pano|kaçak akım/i,
+  estate: /emlak|gayrimenkul|ta[şs][ıi]nmaz|konut sat|kira(?:lama|c[ıi])|tapu|komisyoncu|aracılık hizmet|yetki belgesi|ta[şs][ıi]nmaz ticaret/i,
+};
+const GENERAL_TERMS = /i[şs]yeri|i[şs] sağlığı|yapı|bina|tüketici|ticari|ticaret|sözleşme|mesleki|esnaf|enerji|tesis|belgelendirme|denetim|güvenlik|standart/i;
 const NOT_FOOD = /üniversite|yüksekokul|uygulama ve araştırma merkezi|araştırma ve uygulama merkezi|enstitü/i;
+export type SectorMatch = { level: 'clear' | 'uncertain' | 'out'; sectors: Sector[]; why: string };
+export function sectorRelevance(title: string): SectorMatch {
+  if (NOT_FOOD.test(title)) return { level: 'out', sectors: [], why: 'Üniversite/merkez düzenlemesi: kapsam dışı.' };
+  const hits = (Object.keys(SECTOR_TERMS) as Sector[]).flatMap(k => { const m = SECTOR_TERMS[k].exec(title); return m ? [{ k, w: m[0] }] : []; });
+  if (hits.length) return { level: 'clear', sectors: hits.map(h => h.k), why: hits.map(h => `Başlıkta "${h.w}" geçiyor (${SECTOR_TR[h.k]} kapsamı).`).join(' ') };
+  const g = GENERAL_TERMS.exec(title);
+  if (g) return { level: 'uncertain', sectors: [], why: `Başlıkta yalnız genel bir ifade var ("${g[0]}"); hangi iş koluna ait olduğu başlıktan anlaşılmıyor. İnsan incelemesi gerekir.` };
+  return { level: 'out', sectors: [], why: 'Başlıkta desteklenen iş kollarından (gıda, elektrik, emlak) hiçbirine ait ifade yok.' };
+}
+/** Kept for the food-only callers/tests: a food term in the title. */
 export function foodSafetyRelevance(title: string): { relevant: boolean; why: string } {
   if (NOT_FOOD.test(title)) return { relevant: false, why: 'Üniversite/merkez düzenlemesi: kapsam dışı.' };
-  const m = FOOD_TERMS.exec(title);
+  const m = SECTOR_TERMS.food.exec(title);
   return m ? { relevant: true, why: `Başlıkta "${m[0]}" geçiyor (gıda güvenliği kapsamı).` } : { relevant: false, why: 'Başlıkta gıda güvenliği ifadesi yok.' };
 }
 
@@ -205,7 +226,7 @@ export function parseGazetteDocument(html: string, fallback: { title: string; pu
 }
 
 /** `docsRead`: documents (gazette items / watched consolidated texts) read and parsed in this scan, separate from `seen` (items or articles). */
-export type ScanOutcome = { seen: number; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
+export type ScanOutcome = { seen: number; /** items matching a supported sector (clear) */ selected: number; /** items a person must classify */ uncertain: number; /** items outside every supported sector, with the reason */ skipped: { title: string; why: string }[]; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
 
 /**
  * The effective-date parts of a gazette instrument, kept in SEPARATE fields: the general entry-into-force clause, the
@@ -245,7 +266,7 @@ export function daysBack(today: string, n: number): string[] {
 }
 
 export async function scanGazette(o: { baseUrl: string; today: string; lookbackDays: number; fetcher: Fetcher; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
-  const out: ScanOutcome = { seen: 0, docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
+  const out: ScanOutcome = { seen: 0, selected: 0, uncertain: 0, skipped: [], docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
   const base = o.baseUrl.replace(/\/+$/, '');
   for (const day of daysBack(o.today, o.lookbackDays)) {
     let items: GazetteItem[];
@@ -258,8 +279,9 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
     } catch (e) { out.errors.push(`${day}: ${(e as Error).message}`); continue; }
     out.seen += items.length;
     for (const it of items) {
-      const rel = foodSafetyRelevance(it.title);
-      if (!rel.relevant) continue;
+      const rel = sectorRelevance(it.title);
+      if (rel.level === 'out') { out.skipped.push({ title: it.title.slice(0, 160), why: rel.why }); continue; }
+      if (rel.level === 'clear') out.selected += 1; else out.uncertain += 1;
       try {
         const url = new URL(it.url, base + '/').toString();
         // Links inside the day list are followed only when they stay on the configured source host.
@@ -280,7 +302,7 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
           sourceCode: 'resmi_gazete', externalKey: `rg:${file}`, changeType: type,
           docRef: `Resmî Gazete ${doc.sayi ?? '(sayı okunamadı)'} · ${trDate(day)}`, docTitle: it.title, articleRef: null, sourceUrl: url, publishedOn: day, effective: eff,
           oldText: null, newText,
-          suggestion: { relevance: rel.why, category: it.category, issuer: doc.issuer, kind: type, effectiveDetail: effectiveDetail(doc, day),
+          suggestion: { relevance: rel.why, sectors: rel.sectors, matchLevel: rel.level, needsHumanClassification: rel.level === 'uncertain', category: it.category, issuer: doc.issuer, kind: type, effectiveDetail: effectiveDetail(doc, day),
             hint: type === 'article_amendment' ? 'Değişiklik metni var; değişen maddenin eski metni için ilgili mevzuatın birleştirilmiş metnine bakın.' : type === 'repeal' ? 'Yürürlükten kaldırma: ilgili kural sürümü için bitiş tarihi önerilir.' : 'Yeni düzenleme: kural koşulunu ve görevleri uzman yazmalı.',
             ...compareTexts(null, newText) },
         });
@@ -335,7 +357,7 @@ export function parseConsolidated(html: string): { title: string; articles: Reco
 }
 
 export async function scanConsolidated(o: { baseUrl: string; watch: WatchDoc[]; previous: Map<string, Record<string, string>>; fetcher: Fetcher; today: string; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
-  const out: ScanOutcome = { seen: 0, docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
+  const out: ScanOutcome = { seen: 0, selected: 0, uncertain: 0, skipped: [], docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
   const base = o.baseUrl.replace(/\/+$/, '');
   for (const w of o.watch) {
     const url = `${base}/anasayfa/MevzuatFihristDetayIframe?MevzuatTur=${w.tur}&MevzuatNo=${w.no}&MevzuatTertip=${w.tertip}`;

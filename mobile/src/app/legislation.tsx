@@ -15,11 +15,12 @@ import { C, tint, type } from '../theme';
 type Source = { code: string; name: string; base_url: string; is_example: boolean; last_attempt_at: string | null; last_success_at: string | null; last_error: string | null; last_error_at: string | null; failures_in_row: number;
   last_error_kind?: string | null; last_docs_read?: number | null; last_items_seen?: number | null; queue_total?: number; queue_open?: number };
 type Overview = {
-  sources: Source[]; lastSuccessfulScan: { finished_at: string; trigger: string } | null; lastRun: { status: string; started_at: string; trigger: string } | null;
+  sources: Source[]; lastSuccessfulScan: { finished_at: string; trigger: string } | null; lastRun: { status: string; started_at: string; trigger: string; results?: { source: string; seen: number; selected?: number; uncertain?: number; skipped?: { title: string; why: string }[]; docsRead: number; created: number }[] } | null;
   pendingReview: number; counts: Record<string, number>; unclearDates: number; schedule: { enabled: boolean; timezone: string; dailyAtHour: number; nextRunAt?: string | null; missedDays?: string[] }; baselineNote?: string; canScan: boolean; exampleNote: string;
 };
 type Row = { id: string; source_code: string; change_type: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null;
-  date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null };
+  date_status: 'known' | 'unclear'; status: string; is_example: boolean; apply_on: string | null; match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null };
+const SECTOR_TR: Record<string, string> = { food: 'Gıda', electrical: 'Elektrik', estate: 'Emlak' };
 
 const ERROR_KIND_TR: Record<string, string> = { timeout: 'Zaman aşımı', blocked: 'Erişim engeli', not_found: 'Sayfa yok', http_error: 'Sunucu hatası', network: 'Bağlantı hatası', empty: 'Boş yanıt', unexpected_format: 'Beklenmeyen biçim (HTML değil / sayfa yapısı değişmiş)', corrupt: 'Bozuk/eksik metin', refused_link: 'Resmî olmayan bağlantı reddedildi', unknown: 'Sınıflanmamış hata' };
 const SOURCE_TR: Record<string, string> = { resmi_gazete: 'Resmî Gazete', mevzuat: 'Mevzuat Bilgi Sistemi' };
@@ -96,6 +97,15 @@ export default function LegislationRoute() {
               ) : <Text style={type(12, 500, { color: C.lime })}>Hata yok</Text>}
             </Card>
           ))}
+          {(() => { const g = o.lastRun?.results?.find(x => x.source === 'resmi_gazete'); return g && g.selected !== undefined ? (
+            <Card testID="leg-stages" style={{ gap: 4 }}>
+              <Text style={type(14, 700)}>Son tarama · aşamalar (Resmî Gazete)</Text>
+              <Text testID="leg-stage-seen" style={type(12.5, 500, { color: C.t2 })}>1 · Kaynakta görülen yayın: {g.seen}</Text>
+              <Text testID="leg-stage-selected" style={type(12.5, 500, { color: C.t2 })}>2 · Desteklenen iş koluna eşleşen aday: {g.selected} · belirsiz (insan sınıflar): {g.uncertain ?? 0} · kapsam dışı: {g.skipped?.length ?? 0}</Text>
+              <Text testID="leg-stage-queue" style={type(12.5, 500, { color: C.t2 })}>3 · Onay kuyruğuna bu taramada yeni eklenen: {g.created}</Text>
+              <Text testID="leg-stage-applied" style={type(12.5, 500, { color: C.t2 })}>4 · Şubeye uygulanan: onaydan sonra, uygulama kaydında görünür (onaydan önce hiçbir işletme etkilenmez).</Text>
+              {(g.skipped ?? []).map((k, i) => <Text key={i} testID={`leg-skipped-${i}`} style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>Atlandı: {k.title} — {k.why}</Text>)}
+            </Card>) : null; })()}
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{o.exampleNote}</Text>
         </>
       ) : null}
@@ -120,6 +130,8 @@ export default function LegislationRoute() {
                 <Text style={type(10.5, 700, { ls: 0.06, color })}>{label}</Text>
                 {r.is_example ? <ExampleBadge label="ÖRNEK" /> : null}
                 {r.date_status === 'unclear' ? <Text style={type(10.5, 700, { color: C.warn })}>TARİH BELİRSİZ</Text> : null}
+                {r.match_level === 'uncertain' ? <Text testID={`leg-uncertain-${r.id}`} style={type(10.5, 700, { color: C.warn })}>BELİRSİZ EŞLEŞME · İNSAN İNCELEMESİ</Text> : null}
+                {r.sectors?.length ? <Text testID={`leg-sectors-${r.id}`} style={type(10.5, 700, { color: C.info })}>{r.sectors.map(k => SECTOR_TR[k] ?? k).join(' · ').toUpperCase()}</Text> : null}
               </View>
               <Text style={type(14, 600, { lh: 1.35 })}>{r.doc_title}{r.article_ref ? ` · md. ${r.article_ref}` : ''}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>{r.typeLabel} · {SOURCE_TR[r.source_code] ?? r.source_code} · {r.doc_ref} · yayın {dayTr(r.published_on)} · yürürlük {r.effective_from ? dayTr(r.effective_from) : 'belirsiz'}</Text>

@@ -1,6 +1,6 @@
 import type { Tx } from '../db/pool';
 import { invalid } from '../domain/errors';
-import { NACE_VERSION, dealsWithFood, dealsWithBrokerage, lookupNace, normalizeNace } from '../domain/nace';
+import { NACE_VERSION, dealsWithFood, dealsWithBrokerage, dealsWithInstallation, lookupNace, normalizeNace } from '../domain/nace';
 import type { Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { recomputeSite } from './obligations';
@@ -40,7 +40,7 @@ export async function confirmActivity(tx: Tx, p: Principal, companyId: string, i
  * Derives the site-level activity statement from the company's confirmed classes (also used for a branch added later)
  * and recomputes the site. Re-running with the same answers records nothing new and creates no task twice.
  */
-export async function applyActivityToSite(tx: Tx, p: Principal, companyId: string, siteId: string) {
+export async function applyActivityToSite(tx: Tx, p: Principal | 'system', companyId: string, siteId: string) {
   const facts = await currentFacts(tx, companyId, siteId);
   const codes = facts['activity.nace_codes']?.value;
   if (Array.isArray(codes) && codes.length && codes.every(c => typeof c === 'string' && lookupNace(c))) {
@@ -58,6 +58,12 @@ export async function applyActivityToSite(tx: Tx, p: Principal, companyId: strin
       await recordFact(tx, p, companyId, { siteId, key: 'activity.food_business', value: foodBusiness, source: 'user_declared', verification: 'user_confirmed', sourceRef: ref,
         note: `Onaylanan faaliyet kodlarından türetildi: ${codes.join(', ')}` });
     }
+    const installation = entries.some(dealsWithInstallation);
+    const curI = facts['activity.installation_business'];
+    if (curI?.value !== installation || curI.verification === 'rejected') {
+      await recordFact(tx, p, companyId, { siteId, key: 'activity.installation_business', value: installation, source: 'user_declared', verification: 'user_confirmed', sourceRef: ref,
+        note: `Onaylanan faaliyet kodlarından türetildi: ${codes.join(', ')}` });
+    }
     const brokerage = entries.some(dealsWithBrokerage);
     const curK = facts['activity.brokerage'];
     if (curK?.value !== brokerage || curK.verification === 'rejected') {
@@ -65,7 +71,8 @@ export async function applyActivityToSite(tx: Tx, p: Principal, companyId: strin
         note: `Onaylanan faaliyet kodlarından türetildi: ${codes.join(', ')}` });
     }
   }
-  const r = await recomputeSite(tx, companyId, siteId, p.userId);
-  const created = (await topUpSite(tx, companyId, siteId, 14, p.userId)).created;
+  const uid = p === 'system' ? null : p.userId;
+  const r = await recomputeSite(tx, companyId, siteId, uid);
+  const created = (await topUpSite(tx, companyId, siteId, 14, uid)).created;
   return { ...r, createdTasks: created };
 }

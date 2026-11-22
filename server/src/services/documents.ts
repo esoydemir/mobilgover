@@ -434,15 +434,43 @@ export async function linkDocument(tx: Tx, p: Principal, companyId: string, id: 
   }
 }
 
-/** Documents a check uses (by its template or its equipment), readable by this person. */
+/**
+ * Documents a check uses (by its template, its equipment or its obligation), with what a person at the task needs to know:
+ * is a file there (presence), has anyone reviewed its CONTENT, and may this person do that review. A person who cannot read a document
+ * only learns that one exists (hidden), never its name or content.
+ */
 export async function documentsForTask(tx: Tx, p: Principal, companyId: string, t: { template_code: string; equipment_id: string | null; rule_code?: string | null }) {
   const rows = (await tx.query(`SELECT DISTINCT d.id, d.site_id, d.title, l.purpose, l.link_kind FROM document_links l JOIN documents d ON d.id = l.document_id
      WHERE l.company_id = $1 AND l.removed_at IS NULL AND d.archived_at IS NULL
        AND ((l.link_kind = 'task_template' AND l.ref = $2) OR (l.link_kind = 'equipment' AND l.ref = $3) OR (l.link_kind = 'obligation' AND l.ref = $4))`,
     [companyId, t.template_code, t.equipment_id ?? '', t.rule_code ?? ''])).rows;
-  const out = [];
-  for (const r of rows) if (await canReadDoc(tx, p, companyId, r)) out.push({ id: r.id, title: r.title, purpose: r.purpose, kind: r.link_kind });
-  return out;
+  const documents = []; let hidden = 0;
+  const readable: string[] = [];
+  for (const r of rows) {
+    if (!(await canReadDoc(tx, p, companyId, r))) { hidden++; continue; }
+    readable.push(r.id);
+    const v = (await tx.query(`${VERSIONS_SQL} WHERE v.document_id = $1 ORDER BY v.version DESC LIMIT 1`, [r.id])).rows[0];
+    const file: 'none' | 'pending' | 'stored' = !v ? 'none' : v.file_status === 'stored' ? 'stored' : 'pending';
+    const canReview = !!v && file === 'stored' && v.review_status === 'unreviewed' && can(p, 'document.review', { companyId, siteId: r.site_id }).ok && v.uploaded_by !== p.userId;
+    documents.push({ id: r.id, title: r.title, purpose: r.purpose, kind: r.link_kind,
+      latest: v ? { version: v.version as number, file, uploadedBy: v.uploaded_by_name as string, review: v.review_status as 'unreviewed' | 'verified' | 'rejected',
+        reviewedBy: (v.reviewed_by_name as string | null) ?? null, reviewedAt: v.reviewed_at ? new Date(v.reviewed_at).toISOString() : null } : null,
+      canReview, reviewBlockedReason: !v || file !== 'stored' || v.review_status !== 'unreviewed' ? null
+        : v.uploaded_by === p.userId ? 'uploader' : !can(p, 'document.review', { companyId, siteId: r.site_id }).ok ? 'no_permission' : null });
+  }
+  return { documents, hidden, history: await documentHistory(tx, companyId, readable) };
+}
+
+const DOC_EVENT_TR: Record<string, string> = { 'document.created': 'belgeyi oluşturdu', 'document.version_added': 'dosya yükledi', 'document.version_verified': 'içeriği inceledi: uygun',
+  'document.version_rejected': 'içeriği inceledi: kabul etmedi', 'document.use_added': 'belgeyi bu kontrole bağladı', 'document.issuer_checked': 'veren kurumda doğruladı' };
+/** Who did what, for which version, to the documents a check uses. Only for documents the reader may read. */
+async function documentHistory(tx: Tx, companyId: string, docIds: string[]) {
+  if (!docIds.length) return [];
+  const rows = (await tx.query(`SELECT a.occurred_at, a.event_type, a.entity_id, a.payload, u.display_name AS actor, d.title
+      FROM audit_events a LEFT JOIN users u ON u.id = a.actor_id JOIN documents d ON d.id::text = a.entity_id
+     WHERE a.company_id = $1 AND a.entity_type = 'document' AND a.entity_id = ANY($2::text[]) AND a.event_type = ANY($3::text[]) ORDER BY a.seq`, [companyId, docIds, Object.keys(DOC_EVENT_TR)])).rows;
+  return rows.map(r => ({ at: new Date(r.occurred_at).toISOString(), actor: (r.actor as string | null) ?? 'sistem', documentId: r.entity_id as string, title: r.title as string,
+    action: DOC_EVENT_TR[r.event_type] as string, version: (r.payload?.version as number | undefined) ?? null, note: (r.payload?.notes as string | undefined) ?? null }));
 }
 
 /** What a document can be tied to: checks in use at its site(s), equipment of its site, obligations. */

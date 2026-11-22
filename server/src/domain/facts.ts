@@ -23,6 +23,7 @@ export const FACTS = {
   'utility.lpg': { type: 'boolean', label: 'LPG / tüp gaz kullanımı', critical: true, level: 'site' },
   'service.delivery': { type: 'boolean', label: 'Paket servis', critical: true, level: 'site' },
   'activity.onsite_installation': { type: 'boolean', label: 'Müşteri yerinde montaj / kurulum işi', critical: true, level: 'site' },
+  'activity.installation_business': { type: 'boolean', label: 'Montaj / kurulum işi yapılan faaliyet', critical: true, level: 'site' },
   'activity.brokerage': { type: 'boolean', label: 'Emlak / aracılık faaliyeti', critical: true, level: 'site' },
   'activity.client_contracts': { type: 'boolean', label: 'Müşteri adına sözleşme / yetki belgesi dosyası tutma', critical: true, level: 'site' },
   'storage.cold': { type: 'boolean', label: 'Soğuk depolama', critical: true, level: 'site' },

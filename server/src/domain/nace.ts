@@ -47,6 +47,7 @@ export function normalizeNace(raw: string): string | null {
 
 /** A class that opens the food questions deals with food product (prepares or sells it), whether or not it prepares food itself. */
 export const dealsWithFood = (e: NaceEntry) => (e.groups ?? []).includes('food');
+export const dealsWithInstallation = (e: NaceEntry) => (e.groups ?? []).includes('installation');
 export const dealsWithBrokerage = (e: NaceEntry) => (e.groups ?? []).includes('brokerage');
 export const lookupNace = (code: string) => NACE.find(n => n.code === code) ?? null;
 

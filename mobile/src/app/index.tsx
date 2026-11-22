@@ -73,6 +73,7 @@ function HomeScreen() {
   // The one thing that matters most: the first critical risk item (any kind), not only a nonconformity.
   const topRisk = risk.items.find(i => i.sev === 'crit');
   const needsInfo = (obligations.data ?? []).filter(o => o.decision === 'needs_info' || o.decision === 'needs_review');
+  const firstMissing = needsInfo.flatMap(o => o.missingFacts ?? [])[0];
   const total = derived.todays.length;
   const remaining = total - derived.done;
 
@@ -208,10 +209,11 @@ function HomeScreen() {
       )}
 
       {!isStaff && needsInfo.length > 0 && (
-        <Tap onPress={() => router.push('/profile')} style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: tint.lime(0.32), borderRadius: 22, backgroundColor: tint.lime(0.04), paddingVertical: 16, paddingHorizontal: 18, marginTop: 4 }}>
+        <Tap testID="home-profile-missing" onPress={() => router.push(`/profile${firstMissing ? `?focus=${firstMissing}` : ''}` as never)} style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: tint.lime(0.32), borderRadius: 22, backgroundColor: tint.lime(0.04), paddingVertical: 16, paddingHorizontal: 18, marginTop: 4 }}>
           <Text style={type(10, 600, { ls: 0.11, color: C.lime })}>PROFİL EKSİK</Text>
           <Text style={[type(14.5, 600, { ls: -0.01 }), { marginTop: 8 }]}>{needsInfo.length} yükümlülük için bilgi veya inceleme bekleniyor</Text>
-          <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>Eksik bilgi "uygulanmaz" sayılmaz; yanıtlayınca netleşir.</Text>
+          <Text testID="home-profile-missing-list" style={[type(12, 400, { color: C.t2, lh: 1.45 }), { marginTop: 4 }]}>{needsInfo.slice(0, 3).map(o => o.title).join(' · ')}{needsInfo.length > 3 ? ` · +${needsInfo.length - 3}` : ''}</Text>
+          <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>Eksik bilgi "uygulanmaz" sayılmaz; ilk soruyu açmak için dokun.</Text>
         </Tap>
       )}
     </Screen>
@@ -280,7 +282,7 @@ function GapCard({ gap, onDone }: { gap: Gap; onDone: () => void }) {
           {err ? <ErrorBox message={err} /> : null}
         </View>
       ) : <PrimaryButton testID="gap-equipment-add" label={gap.action.label} glow={false} height={42} size={13} onPress={() => setOpen(true)} />)
-        : <GhostButton testID="gap-answer" label={gap.action.label} height={40} size={12.5} onPress={() => router.push('/profile')} />}
+        : <GhostButton testID="gap-answer" label={gap.action.label} height={40} size={12.5} onPress={() => router.push(`/profile${gap.action.factKey ? `?focus=${gap.action.factKey}` : ''}` as never)} />}
     </Card>
   );
 }

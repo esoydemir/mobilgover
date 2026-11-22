@@ -18,7 +18,7 @@ type Impact = { onDate: string; affectedSites: number; notifiedSites: number; ou
   sites: { siteId: string; site: string; company: string; from: string | null; to: string; effect: string; reason: string; openTasks: number; openTaskEffect: string; notify: boolean; missingFacts: string[] }[] };
 type Detail = {
   id: string; status: string; changeType: string; typeLabel: string; docRef: string; docTitle: string; articleRef: string | null; sourceUrl: string; sourceCode: string; publishedOn: string | null; effectiveFrom: string | null;
-  dateStatus: 'known' | 'unclear'; dateNote: string | null; oldText: string | null; newText: string | null; suggestion: { relevance?: string; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] };
+  dateStatus: 'known' | 'unclear'; dateNote: string | null; oldText: string | null; newText: string | null; suggestion: { relevance?: string; sectors?: string[]; matchLevel?: 'clear' | 'uncertain'; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] };
     effectiveDetail?: { general: { articleIds: string[]; clause: string | null }; transitional: { articleId: string; dates: string[]; sentence: string }[]; scope: { articleId: string; text: string } | null } } | null;
   isExample: boolean; exampleNote: string | null; proposal: any | null; rule: { id: string; code: string; version: number; status: string } | null; missingAreaReviews: string[];
   approveReason: string | null; rejectReason: string | null; applyOn: string | null; appliedAt: string | null; applyResult: any | null;
@@ -129,10 +129,18 @@ export default function LegislationDetailRoute() {
       {sg ? (
         <Card style={{ gap: 4 }}>
           <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>OTOMATİK KARŞILAŞTIRMA · YALNIZ ÖNERİDİR</Text>
-          {sg.relevance ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{sg.relevance}</Text> : null}
+          {sg.relevance ? <Text testID="leg-relevance" style={type(12, 400, { color: C.t2, lh: 1.45 })}>{sg.relevance}</Text> : null}
+          {sg.matchLevel === 'uncertain' ? <Text testID="leg-uncertain-note" style={type(12, 600, { color: C.warn, lh: 1.45 })}>Belirsiz eşleşme: başlıktan hangi iş koluna ait olduğu anlaşılmıyor. Metni oku; ilgisizse reddet, ilgiliyse iş kolunu belirterek taslağa al. Onaylanana kadar hiçbir işletme etkilenmez.</Text> : null}
           {sg.addedWords?.length ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Eklenen sözcükler: {sg.addedWords.join(', ')}</Text> : null}
           {sg.removedWords?.length ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Çıkan sözcükler: {sg.removedWords.join(', ')}</Text> : null}
           {sg.changedNumbers && (sg.changedNumbers.from.length || sg.changedNumbers.to.length) ? <Text style={type(12, 600, { color: C.warn, lh: 1.45 })}>Değişen sayılar: {sg.changedNumbers.from.join(', ') || '—'} → {sg.changedNumbers.to.join(', ') || '—'}</Text> : null}
+          {sg.sectors?.includes('electrical') || sg.sectors?.includes('estate') ? (
+            <View testID="leg-example-checks" style={{ gap: 3, marginTop: 4 }}>
+              <ExampleBadge label="ÖRNEK KONTROLLER" />
+              {sg.sectors.includes('electrical') ? <Text testID="leg-example-earthing" style={type(12, 500, { lh: 1.45 })}>ÖRNEK · Elektrik: “Montaj sonrası topraklama ölçümü” — kontrol listesi + ölçüm cihazı fotoğrafı. Gerçek mevzuat değildir; yalnız onaylı kural sürümü görev üretir.</Text> : null}
+              {sg.sectors.includes('estate') ? <Text testID="leg-example-contract" style={type(12, 500, { lh: 1.45 })}>ÖRNEK · Emlak: “Sözleşme ve yetki belgesi dosyası kontrolü” — dosya varlık teyidi; içeriği yetkili yönetici belge kasasında inceler. Gerçek mevzuat değildir.</Text> : null}
+            </View>
+          ) : null}
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Bu karşılaştırma karar vermez; uygulanan koşul, görev ve süre yalnız onaylanan kural sürümünden gelir.</Text>
         </Card>
       ) : null}

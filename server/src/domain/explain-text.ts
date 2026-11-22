@@ -15,6 +15,7 @@ const STATEMENT: Record<string, { yes: string; no: string }> = {
   'storage.cold': { yes: 'Bu şubede soğukta saklanan ürün olduğunu belirttiniz.', no: 'Bu şubede soğukta saklanan ürün olmadığını belirttiniz.' },
   'utility.lpg': { yes: 'Bu şubede LPG / tüp gaz kullandığınızı belirttiniz.', no: 'Bu şubede LPG / tüp gaz kullanmadığınızı belirttiniz.' },
   'service.delivery': { yes: 'Bu şubede paket servis yaptığınızı belirttiniz.', no: 'Bu şubede paket servis yapmadığınızı belirttiniz.' },
+  'activity.installation_business': { yes: 'Faaliyetiniz montaj / kurulum işi içeren bir faaliyet olarak kayıtlı.', no: 'Faaliyetiniz montaj / kurulum işi içeren bir faaliyet olarak kayıtlı değil.' },
   'activity.brokerage': { yes: 'Faaliyetiniz emlak / aracılık olarak kayıtlı.', no: 'Faaliyetiniz emlak / aracılık olarak kayıtlı değil.' },
   'activity.client_contracts': { yes: 'Müşteri veya mülk sahibi adına sözleşme ve yetki belgesi dosyası tuttuğunuzu belirttiniz.', no: 'Müşteri veya mülk sahibi adına sözleşme ve yetki belgesi dosyası tutmadığınızı belirttiniz.' },
   'activity.onsite_installation': { yes: 'Müşteri yerinde montaj / kurulum işi yaptığınızı belirttiniz.', no: 'Müşteri yerinde montaj / kurulum işi yapmadığınızı belirttiniz.' },

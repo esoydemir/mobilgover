@@ -31,7 +31,10 @@ export type Requirement =
 
 export type TaskDetail = {
   relatedTraining?: { id: string; title: string; summary: string; is_example: boolean; minutes: number | null }[];
-  relatedDocuments?: { id: string; title: string; purpose: string; kind: string }[];
+  relatedDocuments?: { id: string; title: string; purpose: string; kind: string; canReview: boolean; reviewBlockedReason: 'uploader' | 'no_permission' | null;
+    latest: { version: number; file: 'none' | 'pending' | 'stored'; uploadedBy: string; review: 'unreviewed' | 'verified' | 'rejected'; reviewedBy: string | null; reviewedAt: string | null } | null }[];
+  relatedDocumentsHidden?: number;
+  documentHistory?: { at: string; actor: string; documentId: string; title: string; action: string; version: number | null; note: string | null }[];
   id: string; siteId?: string; status: TaskRow['status']; outcome: TaskRow['outcome']; dueAt: string; reviewFlag: string | null;
   title: string; instructions: string; severity: TaskRow['severity'];
   equipment: { id: string; name: string; type: string } | null;

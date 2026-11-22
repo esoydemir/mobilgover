@@ -251,6 +251,18 @@ Açık (bu dilimde yapılmadı):
 - B-04, B-06, B-09 işlenmedi; GH-04'te gerçek dış bildirim kanalı yok; mevzuat masası yalnız sentetik kaynakla sınandı.
 - Üç açık ürün kararı hâlâ öneri olarak bekliyor (benimsenmiş politika yok).
 
+## On ikinci dilim — profil eksik, emlak belgesi, çok sektörlü keşif (23 Kasım)
+
+Tüm kurallar, belgeler ve yayınlar ÖRNEK / SENTETİKTİR. Gerçek kural yayımlanmadı, hiçbir ortama dağıtım yapılmadı. Testteki 45 günlük üretim penceresi (`topup-window.ts`) önceki turda belgelendi; gerçek tarihte gerçekleşmiş iş değildir.
+
+**1 · "Profil eksik" sayacı.** Önceki: sektör geçidi olmayan v1 kuralları (EX-LPG-CHECK, EX-ELEC-INSTALL, EX-ESTATE-FILES) hiç sorulmayan soruyu bekleyip sayaçta sonsuza dek "bilgi eksik" kalıyordu. Şimdi: üç kural için v2 (normal taslak → alan incelemesi → onay [onaylayan ≠ yazar] → yayın), yeni türetilmiş bilgi `activity.installation_business`; v1 emekli (silinmez), tamamlanmış görevler v1 şablonuna bağlı kalır, açık olanlar "kural sürümü değişti" ile işaretlenir. Sayaç: market 6→5, elektrikçi 2→1, emlakçı 3→1; kalan her kalem gerçekten sorulan bir soruyu bekler (`gh11-profile-gaps`, 6 test). Ana ekran uyarısı doğru soruyu açar (`?focus=`), cevap sonrası sayaç düşer; aynı profili yeniden kaydetmek görev/bildirim çoğaltmaz. Kanıt: `docs/kanit-f1-profil/01…05`.
+
+**2 · Emlak belgesi.** Önceki: görev yükleyen/çalışan için "sözleşme içeriği doğru mu" gibi içerik iddiaları topluyordu; çalışan bağlı belgeyi göremiyor ve neden göremediğini bilmiyordu; görevden belge geçmişi görünmüyordu. Şimdi: EX-ESTATE-FILES v2 yalnız dosya VARLIĞINI teyit eder (`files_present`, `missing_noted`) ve "içeriğini incelemez, yetkili yönetici belge kasasında inceler" der. Görev ekranı belge başına dosya durumunu (varlık teyidi) ve içerik incelemesini (incelenmedi / uygun / kabul edilmedi) ayrı satırlarda gösterir; belgeyi göremeyen çalışan yalnız "N belge bağlı, içeriği görme yetkin yok" bilgisini alır; yükleyen "bu sürümü sen yükledin, başka yetkili incelemeli" görür; yetkili yönetici "İçeriği incele" ile belge kasasına gider. Görev geçmişi: kim, hangi sürüm, hangi işlem (yalnız belgeyi okuyabilene). Çalışan belge ve inceleme uçlarında 404 alır (`gh12-estate-document`, 6 test). Kanıt: `docs/kanit-f1-profil/11…13` (çalışan, yükleyen sahip, yetkili yönetici; sentetik PDF, her biri kendi oturumunda).
+
+**3 · Çok sektörlü mevzuat keşfi.** Önceki: Resmî Gazete taraması yalnız başlıkta gıda sözcüğü arıyordu; elektrik ve emlak yayınları "gıda güvenliği ifadesi yok" diye sessizce atlanıyordu. Şimdi: `sectorRelevance` — gıda, elektrik, emlak için açık sözcük = aday; yalnız genel sözcük (işyeri, denetim, yapı…) = BELİRSİZ, insana gider (kuyrukta "belirsiz eşleşme" etiketi, reddet/taslağa al); hiçbiriyle ilgisi yok = kapsam dışı, ATLANAN başlık ve nedeni taramada kaydedilir. Aşamalar ayrı ölçülür: kaynakta görülen → eşleşen aday / belirsiz / kapsam dışı → onay kuyruğuna yeni eklenen → şubeye uygulanan. Ölçüm (8100, sentetik): görülen 5; aday 3 (gıda LPG, elektrik, emlak), belirsiz 1, kapsam dışı 1; kuyruğa 4 yeni; tekrar taramada yeni 0, toplam aday 5 sabit; görev 144 / bildirim 25 / yükümlülük 25 onaydan önce DEĞİŞMEDİ. Şubeye uygulama aşaması bu turda yalnız önceki turdan gelen 1 kayıtta ölçülüdür; yeni 4 aday onaylanmadı (gerçek kural yayımı kapsam dışı). Ekranda topraklama ve sözleşme kontrolleri "ÖRNEK KONTROLLER" olarak görünür. `gh13-multi-sector-discovery` (4 test). Kanıt: `docs/kanit-f1-mevzuat/20…21`.
+
+**Açık kalanlar.** Başlık eşleşmesi gövde metnine bakmaz: başlığı genel ama içeriği elektrik/emlak olan yayın "belirsiz" olur ve insan okur (bilerek, sessiz atlama yok). Başka iş kolları için sözcük listesi yok. B-04/B-06/B-09 tanımsız, işlenmedi.
+
 ## Bilinen sınırlar (gizlenmiyor)
 
 - Elektrik için "destek kategorisi" (GoverUp önerisi) bağlanmadı; GH-06 yalnız soğutma ve gaz kategorilerini haritaladı.
@@ -261,7 +273,7 @@ Açık (bu dilimde yapılmadı):
 - İki ÖRNEK sektör kuralı ölçüldü (EX-COLD-CHAIN, EX-ELEC-INSTALL); diğer sektör kuralları yazılmadı.
 - Fotoğraf yükleme ekran kanıtında tarayıcı dosya seçicisi sürülemediği için API ile yapıldı; ölçüm, atama ve tamamlama ekrandan yapıldı.
 - Kayıt ekranında ikinci şube eklemek için ayrı bir ekran akışı denenmedi; B şubesi API ile eklendi (`POST /companies/:id/sites`).
-- `npm run migrate` Windows'ta sessizce hiçbir şey yapmıyor (`import.meta.url === file://${argv[1]}` karşılaştırması `file:///C:/…` ile eşleşmez); testler `migrate()` fonksiyonunu doğrudan çağırdığı için etkilenmez.
+- (Giderildi, on birinci dilim) `npm run migrate` Windows'ta sessizce hiçbir şey yapmıyordu (`import.meta.url === file://${argv[1]}` karşılaştırması `file:///C:/…` ile eşleşmez); testler `migrate()` fonksiyonunu doğrudan çağırdığı için etkilenmez.
 
 ## Ekran kanıtı
 

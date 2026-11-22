@@ -150,12 +150,37 @@ export default function TaskDetailRoute() {
         </Card>
       ) : null}
 
-      {t.relatedDocuments?.length ? (
+      {t.relatedDocuments?.length || t.relatedDocumentsHidden ? (
         <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>İLGİLİ BELGELER</Eyebrow>
-          {t.relatedDocuments.map(d => (
-            <Text key={d.id} testID={`task-doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={type(12.5, 500, { color: C.info, lh: 1.45 })}>{d.title} · {d.purpose}</Text>
-          ))}
+          {(t.relatedDocuments ?? []).map(d => {
+            const v = d.latest;
+            const fileTxt = !v ? 'Dosya yok' : v.file === 'stored' ? `Dosya var (sürüm ${v.version}) — varlık teyidi` : 'Dosya yüklenmedi';
+            const revTxt = !v || v.file !== 'stored' ? null : v.review === 'unreviewed' ? 'İçerik incelenmedi' : v.review === 'verified' ? `İçerik incelendi: uygun · ${v.reviewedBy ?? ''}` : `İçerik incelendi: kabul edilmedi · ${v.reviewedBy ?? ''}`;
+            const next = d.canReview ? 'Sıradaki adım: belgeyi aç ve içeriği incele.'
+              : d.reviewBlockedReason === 'uploader' ? 'Bu sürümü sen yükledin; içeriği başka bir yetkili incelemelidir.'
+              : d.reviewBlockedReason === 'no_permission' ? 'İçeriği incelemek için belge inceleme yetkisi gerekir; yöneticine ilet.' : null;
+            return (
+              <View key={d.id} testID={`task-doc-card-${d.id}`} style={{ gap: 3 }}>
+                <Text testID={`task-doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={type(12.5, 600, { color: C.info, lh: 1.45 })}>{d.title} · {d.purpose}</Text>
+                <Text testID={`task-doc-file-${d.id}`} style={type(12, 400, { color: C.t2, lh: 1.45 })}>{fileTxt}</Text>
+                {revTxt ? <Text testID={`task-doc-review-${d.id}`} style={type(12, 500, { color: v?.review === 'verified' ? C.info : v?.review === 'rejected' ? C.crit : C.warn, lh: 1.45 })}>{revTxt}</Text> : null}
+                {next ? <Text testID={`task-doc-next-${d.id}`} style={type(12, 400, { color: C.t2, lh: 1.45 })}>{next}</Text> : null}
+                {d.canReview ? <GhostButton testID={`task-doc-review-btn-${d.id}`} label="İçeriği incele" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/documents/${d.id}`)} /> : null}
+              </View>
+            );
+          })}
+          {t.relatedDocumentsHidden ? (
+            <Text testID="task-doc-hidden" style={type(12, 400, { color: C.t2, lh: 1.45 })}>Bu kontrole {t.relatedDocumentsHidden} belge bağlı; içeriğini görme yetkin yok. Sen yalnız dosyaların var olduğunu teyit edersin; içeriği yetkili yönetici belge kasasında inceler.</Text>
+          ) : null}
+          {t.documentHistory?.length ? (
+            <View testID="task-doc-history" style={{ gap: 2, marginTop: 4 }}>
+              <Text style={type(11, 600, { color: C.t3 })}>BELGE GEÇMİŞİ</Text>
+              {t.documentHistory.map((h, i) => (
+                <Text key={i} style={type(11.5, 400, { color: C.t2, lh: 1.4 })}>{fmtDateTime(h.at)} · {h.actor} · {h.title}{h.version ? ` · sürüm ${h.version}` : ''} · {h.action}</Text>
+              ))}
+            </View>
+          ) : null}
         </Card>
       ) : role !== 'staff' ? (
         <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>

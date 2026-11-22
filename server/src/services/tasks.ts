@@ -308,7 +308,8 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     canAssign: can(p, 'task.assign', { companyId, siteId: t.site_id }).ok,
     // Training that fits this check (by check, obligation or topic); reading it is optional.
     relatedTraining: await relatedCourses(tx, companyId, { hazard: t.hazard_type, templateCode: t.template_code, ruleCode: t.rule_code }),
-    relatedDocuments: await documentsForTask(tx, p, companyId, { template_code: t.template_code, equipment_id: t.equipment_id, rule_code: t.rule_code }),
+    ...await (async () => { const r = await documentsForTask(tx, p, companyId, { template_code: t.template_code, equipment_id: t.equipment_id, rule_code: t.rule_code });
+      return { relatedDocuments: r.documents, relatedDocumentsHidden: r.hidden, documentHistory: r.history }; })(),
   };
 }
 

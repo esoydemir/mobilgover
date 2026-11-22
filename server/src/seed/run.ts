@@ -1,7 +1,7 @@
 import { loadConfig } from '../config';
 import { Db } from '../db/pool';
 import { topUpAllSites } from '../services/horizon';
-import { ensureFoodScopeRevision, ensureReportRules, ensureSectorRules, seedDemoCompany, seedDemoProvider, seedPlatform } from './demo';
+import { ensureActivityDerivedFacts, ensureFoodScopeRevision, ensureReportRules, ensureSectorGateRevisions, ensureSectorRules, seedDemoCompany, seedDemoProvider, seedPlatform } from './demo';
 
 /**
  * Loads demo data into a demo deployment (DEMO_MODE=true only). Runs once:
@@ -39,7 +39,9 @@ try {
   // GM-30 devamı: example rules whose document evidence accepts a reviewed service report. Added once; existing data is untouched.
   const reportRules = await ensureReportRules(db);
   await ensureSectorRules(db);
+  console.log('activity-derived facts re-derived for sites:', await ensureActivityDerivedFacts(db));
   console.log('food-scope revision (v1→v2):', JSON.stringify(await ensureFoodScopeRevision(db)));
+  console.log('sector-gate revision (v1→v2):', JSON.stringify(await ensureSectorGateRevisions(db)));
   if (reportRules) console.log(`Demo: ${reportRules} örnek servis raporu kuralı yayımlandı.`);
   // On every start: top up the next 30 days of tasks (adds missing ones; never changes or deletes).
   const r = await topUpAllSites(db, 30);
