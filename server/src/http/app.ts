@@ -47,6 +47,7 @@ import { SAMPLE_PROFILES, approve, areaReview, rejectVersion, returnToDraft, wit
 import { FACTS } from '../domain/facts';
 import { NACE_SOURCE, NACE_VERSION, lookupNace, questionKeysFor, searchNace } from '../domain/nace';
 import { applyActivityToSite, confirmActivity } from '../services/activity';
+import { adminWork } from '../services/admin-work';
 import { addEvidence, assignableMembers, assignTask, completeTask, ensureDecisions, generateTasks, listTasks, recordMeasurement, selectServiceReportEvidence, taskDetail, topUpSite } from '../services/tasks';
 import { ALLOWED_MIME, type EvidenceStore } from '../storage/local';
 
@@ -899,6 +900,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
 
   // ── Platform administration: overview, audit trail, platform roles ──
+  app.get('/admin/work', async req => { platformGate(req); return db.system(tx => adminWork(tx, req.principal, legCfg())); });
   app.get('/admin/overview', async req => { platformGate(req); return db.system(tx => padmin.overview(tx, req.principal)); });
   app.get('/admin/audit', async req => {
     platformGate(req);

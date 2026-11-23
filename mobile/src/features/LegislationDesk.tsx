@@ -38,9 +38,14 @@ export const waitText = (iso: string | null | undefined, now = Date.now()) => {
 export function LegislationDesk() {
   const { me, call } = useSession();
   const { showToast } = useUi();
-  const params = useLocalSearchParams<{ sel?: string }>();
+  const params = useLocalSearchParams<{ sel?: string; quick?: string; health?: string }>();
   const allowed = (me?.platformRoles ?? []).some(r => ['platform_admin', 'rule_author', 'rule_reviewer'].includes(r));
-  const [quick, setQuickS] = useState<Quick>(keep.quick);
+  const fromLink = QUICK.find(q => q[0] === params.quick)?.[0];
+  // Ana sayfadaki sayaçtan gelindiğinde başka süzgeç kalıntısı olmasın: sayaç ne sayıyorsa liste onu göstermeli.
+  const linked = useRef(false);
+  if (fromLink && !linked.current) { keep.quick = fromLink; keep.source = null; keep.text = ''; }
+  linked.current = true;
+  const [quick, setQuickS] = useState<Quick>(fromLink ?? keep.quick);
   const [source, setSourceS] = useState<string | null>(keep.source);
   const [text, setTextS] = useState(keep.text);
   const [sel, setSelS] = useState<string | null>(params.sel ?? keep.sel);
@@ -51,7 +56,7 @@ export function LegislationDesk() {
     keep.sel = id; setSelS(id);
     if (Platform.OS === 'web' && typeof window !== 'undefined') { try { window.history.replaceState(null, '', id ? `/legislation?sel=${id}` : '/legislation'); } catch { /* adres çubuğu güncellenemezse seçim yine de çalışır */ } }
   }, []);
-  const [showHealth, setShowHealth] = useState(false);
+  const [showHealth, setShowHealth] = useState(params.health === '1');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

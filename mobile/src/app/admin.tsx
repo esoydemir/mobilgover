@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
@@ -9,6 +9,8 @@ import { ErrorBox, ExampleBadge, Field, SectionLabel } from '../components/state
 import { Card, FilterChip, GhostButton, PrimaryButton, shortWhy } from '../components/ui';
 import { credentialLabel } from '../features/labels';
 import { MarketOps } from '../features/ServiceExtras';
+import { AdminHome } from '../features/AdminHome';
+import { useDesktop } from '../features/desktop';
 import { AuditTrail, PlatformOverview, PlatformRoles } from '../features/PlatformAdmin';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
@@ -24,6 +26,10 @@ export default function AdminRoute() {
   const { me, call } = useSession();
   const { showToast } = useUi();
   const roles = me?.platformRoles ?? [];
+  const desktop = useDesktop();
+  // /admin?list=verifications|authorizations: ana sayfadaki sayaçtan gelen, yalnız o kayıtları gösteren görünüm.
+  const { list } = useLocalSearchParams<{ list?: string }>();
+  const only = list === 'verifications' || list === 'authorizations' ? list : null;
   const [status, setStatus] = useState<'in_review' | 'approved' | 'published' | 'draft' | 'rejected' | 'withdrawn'>('in_review');
   const rules = useApi<RuleVersion[]>(roles.some(r => r.startsWith('rule_') || r === 'platform_admin') ? `/admin/rule-versions?status=${status}` : null);
   const queue = useApi<Queue>(roles.includes('marketplace_reviewer') ? '/admin/marketplace/queue' : null);
@@ -42,7 +48,7 @@ export default function AdminRoute() {
   const mfaMissing = !me?.mfaSatisfied;
 
   return (
-    <Screen title="Yönetim" titleEn="Platform">
+    <Screen title={only ? 'Yönetim · pazar yeri' : 'Yönetim'} titleEn="Platform" contentStyle={desktop ? { maxWidth: 1240, width: '100%', alignSelf: 'center' } : undefined}>
       {mfaMissing ? (
         <View style={{ borderWidth: 1, borderColor: tint.warn(0.35), backgroundColor: tint.warn(0.06), borderRadius: 16, padding: 13, gap: 8 }}>
           <Text style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Bu oturum ek doğrulamadan geçmedi. Platform işlemleri sunucu tarafından reddedilir.</Text>
@@ -50,11 +56,13 @@ export default function AdminRoute() {
         </View>
       ) : null}
       {error ? <ErrorBox message={error} /> : null}
-      {roles.length > 0 ? <PlatformOverview /> : null}
-      {roles.length > 0 ? <GhostButton testID="admin-legislation" label="Mevzuat takibi: günlük tarama ve inceleme kuyruğu ›" height={42} size={12.5} onPress={() => router.push('/legislation')} /> : null}
+      {only ? <GhostButton testID="admin-back-home" label="‹ Bekleyen işlere dön" height={38} size={12} onPress={() => router.replace('/admin')} /> : null}
+      {!only && roles.length > 0 ? <AdminHome /> : null}
+      {!only && roles.length > 0 ? <GhostButton testID="admin-legislation" label="Mevzuat masasını aç: kuyruk, kaynak, atama, karar ›" height={42} size={12.5} onPress={() => router.push('/legislation')} /> : null}
+      {!only && roles.length > 0 ? <PlatformOverview /> : null}
       <Field testID="admin-reason" label="Gerekçe (onay ve yayın için zorunlu)" value={note} onChangeText={setNote} placeholder="ör. Kaynak metinle karşılaştırıldı" />
 
-      {rules.data || rules.error ? (
+      {!only && (rules.data || rules.error) ? (
         <>
           <SectionLabel>KURAL SÜRÜMLERİ</SectionLabel>
           {roles.includes('rule_author') ? <PrimaryButton testID="rule-new" label="Yeni kural taslağı yaz" glow={false} height={42} size={12.5} onPress={() => router.push('/rule/new')} /> : null}
@@ -116,12 +124,11 @@ export default function AdminRoute() {
 
       {queue.data || queue.error ? (
         <>
-          <SectionLabel>PAZAR YERİ · ÇALIŞMA LİSTELERİ</SectionLabel>
-          <MarketOps />
-          <SectionLabel>PAZAR YERİ · BEKLEYEN BELGELER</SectionLabel>
+          {only ? null : <><SectionLabel>PAZAR YERİ · ÇALIŞMA LİSTELERİ</SectionLabel><MarketOps /></>}
+          {only === 'authorizations' ? null : <SectionLabel>PAZAR YERİ · BEKLEYEN BELGELER</SectionLabel>}
           {queue.error ? <ErrorBox message={queue.error} /> : null}
-          {queue.data?.verifications.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Bekleyen belge yok.</Text> : null}
-          {(queue.data?.verifications ?? []).map(v => (
+          {only === 'authorizations' ? null : queue.data?.verifications.length === 0 ? <Text style={type(12, 400, { color: C.t2 })}>Bekleyen belge yok.</Text> : null}
+          {(only === 'authorizations' ? [] : queue.data?.verifications ?? []).map(v => (
             <Card key={v.id} style={{ gap: 6 }}>
               <Text style={type(13.5, 600)}>{v.display_name} · {v.kind === 'identity' ? 'Kimlik' : v.kind === 'credential' ? credentialLabel(v.credential_type ?? '') : 'İşletme kaydı'}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>{v.issuer} · {v.document_ref}{v.valid_until ? ` · ${v.valid_until}'e kadar` : ''}</Text>
@@ -133,9 +140,9 @@ export default function AdminRoute() {
               </View>
             </Card>
           ))}
-          <SectionLabel>PAZAR YERİ · KATEGORİ BAŞVURULARI</SectionLabel>
-          <Field label="Onay bitiş tarihi (YYYY-AA-GG) — dayandığı belgelerin bitişini geçemez" testID="auth-valid-until" value={validUntil} onChangeText={setValidUntil} placeholder="ör. 2027-10-31" />
-          {(queue.data?.authorizations ?? []).map(a => (
+          {only === 'verifications' ? null : <SectionLabel>PAZAR YERİ · KATEGORİ BAŞVURULARI</SectionLabel>}
+          {only === 'verifications' ? null : <Field label="Onay bitiş tarihi (YYYY-AA-GG) — dayandığı belgelerin bitişini geçemez" testID="auth-valid-until" value={validUntil} onChangeText={setValidUntil} placeholder="ör. 2027-10-31" />}
+          {(only === 'verifications' ? [] : queue.data?.authorizations ?? []).map(a => (
             <Card key={a.id} style={{ gap: 6 }}>
               <Text style={type(13.5, 600)}>{a.display_name} · {a.category_name}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>Gerekli: kimlik + {a.required_credentials.map(credentialLabel).join(', ')}</Text>
@@ -149,7 +156,7 @@ export default function AdminRoute() {
           ))}
         </>
       ) : null}
-      {roles.includes('platform_admin') ? <><PlatformRoles /><AuditTrail /></> : null}
+      {!only && roles.includes('platform_admin') ? <><PlatformRoles /><AuditTrail /></> : null}
       {roles.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Platform rolün yok.</Text> : null}
     </Screen>
   );
