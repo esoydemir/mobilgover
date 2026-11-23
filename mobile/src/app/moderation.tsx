@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
@@ -22,7 +22,8 @@ const DECISION: Record<string, string> = { hide: 'İçeriği gizle', dismiss: '�
 
 /** Network moderation: every decision needs a reason and is recorded in the audit log. */
 export default function ModerationRoute() {
-  const [status, setStatus] = useState<'open' | 'closed' | 'appeals'>('open');
+  const params = useLocalSearchParams<{ status?: string }>();
+  const [status, setStatus] = useState<'open' | 'closed' | 'appeals'>(params.status === 'closed' || params.status === 'appeals' ? params.status : 'open');
   const q = useApi<Report[]>(status === 'appeals' ? null : `/network/moderation/reports?status=${status}`);
   const ap = useApi<Appeal[]>(status === 'appeals' ? '/network/moderation/appeals' : null);
   return (
