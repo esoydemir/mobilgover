@@ -96,7 +96,7 @@ describe('board', () => {
     const cmp = (await owner().get(`${C()}/board`)).body.comparison.sites;
     const a = cmp.find((x: any) => x.siteId === demo.siteId), b = cmp.find((x: any) => x.siteId === site2);
     expect(a.controls).toMatchObject({ checkedOk: 1, checkedNonconforming: 0, notChecked: 1, due: 2 });
-    expect(b.controls).toMatchObject({ checkedOk: 0, notChecked: 0, due: 0 }); // nothing due there: neither "fine" nor "missed"
+    expect(b.controls).toMatchObject({ checkedOk: 0, notChecked: 0, due: 0, waitingInfo: expect.any(Number) }); // nothing due there: neither "fine" nor "missed"
   });
 
   it('filters: site, topic, equipment, responsible, dates', async () => {

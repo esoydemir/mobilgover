@@ -3,6 +3,7 @@ import { conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { listDocuments } from './documents';
+import { currentObligations } from './obligations';
 import { equipmentGaps, topUpSite } from './tasks';
 
 /**
@@ -189,7 +190,9 @@ async function compareSites(tx: Tx, p: Principal, companyId: string, sites: { id
               count(*) FILTER (WHERE status = 'open' AND due_at < now())::int AS open_late, count(*) FILTER (WHERE status = 'missed')::int AS missed
          FROM tasks WHERE company_id = $1 AND site_id = $2 AND due_at < now() AND due_at >= $3 AND status <> 'cancelled'`, [companyId, s.id, since])).rows[0]!;
     const notChecked = c.open_late + c.missed, due = c.ok + c.bad + notChecked;
-    out.push({ controls: { checkedOk: c.ok, checkedNonconforming: c.bad, notChecked, due, since }, siteId: s.id, site: s.name, critical: open.filter(n => n.risk_level === 'critical' || n.risk_level === 'high').length, overdueActions: overdue,
+    // A site that never answered its profile has no checks generated at all: that is "unknown", not "nothing to check".
+    const waitingInfo = (await currentObligations(tx, companyId, s.id)).filter((o: any) => o.decision === 'needs_info').length;
+    out.push({ controls: { checkedOk: c.ok, checkedNonconforming: c.bad, notChecked, due, since, waitingInfo }, siteId: s.id, site: s.name, critical: open.filter(n => n.risk_level === 'critical' || n.risk_level === 'high').length, overdueActions: overdue,
       awaitingVerification: open.filter(n => n.status === 'awaiting_verification').length, repeats: rep.list.length,
       openDaysMedian: median(closedDur), closedCount: closedDur.length });
   }
