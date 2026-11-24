@@ -24,7 +24,7 @@ type Manager = {
   sections: { critical: Ref[]; overdueActions: { id: string; ncrId: string; description: string; ncrTitle: string; site: string; owner: string | null; dueAt: string; lateDays: number }[];
     awaitingVerification: Ref[]; documents: { id: string; title: string; site: string; status: string; expiring: boolean; validUntil: string | null }[]; repeats: Repeat[] };
   indicators: Indicator[];
-  comparison: { note: string; sites: { siteId: string; site: string; critical: number; overdueActions: number; awaitingVerification: number; repeats: number; openDaysMedian: number | null; closedCount: number }[] } | null;
+  comparison: { note: string; sites: { controls: { checkedOk: number; checkedNonconforming: number; notChecked: number; due: number; since: string }; siteId: string; site: string; critical: number; overdueActions: number; awaitingVerification: number; repeats: number; openDaysMedian: number | null; closedCount: number }[] } | null;
 };
 type Mine = { scope: 'mine'; note: string; sections: { actions: { id: string; ncr_id: string; description: string; due_at: string | null; overdue: boolean; ncr_title: string }[];
   tasks: { id: string; title: string; due_at: string; overdue: boolean }[]; cases: { id: string; title: string; risk_level: string; status: string }[] } };
@@ -110,6 +110,9 @@ export default function BoardRoute() {
               <Text style={type(13, 600)}>{s.site} ›</Text>
               <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Kritik/yüksek {s.critical} · geciken aksiyon {s.overdueActions} · doğrulama bekleyen {s.awaitingVerification} · tekrar adayı {s.repeats}
                 {' · '}açık kalma medyanı {s.openDaysMedian == null ? 'veri yok' : `${s.openDaysMedian} gün (${s.closedCount} kayıt)`}</Text>
+              <Text testID={`board-controls-${s.siteId}`} style={type(11.5, 600, { color: s.controls.notChecked ? C.warn : C.t2, lh: 1.45 })}>
+                {s.controls.due === 0 ? 'Bu dönemde zamanı gelen kontrol yok.' : `Kontrol (zamanı gelen ${s.controls.due}): ${s.controls.checkedOk} yapıldı ve uygun · ${s.controls.checkedNonconforming} yapıldı, uygunsuz · ${s.controls.notChecked} henüz yapılmadı`}
+              </Text>
             </Tap>
           ))}
           <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>{b.comparison.note}</Text>

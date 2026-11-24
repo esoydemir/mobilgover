@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedDemoCompany, seedPlatform } from '../../src/seed/demo';
 import { createSession } from '../../src/services/principal';
+import { topUpSite } from '../../src/services/tasks';
 import { client, freshEnv, type Env } from '../support/env';
 
 /**
@@ -84,6 +85,18 @@ describe('board', () => {
     expect(ind.openDays.denominator).toBe(1);
     expect(ind.effectiveActions.basis).toContain('Takip aksiyonları sayılmaz');
     expect(b.note).toContain('ceza');
+  });
+
+  it('HQ comparison tells "checked and fine" apart from "not checked yet" per site', async () => {
+    await env.db.system(tx => topUpSite(tx, demo.companyId, demo.siteId, 14));
+    const ids = (await env.ownerDb.query(`SELECT id FROM tasks WHERE company_id = $1 AND site_id = $2 AND status = 'open' ORDER BY created_at LIMIT 3`, [demo.companyId, demo.siteId])).rows.map(r => r.id as string);
+    expect(ids.length).toBeGreaterThanOrEqual(2);
+    await env.ownerDb.query(`UPDATE tasks SET due_at = now() - interval '2 days' WHERE id = ANY($1)`, [ids.slice(0, 2)]);
+    await env.ownerDb.query(`UPDATE tasks SET status = 'done', outcome = 'conforming', completed_by = $2, completed_at = now() - interval '1 day' WHERE id = $1`, [ids[0], demo.users.manager.id]);
+    const cmp = (await owner().get(`${C()}/board`)).body.comparison.sites;
+    const a = cmp.find((x: any) => x.siteId === demo.siteId), b = cmp.find((x: any) => x.siteId === site2);
+    expect(a.controls).toMatchObject({ checkedOk: 1, checkedNonconforming: 0, notChecked: 1, due: 2 });
+    expect(b.controls).toMatchObject({ checkedOk: 0, notChecked: 0, due: 0 }); // nothing due there: neither "fine" nor "missed"
   });
 
   it('filters: site, topic, equipment, responsible, dates', async () => {
