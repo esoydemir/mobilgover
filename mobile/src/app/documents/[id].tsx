@@ -152,6 +152,7 @@ function NewVersion({ docId, maxBytes, onDone }: { docId: string; maxBytes: numb
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState('');
   const [until, setUntil] = useState('');
+  const [noEnd, setNoEnd] = useState(false); // "this document has no end date" is a statement, not an empty box
   const [notes, setNotes] = useState('');
   const [file, setFile] = useState<Picked | null>(null);
   const [busy, setBusy] = useState(false);
@@ -178,7 +179,7 @@ function NewVersion({ docId, maxBytes, onDone }: { docId: string; maxBytes: numb
     try {
       if (pending) { await upload(pending.evidenceId, pending.version); return; }
       const r = await call<{ evidenceId: string; version: number }>('POST', `/companies/${company!.id}/documents/${docId}/versions`,
-        { validFrom: from || null, validUntil: until || null, notes: notes.trim() || null, file: fileMeta(file!) });
+        { validFrom: from || null, validUntil: noEnd ? null : until || null, ...(noEnd ? { endKind: 'none' } : {}), notes: notes.trim() || null, file: fileMeta(file!) });
       await upload(r.evidenceId, r.version);
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };
@@ -190,7 +191,8 @@ function NewVersion({ docId, maxBytes, onDone }: { docId: string; maxBytes: numb
       {!pending ? (
         <>
           <Field label="Geçerlilik başlangıcı (YYYY-AA-GG, isteğe bağlı)" testID="doc-valid-from" value={from} onChangeText={setFrom} placeholder="2026-01-15" />
-          <Field label="Geçerlilik sonu (YYYY-AA-GG; süresizse boş bırak)" testID="doc-valid-until" value={until} onChangeText={setUntil} placeholder="2027-01-15" />
+          <Field label="Geçerlilik sonu (YYYY-AA-GG; bilmiyorsan boş bırak, “bitiş bilinmiyor” kalır)" testID="doc-valid-until" value={noEnd ? '' : until} onChangeText={setUntil} editable={!noEnd} placeholder="2027-01-15" />
+          <GhostButton testID="doc-no-end" label={noEnd ? '● Bu belgenin bitiş tarihi yok (süresiz)' : 'Bu belgenin bitiş tarihi yok (süresiz)'} height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => { setNoEnd(v => !v); setUntil(''); }} />
           <Field label="Not (isteğe bağlı)" value={notes} onChangeText={setNotes} multiline />
           <Text style={type(11, 400, { color: C.t3, lh: 1.45 })}>Tarihleri belgede yazdığı gibi gir; inceleyen kişi belgeyle karşılaştırıp onaylar ya da düzeltir.</Text>
         </>
@@ -198,7 +200,7 @@ function NewVersion({ docId, maxBytes, onDone }: { docId: string; maxBytes: numb
       {error ? <ErrorBox message={error} /> : null}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <PrimaryButton testID="doc-version-save" label={busy ? 'Yükleniyor…' : pending ? 'Yüklemeyi yeniden dene' : 'Yükle ve incelemeye gönder'} glow={false} height={44} size={12.5} style={{ flex: 1 }}
-          disabled={busy || !file || !isDay(from) || !isDay(until)} onPress={save} />
+          disabled={busy || !file || !isDay(from) || (!noEnd && !isDay(until))} onPress={save} />
         <GhostButton label="Vazgeç" height={44} size={12.5} onPress={() => { setOpen(false); setPending(null); setError(null); }} />
       </View>
     </Card>
@@ -236,6 +238,7 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
   const [mode, setMode] = useState<'review' | 'issuer' | null>(null);
   const [notes, setNotes] = useState('');
   const [until, setUntil] = useState(v.valid_until ?? '');
+  const [noEnd, setNoEnd] = useState(false);
   const [method, setMethod] = useState<string>('barcode_query');
   const [ref, setRef] = useState('');
   const [busy, setBusy] = useState(false);
@@ -274,12 +277,13 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
       {mode === 'review' ? (
         <View style={{ gap: 8, marginTop: 4 }}>
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Kurum içi inceleme: belgeyi aslıyla karşılaştır. Bu, düzenleyen kurumun doğrulaması değildir.</Text>
-          <Field label="Belgedeki geçerlilik sonu (gerekirse düzelt; süresizse boş)" testID={`doc-review-until-${v.version}`} value={until} onChangeText={setUntil} />
+          <Field label="Belgedeki geçerlilik sonu (gerekirse düzelt; okuyamıyorsan boş bırak, “bitiş bilinmiyor” kalır)" testID={`doc-review-until-${v.version}`} value={noEnd ? '' : until} onChangeText={setUntil} editable={!noEnd} />
+          <GhostButton testID={`doc-review-no-end-${v.version}`} label={noEnd ? '● Belgede bitiş tarihi yok (süresiz)' : 'Belgede bitiş tarihi yok (süresiz)'} height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => { setNoEnd(x => !x); setUntil(''); }} />
           <Field label="Neyi kontrol ettin?" testID={`doc-review-notes-${v.version}`} value={notes} onChangeText={setNotes} multiline placeholder="ör. Seri no ve tarih belgeyle aynı." />
           {error ? <ErrorBox message={error} /> : null}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <PrimaryButton testID={`doc-review-ok-${v.version}`} label={busy ? 'Kaydediliyor…' : 'İncelendi'} glow={false} height={40} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5 || !isDay(until)}
-              onPress={() => run(() => call('POST', `${base}/review`, { decision: 'verified', notes: notes.trim(), validUntil: until || null }), 'Kurum içi incelendi', 'Resmî doğrulama değildir; kurumla doğruladıysan ayrıca kaydet.')} />
+            <PrimaryButton testID={`doc-review-ok-${v.version}`} label={busy ? 'Kaydediliyor…' : 'İncelendi'} glow={false} height={40} size={12.5} style={{ flex: 1 }} disabled={busy || notes.trim().length < 5 || (!noEnd && !isDay(until))}
+              onPress={() => run(() => call('POST', `${base}/review`, { decision: 'verified', notes: notes.trim(), validUntil: noEnd ? null : until || null, ...(noEnd ? { endKind: 'none' } : {}) }), 'Kurum içi incelendi', 'Resmî doğrulama değildir; kurumla doğruladıysan ayrıca kaydet.')} />
             <GhostButton testID={`doc-review-reject-${v.version}`} label="Reddet" height={40} size={12.5} color={C.crit} border={tint.crit(0.3)} disabled={busy || notes.trim().length < 5} why={shortWhy(notes, 5, 'Not')}
               onPress={() => run(() => call('POST', `${base}/review`, { decision: 'rejected', notes: notes.trim() }), 'Belge reddedildi', 'Yükleyene bildirildi.')} />
             <GhostButton label="Vazgeç" height={40} size={12.5} onPress={() => setMode(null)} />
