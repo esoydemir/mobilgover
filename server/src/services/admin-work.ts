@@ -23,8 +23,14 @@ export async function adminWork(tx: Tx, p: Principal, cfg: LegislationConfig | u
   const areas: Area[] = [];
   const guard = async (area: Area['area'], label: string, need: string, allowed: boolean, build: () => Promise<Pick<Area, 'counters' | 'items' | 'total'>>) => {
     if (!allowed) { areas.push({ area, label, need, state: 'forbidden', counters: [], items: [], total: 0 }); return; }
-    try { areas.push({ area, label, need, state: 'ok', ...(await build()) }); }
-    catch (e) { areas.push({ area, label, need, state: 'error', message: (e as Error).message || 'Yüklenemedi', counters: [], items: [], total: 0 }); }
+    // Each area runs in its own savepoint: one failing query must not abort the shared transaction and make the other areas fail too.
+    await tx.query('SAVEPOINT admin_work_area');
+    try { areas.push({ area, label, need, state: 'ok', ...(await build()) }); await tx.query('RELEASE SAVEPOINT admin_work_area'); }
+    catch (e) {
+      await tx.query('ROLLBACK TO SAVEPOINT admin_work_area').catch(() => undefined);
+      console.error(`[admin-work] ${area}: ${(e as Error).message}`); // raw database text stays in the server log, not on the screen
+      areas.push({ area, label, need, state: 'error', message: 'Bu bölümün verisi şu an alınamadı', counters: [], items: [], total: 0 });
+    }
   };
 
   await guard('legislation', 'Mevzuat', 'platform yöneticisi, kural yazarı ya da kural inceleyici', has(p, 'platform_admin', 'rule_author', 'rule_reviewer'), async () => {

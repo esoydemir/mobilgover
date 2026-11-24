@@ -34,12 +34,15 @@ export function AdminHome() {
   const rows = (w?.areas ?? []).filter(a => area === 'all' || a.area === area).flatMap(a => a.items.map(i => ({ ...i, areaLabel: a.label })))
     .filter(i => !unowned || /^Sahipsiz|atanmadı/.test(i.responsible)).sort((a, b) => b.waitingMinutes - a.waitingMinutes);
   const total = (w?.areas ?? []).reduce((n, a) => n + (a.state === 'ok' ? a.total : 0), 0);
+  const failed = (w?.areas ?? []).filter(a => a.state === 'error').map(a => a.label);
 
   return (
     <View testID="admin-home" style={{ gap: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
         <Text accessibilityRole="header" style={type(20, 700)}>Bugün bekleyen işler</Text>
-        <Text testID="home-total" style={type(13, 600, { color: total ? C.warn : C.lime })}>{w ? (total ? `${total} iş kararını bekliyor` : 'Bekleyen iş yok') : ''}</Text>
+        <Text testID="home-total" style={type(13, 600, { color: failed.length ? C.warn : total ? C.warn : C.lime })}>
+          {w ? (failed.length ? `${total ? `En az ${total} iş kararını bekliyor` : 'Toplam bilinmiyor'} · ${failed.join(', ')} yüklenemedi` : total ? `${total} iş kararını bekliyor` : 'Bekleyen iş yok') : ''}
+        </Text>
       </View>
       {q.error && !w ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!w && !q.error ? <Loading /> : null}

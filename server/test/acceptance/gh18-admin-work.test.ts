@@ -73,6 +73,11 @@ describe('GH-18 platform ana sayfası', () => {
     await env.ownerDb.query(`ALTER TABLE network_reports RENAME TO network_reports_x`);
     try { const mo = await work(mod.c); expect(area(mo, 'moderation')).toMatchObject({ state: 'error' }); expect(area(mo, 'moderation').message).toBeTruthy(); expect(area(mo, 'moderation').items).toEqual([]); }
     finally { await env.ownerDb.query(`ALTER TABLE network_reports_x RENAME TO network_reports`); }
+    // A failing area (market) must not break the areas after it (moderation) that run in the same transaction; the screen gets a plain message, not database text.
+    const both = await user('Çift rol', 'marketplace_reviewer'); await env.ownerDb.query(`INSERT INTO platform_roles VALUES ($1, 'network_moderator')`, [both.id]);
+    await env.ownerDb.query(`ALTER TABLE professional_verifications RENAME TO professional_verifications_x`);
+    try { const w = await work(both.c); expect(area(w, 'market')).toMatchObject({ state: 'error', total: 0, items: [], message: 'Bu bölümün verisi şu an alınamadı' }); expect(JSON.stringify(area(w, 'market'))).not.toMatch(/relation|professional_verifications/); expect(area(w, 'moderation').state).toBe('ok'); expect(area(w, 'moderation').total).toBe(1); }
+    finally { await env.ownerDb.query(`ALTER TABLE professional_verifications_x RENAME TO professional_verifications`); }
     const empty = await work(mod.c); await env.ownerDb.query(`UPDATE network_reports SET status = 'dismissed', decision = 'dismiss', decision_notes = 'Sentetik karar notu.', handled_by = $1, handled_at = now()`, [mod.id]);
     expect(area(await work(mod.c), 'moderation')).toMatchObject({ state: 'ok', total: 0, items: [] }); expect(area(empty, 'moderation').total).toBe(1);
   });
