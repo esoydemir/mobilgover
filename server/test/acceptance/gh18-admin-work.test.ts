@@ -66,6 +66,18 @@ describe('GH-18 platform ana sayfası', () => {
     expect(area(mo, 'moderation').items[0].waitingMinutes).toBeGreaterThanOrEqual(119); expect(area(mo, 'moderation').items[0]).toMatchObject({ action: 'Karara bağla', href: '/moderation?status=open' });
   });
 
+  it('pazar: teklifini bekleyen talep bir "takip" sayacıdır; karar sayısına (toplam) katılmaz, ama "iş yok" da denmez', async () => {
+    const before = await work(mreview()); const total0 = area(before, 'market').total;
+    const owner = (await env.ownerDb.query(`SELECT id FROM users LIMIT 1`)).rows[0].id as string;
+    const co = (await env.ownerDb.query(`INSERT INTO companies (name) VALUES ('Takip Sentetik') RETURNING id`)).rows[0].id as string;
+    const site = (await env.ownerDb.query(`INSERT INTO sites (company_id, name) VALUES ($1,'Şube') RETURNING id`, [co])).rows[0].id as string;
+    await env.ownerDb.query(`INSERT INTO service_requests (company_id, site_id, category_code, title, description, city, status, created_by, created_at) VALUES ($1,$2,'refrigeration_service','Takipte talep','Sentetik','İstanbul','open',$3, now() - interval '3 days')`, [co, site, owner]);
+    const after = await work(mreview());
+    expect(ctr(after, 'market', 'market_follow_requests')).toMatchObject({ count: 1, kind: 'follow_up' });
+    expect(area(after, 'market').total).toBe(total0); // reminders are not decisions
+    expect(ctr(after, 'market', 'market_complaints').count).toBe(0);
+  });
+
   it('kayıt işlenince sayı düşer; bir alan yüklenemezse yalnız o alan "hata" olur, diğerleri çalışır', async () => {
     const before = ctr(await work(admin()), 'legislation', 'leg_unowned').count;
     expect((await admin().post(`/admin/legislation/changes/${ids[1]}/reject`, { reason: 'İlgisiz yayın (sentetik).' })).status).toBe(200);

@@ -9,7 +9,7 @@ import { useDesktop } from './desktop';
 
 /** Platform ana sayfası: kararını bekleyen işler. Sayaçlar ve satırlar GET /admin/work'ten gelir; her sayaç, saydığı kayıtları açan süzgeçli bağlantıdır. */
 type Item = { id: string; kind: string; title: string; waitingMinutes: number; responsible: string; status: string; action: string; href: string };
-type Counter = { key: string; label: string; count: number; href: string };
+type Counter = { key: string; label: string; count: number; href: string; kind?: 'decision' | 'follow_up' };
 type Area = { area: 'legislation' | 'market' | 'moderation'; label: string; need: string; state: 'ok' | 'forbidden' | 'error'; message?: string; counters: Counter[]; items: Item[]; total: number };
 type Work = { generatedAt: string; yourRoles: string[]; areas: Area[]; missing: { key: string; label: string; why: string }[] };
 
@@ -109,11 +109,10 @@ function AreaCard({ a, onRetry, desktop }: { a: Area; onRetry: () => void; deskt
           <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>{a.message}. Bu "bekleyen iş yok" demek değildir.</Text>
           <GhostButton label="Yeniden dene" height={34} size={12} onPress={onRetry} />
         </View>
-      ) : a.total === 0 ? (
-        <Text testID={`home-zero-${a.area}`} style={type(13, 600, { color: C.lime })}>Bekleyen iş yok</Text>
       ) : (
         <View style={{ gap: 6 }}>
-          {a.counters.map(c => (
+          {a.total === 0 ? <Text testID={`home-zero-${a.area}`} style={type(13, 600, { color: C.lime })}>Karar bekleyen iş yok</Text> : null}
+          {a.counters.filter(c => a.total > 0 ? c.kind !== 'follow_up' || c.count > 0 : c.kind === 'follow_up' && c.count > 0).map(c => (
             <Tap key={c.key} testID={`home-counter-${c.key}`} onPress={() => router.push(c.href as never)} accessibilityRole="link" accessibilityLabel={`${c.label}: ${c.count}`}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 }}>
               <Text testID={`home-count-${c.key}`} style={[type(22, 700, { color: c.count ? C.warn : C.t3 }), { width: 44 }]}>{c.count}</Text>

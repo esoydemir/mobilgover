@@ -9,7 +9,7 @@ import { Card, Chevron, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, T
 import { fmtDateTime } from '../features/dates';
 import { PostCard, type Post } from '../features/network';
 import { C, tint, type } from '../theme';
-import { REQ_STATUS } from './services';
+import { reqStatus } from './services';
 
 type Category = { code: string; name: string; description: string; is_example: boolean };
 type Provider = { id: string; display_name: string; headline: string; city: string; district: string | null; verified_credentials: number };
@@ -118,7 +118,7 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
       {(reqs.data ?? []).map(r => (
         <Tap key={r.id} testID={`market-req-${r.id}`} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: r.status === 'open' && r.open_quotes > 0 ? tint.lime(0.3) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Pill label={REQ_STATUS[r.status]![0]} fg={REQ_STATUS[r.status]![1]} bg={REQ_STATUS[r.status]![2]} />
+            <Pill label={reqStatus(r.status, r.open_quotes)[0]} fg={reqStatus(r.status, r.open_quotes)[1]} bg={reqStatus(r.status, r.open_quotes)[2]} />
             <Text style={type(11, 500, { color: C.t3 })}>{r.category_name}</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>

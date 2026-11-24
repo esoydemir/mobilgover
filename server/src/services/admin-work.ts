@@ -2,6 +2,7 @@ import type { Principal } from '../domain/permissions';
 import type { Tx } from '../db/pool';
 import { forbidden } from '../domain/errors';
 import { adminOverview, type LegislationConfig } from './legislation';
+import { operations } from './service-ops';
 
 /**
  * Platform home: the work that is waiting for a decision, per area. Each area shows only to its own roles; the others come back as
@@ -10,7 +11,8 @@ import { adminOverview, type LegislationConfig } from './legislation';
  * Counters that cannot be derived reliably from stored data are listed in `missing`; they are never guessed.
  */
 export type WorkItem = { id: string; kind: string; title: string; waitingMinutes: number; responsible: string; status: string; action: string; href: string };
-export type Counter = { key: string; label: string; count: number; href: string };
+/** `follow_up` counters are reminders about work that waits on someone else (a business, an expert); they are shown but never counted as "decisions waiting". */
+export type Counter = { key: string; label: string; count: number; href: string; kind?: 'decision' | 'follow_up' };
 export type Area = { area: 'legislation' | 'market' | 'moderation'; label: string; need: string; state: 'ok' | 'forbidden' | 'error'; message?: string; counters: Counter[]; items: WorkItem[]; total: number };
 
 const mins = (t: Date | string | null, now: Date) => (t ? Math.max(0, Math.floor((now.getTime() - new Date(t).getTime()) / 60000)) : 0);
@@ -63,9 +65,15 @@ export async function adminWork(tx: Tx, p: Principal, cfg: LegislationConfig | u
       ...v.map((r: any): WorkItem => ({ id: r.id, kind: 'verification', title: `${r.display_name} · ${r.kind === 'identity' ? 'kimlik' : r.kind === 'credential' ? 'yeterlilik belgesi' : 'işletme kaydı'}`, waitingMinutes: mins(r.submitted_at, now), responsible: 'Pazar yeri inceleyicisi (atanmadı)', status: 'Belge doğrulaması bekliyor', action: 'Doğrula ya da reddet', href: '/admin?list=verifications' })),
       ...a.map((r: any): WorkItem => ({ id: r.id, kind: 'authorization', title: `${r.display_name} · ${r.category}`, waitingMinutes: mins(r.requested_at, now), responsible: 'Pazar yeri inceleyicisi (atanmadı)', status: 'Kategori başvurusu bekliyor', action: 'Onayla ya da reddet', href: '/admin?list=authorizations' })),
     ];
-    return { total: nv + na, items, counters: [
+    const ops = (await operations(tx, p, now)).counts;
+    return { total: nv + na + ops.openComplaints, items, counters: [
       { key: 'market_verifications', label: 'Belge doğrulaması bekleyen', count: nv, href: '/admin?list=verifications' },
       { key: 'market_authorizations', label: 'Kategori başvurusu bekleyen', count: na, href: '/admin?list=authorizations' },
+      { key: 'market_complaints', label: 'Açık hizmet şikâyeti (karar)', count: ops.openComplaints, href: '/admin' },
+      { key: 'market_follow_requests', label: 'Teklifini bekleyen talep (takip)', count: ops.openRequests, href: '/admin', kind: 'follow_up' },
+      { key: 'market_follow_appointments', label: 'Geciken randevu (takip)', count: ops.lateAppointments, href: '/admin', kind: 'follow_up' },
+      { key: 'market_follow_reports', label: 'Revizyondaki rapor (takip)', count: ops.rejectedReports, href: '/admin', kind: 'follow_up' },
+      { key: 'market_follow_approvals', label: 'Biten/bitecek uzman onayı (takip)', count: ops.expiringApprovals, href: '/admin', kind: 'follow_up' },
     ] };
   });
 
@@ -80,7 +88,6 @@ export async function adminWork(tx: Tx, p: Principal, cfg: LegislationConfig | u
   const missing = [
     { key: 'assignee_market', label: 'Pazar yeri başvurusunda sorumlu kişi', why: 'Başvurular kişiye atanmıyor; yalnız karar veren kaydediliyor. Satırlarda rol adı gösterilir.' },
     { key: 'assignee_moderation', label: 'Şikâyette sorumlu moderatör', why: 'Şikâyetler kişiye atanmıyor; yalnız karar veren kaydediliyor. Satırlarda rol adı gösterilir.' },
-    { key: 'market_complaints', label: 'Pazar yeri hizmet şikâyetleri', why: 'Bu turun kapsamı dışında; ana sayfada sayılmıyor.' },
   ];
   return { generatedAt: now.toISOString(), yourRoles: p.platformRoles, areas, missing };
 }
