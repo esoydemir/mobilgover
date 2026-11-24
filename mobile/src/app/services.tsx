@@ -16,6 +16,9 @@ export const REQ_STATUS: Record<string, [string, string, string]> = {
   completed: ['TAMAMLANDI', C.lime, tint.lime(0.14)], cancelled: ['İPTAL', C.t2, tint.white(0.08)],
 };
 
+/** Whose turn it is: with no quote yet the request waits for an expert; once a quote is in, the decision is the business's. */
+export const reqStatus = (status: string, quotes: number): [string, string, string] => (status === 'open' && quotes > 0 ? ['SIRA SENDE · TEKLİFİ DEĞERLENDİR', C.warn, tint.warn(0.14)] : REQ_STATUS[status]!);
+
 export default function ServicesRoute() {
   const { company } = useSession();
   const q = useApi<Req[]>(company ? `/companies/${company.id}/service-requests` : null);
@@ -30,7 +33,7 @@ export default function ServicesRoute() {
       {(q.data ?? []).map(r => (
         <Tap key={r.id} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <Pill label={REQ_STATUS[r.status]![0]} fg={REQ_STATUS[r.status]![1]} bg={REQ_STATUS[r.status]![2]} />
+            <Pill label={reqStatus(r.status, r.open_quotes)[0]} fg={reqStatus(r.status, r.open_quotes)[1]} bg={reqStatus(r.status, r.open_quotes)[2]} />
             <Text style={type(11, 500, { color: C.t3 })}>{r.category_name}</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>

@@ -11,7 +11,7 @@ import { fmtDateTime } from '../../features/dates';
 import { AppointmentCard, ComplaintCard, MessageThread } from '../../features/ServiceExtras';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
-import { REQ_STATUS } from '../services';
+import { reqStatus } from '../services';
 
 type Quote = { id: string; display_name: string; provider_profile_id: string; scope: string; exclusions: string; price_net: number; vat_rate: number; price_gross: number;
   materials: string; duration_text: string; warranty_text: string; deliverable: string; valid_until: string; status: string; expired: boolean;
@@ -58,7 +58,7 @@ export default function ServiceDetailRoute() {
   return (
     <Screen title="Hizmet talebi" titleEn="Service request" onRefresh={q.reload} refreshing={q.loading}>
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Pill label={REQ_STATUS[d.request.status]![0]} fg={REQ_STATUS[d.request.status]![1]} bg={REQ_STATUS[d.request.status]![2]} />
+        <Pill label={reqStatus(d.request.status, live.length)[0]} fg={reqStatus(d.request.status, live.length)[1]} bg={reqStatus(d.request.status, live.length)[2]} />
         <Pill label={d.mode === 'direct' ? 'DOĞRUDAN TEK UZMAN' : d.mode === 'selected' ? 'SEÇİLİ UZMANLAR' : 'ÇOK TEKLİFLİ'} fg={C.info} bg={tint.info(0.12)} />
       </View>
       <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{d.request.title}</Text>

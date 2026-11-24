@@ -129,13 +129,18 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
   // GH-07: the product decision is shown apart from the device fix. Open cases show what is still undecided.
   const prodIds = [...new Set([...caseIds, ...critIds])];
   const prodRows = prodIds.length ? (await tx.query(
-    `SELECT a.ncr_id, a.product_ref, a.quantity, a.quantity_unit, a.quantity_unknown, a.first_action, a.opened_at, a.decision, a.rationale, a.decided_at,
+    `SELECT a.id, a.ncr_id, a.product_ref, a.quantity, a.quantity_unit, a.quantity_unknown, a.first_action, a.opened_at, a.decision, a.rationale, a.decided_at,
             au.display_name AS assessor, du.display_name AS decider FROM ncr_product_assessments a JOIN users au ON au.id = a.assessor_id LEFT JOIN users du ON du.id = a.decided_by
       WHERE a.ncr_id = ANY($1) ORDER BY a.opened_at`, [prodIds])).rows : [];
+  // A corrected product decision keeps the earlier one on record; the file must show it too, not only the current decision.
+  const revRows = prodIds.length ? (await tx.query(
+    `SELECT v.ncr_id, v.assessment_id, v.prev_decision, v.prev_rationale, v.prev_decided_at, pu.display_name AS prev_by, v.reason, v.corrected_at, cu.display_name AS corrector
+       FROM ncr_product_decision_revisions v JOIN users pu ON pu.id = v.prev_decided_by JOIN users cu ON cu.id = v.corrected_by WHERE v.ncr_id = ANY($1) ORDER BY v.corrected_at`, [prodIds])).rows : [];
   const productOf = (id: string) => prodRows.filter(x => x.ncr_id === id).map(x => ({
     product: x.product_ref as string, quantity: x.quantity_unknown ? 'MİKTAR BİLİNMİYOR' : `${Number(x.quantity).toLocaleString('tr-TR')}${x.quantity_unit ? ' ' + x.quantity_unit : ''}`,
     firstAction: x.first_action as string, assessor: x.assessor as string,
-    decision: x.decision ? `${DECISION_TR[x.decision as ProductDecision]} · ${x.decider ?? '—'} · ${tr(x.decided_at)} · gerekçe: ${clip(x.rationale, 200)}` : 'KARAR AÇIK' }));
+    decision: x.decision ? `${DECISION_TR[x.decision as ProductDecision]} · ${x.decider ?? '—'} · ${tr(x.decided_at)} · gerekçe: ${clip(x.rationale, 200)}` : 'KARAR AÇIK',
+    previous: revRows.filter(v => v.assessment_id === x.id).map(v => `Önceki karar (düzeltildi ${tr(v.corrected_at)}, düzelten ${v.corrector}): ${DECISION_TR[v.prev_decision as ProductDecision]} · ${v.prev_by} · ${tr(v.prev_decided_at)} · gerekçe: ${clip(v.prev_rationale, 200)} · düzeltme nedeni: ${clip(v.reason, 200)}`) }));
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'audit.report_generated', entityType: 'company', entityId: companyId,
@@ -206,7 +211,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
       p(`${n.site}${n.equipment ? ` · ekipman: ${n.equipment}` : ''} · ${n.status} · tespit ${n.detected} · sorumlu ${n.owner === '—' ? 'ATANMAMIŞ' : n.owner} · termin ${n.due ?? 'belirlenmemiş'}`, { color: '#555' });
       p(`   İlk müdahale: ${n.containment ? clip(n.containment, 160) : 'kayıtlı değil'} · aksiyon: ${n.actions.total} (${n.actions.declared} beyan doğrulanmadı) · servis: ${n.service.length ? n.service.join(', ') : 'talep yok'}`, { color: '#555', size: 8.5 });
       for (const h of n.history) p(`   ${h}`, { color: '#555', size: 8.5 });
-      for (const x of n.product) p(`   Ürün kararı: ${x.product} · ${x.quantity} · ${x.decision}`, { color: x.decision === 'KARAR AÇIK' ? '#b45309' : '#555', size: 8.5 });
+      for (const x of n.product) { p(`   Ürün kararı: ${x.product} · ${x.quantity} · ${x.decision}`, { color: x.decision === 'KARAR AÇIK' ? '#b45309' : '#555', size: 8.5 }); for (const o of x.previous) p(`      ${o}`, { color: '#555', size: 8 }); }
       doc.moveDown(0.2);
     }
 
@@ -251,7 +256,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
       if (n.sequence.length) p('   Cihaz / düzeltme kararı ve adımları', { bold: true, size: 8.5 });
       for (const e of n.sequence) p(`   ${e.at} · ${e.who} · ${e.text}`, { color: '#555', size: 8.5 });
       if (n.product.length) p('   Ürün kararı', { bold: true, size: 8.5 });
-      for (const x of n.product) p(`   ${x.product} · ${x.quantity} · ilk önlem: ${x.firstAction} · değerlendiren: ${x.assessor} · ${x.decision}`, { color: '#555', size: 8.5 });
+      for (const x of n.product) { p(`   ${x.product} · ${x.quantity} · ilk önlem: ${x.firstAction} · değerlendiren: ${x.assessor} · ${x.decision}`, { color: '#555', size: 8.5 }); for (const o of x.previous) p(`      ${o}`, { color: '#555', size: 8 }); }
       doc.moveDown(0.2);
     }
 

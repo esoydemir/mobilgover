@@ -17,7 +17,9 @@ const SYSTEM_KEYS = ['equipment.types', 'activity.nace_codes']; // faaliyet kodu
  * Business profile questions. "Bilmiyorum" is a real answer: nothing is
  * stored, and obligations that depend on it stay "needs information".
  */
-export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet', focus }: { onSaved?: (changed: number) => void; submitLabel?: string; focus?: string }) {
+export type FactResult = { recomputed?: { changed: ProfileDiff['changes']; cancelledTasks?: number }[]; createdTasks?: number };
+export type ProfileDiff = { changes: { ruleCode: string; title: string; from: string | null; to: string }[]; created: number; cancelled: number };
+export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet', focus }: { onSaved?: (changed: number, diff?: ProfileDiff) => void; submitLabel?: string; focus?: string }) {
   const { call, company, siteId } = useSession();
   const [catalog, setCatalog] = useState<CatalogItem[] | null>(null);
   const [current, setCurrent] = useState<Record<string, FactRecord>>({});
@@ -61,14 +63,17 @@ export function ProfileQuestions({ onSaved, submitLabel = 'Kaydet', focus }: { o
 
   const save = async () => {
     setBusy(true); setError(null);
+    const diff: ProfileDiff['changes'] = []; let created = 0, cancelled = 0;
     try {
       for (const [key, value] of changed) {
         const def = catalog.find(c => c.key === key)!;
-        await call('POST', `/companies/${company!.id}/profile/facts`, {
+        const r = await call<FactResult>('POST', `/companies/${company!.id}/profile/facts`, {
           siteId: def.level === 'site' ? siteId : null, key, value, source: 'user_declared', verification: 'user_confirmed',
         });
+        for (const x of r?.recomputed ?? []) { diff.push(...x.changed.filter(c => c.from !== c.to)); cancelled += x.cancelledTasks ?? 0; }
+        created += r?.createdTasks ?? 0;
       }
-      onSaved?.(changed.length);
+      onSaved?.(changed.length, { changes: diff, created, cancelled });
       setAnswers({});
       setCurrent(await call('GET', `/companies/${company!.id}/sites/${siteId}/profile`));
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }

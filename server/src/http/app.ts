@@ -355,7 +355,10 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
         // A check that now applies gets its tasks right away (not only at the next hourly top-up). Re-running adds nothing twice.
         if (r.changed.some(c => c.to === 'applies')) createdTasks += (await topUpSite(tx, companyId, s, 14, req.principal.userId)).created;
       }
-      return { id, recomputed, createdTasks };
+      const codes = [...new Set(recomputed.flatMap(r => r.changed.map(c => c.ruleCode)))];
+      const titles = new Map((await tx.query<{ code: string; title: string }>(`SELECT DISTINCT ON (r.code) r.code, rv.obligation_title AS title FROM rules r JOIN rule_versions rv ON rv.rule_id = r.id WHERE r.code = ANY($1) AND rv.status IN ('published','retired') ORDER BY r.code, rv.version DESC`, [codes])).rows.map(r => [r.code, r.title]));
+      const out = recomputed.map(r => ({ ...r, changed: r.changed.map(c => ({ ...c, title: titles.get(c.ruleCode) ?? c.ruleCode })) }));
+      return { id, recomputed: out, createdTasks };
     }, 201);
   });
 

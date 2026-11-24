@@ -24,7 +24,7 @@ type Manager = {
   sections: { critical: Ref[]; overdueActions: { id: string; ncrId: string; description: string; ncrTitle: string; site: string; owner: string | null; dueAt: string; lateDays: number }[];
     awaitingVerification: Ref[]; documents: { id: string; title: string; site: string; status: string; expiring: boolean; validUntil: string | null }[]; repeats: Repeat[] };
   indicators: Indicator[];
-  comparison: { note: string; sites: { siteId: string; site: string; critical: number; overdueActions: number; awaitingVerification: number; repeats: number; openDaysMedian: number | null; closedCount: number }[] } | null;
+  comparison: { note: string; sites: { controls: { checkedOk: number; checkedNonconforming: number; notChecked: number; due: number; since: string; waitingInfo: number }; siteId: string; site: string; critical: number; overdueActions: number; awaitingVerification: number; repeats: number; openDaysMedian: number | null; closedCount: number }[] } | null;
 };
 type Mine = { scope: 'mine'; note: string; sections: { actions: { id: string; ncr_id: string; description: string; due_at: string | null; overdue: boolean; ncr_title: string }[];
   tasks: { id: string; title: string; due_at: string; overdue: boolean }[]; cases: { id: string; title: string; risk_level: string; status: string }[] } };
@@ -64,6 +64,7 @@ export default function BoardRoute() {
         {b.choices.hazards.length > 1 || hazard ? <ChipRow label="Konu" items={[[null, 'Tümü'], ...b.choices.hazards.map(h => [h, hazardName(h)] as [string, string])]} value={hazard} onChange={setHazard} id="board-hazard" /> : null}
         {b.choices.equipment.length || equipmentId ? <ChipRow label="Ekipman" items={[[null, 'Tümü'], ...b.choices.equipment.map(e => [e.id, e.name] as [string, string])]} value={equipmentId} onChange={setEquipmentId} id="board-eq" /> : null}
         {b.choices.owners.length || ownerId ? <ChipRow label="Sorumlu" items={[[null, 'Tümü'], ...b.choices.owners.map(o => [o.id, o.name] as [string, string])]} value={ownerId} onChange={setOwnerId} id="board-owner" /> : null}
+        {siteId ? <Text testID="board-report" onPress={() => router.push({ pathname: '/report', params: { siteId } } as never)} style={type(12, 600, { color: C.info })}>Bu şubenin uyum raporunu aç ›</Text> : null}
         {filtered ? <Text testID="board-clear" onPress={() => { setSiteId(null); setPeriod(null); setHazard(null); setEquipmentId(null); setOwnerId(null); }} style={type(12, 600, { color: C.info })}>Filtreleri temizle</Text> : null}
       </View>
 
@@ -110,6 +111,9 @@ export default function BoardRoute() {
               <Text style={type(13, 600)}>{s.site} ›</Text>
               <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Kritik/yüksek {s.critical} · geciken aksiyon {s.overdueActions} · doğrulama bekleyen {s.awaitingVerification} · tekrar adayı {s.repeats}
                 {' · '}açık kalma medyanı {s.openDaysMedian == null ? 'veri yok' : `${s.openDaysMedian} gün (${s.closedCount} kayıt)`}</Text>
+              <Text testID={`board-controls-${s.siteId}`} style={type(11.5, 600, { color: s.controls.notChecked ? C.warn : C.t2, lh: 1.45 })}>
+                {s.controls.due === 0 ? (s.controls.waitingInfo ? `Kontrol yok ama bu "uygun" demek değil: ${s.controls.waitingInfo} yükümlülük şube profilindeki cevapları bekliyor.` : 'Bu dönemde zamanı gelen kontrol yok.') : `Kontrol (zamanı gelen ${s.controls.due}): ${s.controls.checkedOk} yapıldı ve uygun · ${s.controls.checkedNonconforming} yapıldı, uygunsuz · ${s.controls.notChecked} henüz yapılmadı${s.controls.waitingInfo ? ` · ${s.controls.waitingInfo} yükümlülük profil cevabı bekliyor` : ''}`}
+              </Text>
             </Tap>
           ))}
           <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>{b.comparison.note}</Text>

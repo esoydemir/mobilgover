@@ -66,6 +66,18 @@ describe('GH-18 platform ana sayfası', () => {
     expect(area(mo, 'moderation').items[0].waitingMinutes).toBeGreaterThanOrEqual(119); expect(area(mo, 'moderation').items[0]).toMatchObject({ action: 'Karara bağla', href: '/moderation?status=open' });
   });
 
+  it('pazar: teklifini bekleyen talep bir "takip" sayacıdır; karar sayısına (toplam) katılmaz, ama "iş yok" da denmez', async () => {
+    const before = await work(mreview()); const total0 = area(before, 'market').total;
+    const owner = (await env.ownerDb.query(`SELECT id FROM users LIMIT 1`)).rows[0].id as string;
+    const co = (await env.ownerDb.query(`INSERT INTO companies (name) VALUES ('Takip Sentetik') RETURNING id`)).rows[0].id as string;
+    const site = (await env.ownerDb.query(`INSERT INTO sites (company_id, name) VALUES ($1,'Şube') RETURNING id`, [co])).rows[0].id as string;
+    await env.ownerDb.query(`INSERT INTO service_requests (company_id, site_id, category_code, title, description, city, status, created_by, created_at) VALUES ($1,$2,'refrigeration_service','Takipte talep','Sentetik','İstanbul','open',$3, now() - interval '3 days')`, [co, site, owner]);
+    const after = await work(mreview());
+    expect(ctr(after, 'market', 'market_follow_requests')).toMatchObject({ count: 1, kind: 'follow_up' });
+    expect(area(after, 'market').total).toBe(total0); // reminders are not decisions
+    expect(ctr(after, 'market', 'market_complaints').count).toBe(0);
+  });
+
   it('kayıt işlenince sayı düşer; bir alan yüklenemezse yalnız o alan "hata" olur, diğerleri çalışır', async () => {
     const before = ctr(await work(admin()), 'legislation', 'leg_unowned').count;
     expect((await admin().post(`/admin/legislation/changes/${ids[1]}/reject`, { reason: 'İlgisiz yayın (sentetik).' })).status).toBe(200);
@@ -73,6 +85,11 @@ describe('GH-18 platform ana sayfası', () => {
     await env.ownerDb.query(`ALTER TABLE network_reports RENAME TO network_reports_x`);
     try { const mo = await work(mod.c); expect(area(mo, 'moderation')).toMatchObject({ state: 'error' }); expect(area(mo, 'moderation').message).toBeTruthy(); expect(area(mo, 'moderation').items).toEqual([]); }
     finally { await env.ownerDb.query(`ALTER TABLE network_reports_x RENAME TO network_reports`); }
+    // A failing area (market) must not break the areas after it (moderation) that run in the same transaction; the screen gets a plain message, not database text.
+    const both = await user('Çift rol', 'marketplace_reviewer'); await env.ownerDb.query(`INSERT INTO platform_roles VALUES ($1, 'network_moderator')`, [both.id]);
+    await env.ownerDb.query(`ALTER TABLE professional_verifications RENAME TO professional_verifications_x`);
+    try { const w = await work(both.c); expect(area(w, 'market')).toMatchObject({ state: 'error', total: 0, items: [], message: 'Bu bölümün verisi şu an alınamadı' }); expect(JSON.stringify(area(w, 'market'))).not.toMatch(/relation|professional_verifications/); expect(area(w, 'moderation').state).toBe('ok'); expect(area(w, 'moderation').total).toBe(1); }
+    finally { await env.ownerDb.query(`ALTER TABLE professional_verifications_x RENAME TO professional_verifications`); }
     const empty = await work(mod.c); await env.ownerDb.query(`UPDATE network_reports SET status = 'dismissed', decision = 'dismiss', decision_notes = 'Sentetik karar notu.', handled_by = $1, handled_at = now()`, [mod.id]);
     expect(area(await work(mod.c), 'moderation')).toMatchObject({ state: 'ok', total: 0, items: [] }); expect(area(empty, 'moderation').total).toBe(1);
   });

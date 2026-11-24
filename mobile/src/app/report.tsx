@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
@@ -33,7 +34,10 @@ const tone = (v: number | null): RingDomain['tone'] => (v === null ? 'idle' : v 
 
 /** Indicators with their components, and the audit file with its gaps. */
 export default function ReportRoute() {
-  const { company, siteId, sites, call, token } = useSession();
+  const { company, siteId: sessionSite, sites, call, token } = useSession();
+  const params = useLocalSearchParams<{ siteId?: string }>();
+  const [pickedSite, setPickedSite] = useState<string | null>(null);
+  const siteId = pickedSite ?? (params.siteId && sites.some(x => x.id === params.siteId) ? params.siteId : sessionSite); // the branch chosen on the board carries over
   const [pdfSite, setPdfSite] = useState<string | null | 'all'>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfMsg, setPdfMsg] = useState<string | null>(null);
@@ -76,6 +80,12 @@ export default function ReportRoute() {
       <View onLayout={e => setWidth(e.nativeEvent.layout.width)} style={{ flexDirection: 'row', gap: 7 }}>
         {PERIODS.map(([n, label]) => <FilterChip key={n} label={label} active={days === n} onPress={() => { setDays(n); setFile(null); }} />)}
       </View>
+      {sites.length > 1 ? (
+        <View style={{ gap: 6 }}>
+          <Text testID="report-site-label" style={type(11.5, 600, { color: C.t2 })}>Rapor şubesi: {sites.find(x => x.id === siteId)?.name ?? '—'}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>{sites.map(st => <FilterChip key={st.id} testID={`report-site-${st.id}`} label={st.name} px={11} active={siteId === st.id} onPress={() => { setPickedSite(st.id); setFile(null); }} />)}</View>
+        </View>
+      ) : null}
       {ind.stale ? <StaleNote /> : null}
       {ind.error ? <ErrorBox message={ind.error} onRetry={ind.reload} /> : null}
       {!d ? <Loading /> : (

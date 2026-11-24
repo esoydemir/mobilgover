@@ -92,5 +92,9 @@ describe('wrong product decision on a CLOSED case', () => {
     expect(hist).toEqual(expect.arrayContaining(['effective', 'reopened']));
     const types = (await env.ownerDb.query(`SELECT event_type FROM audit_events WHERE entity_id = $1`, [k.id])).rows.map(x => x.event_type);
     expect(types).toEqual(expect.arrayContaining(['nonconformity.reopened', 'nonconformity.product_decision_corrected']));
+    // The audit file shows the corrected decision AND the earlier one (who, when, why), so it can be read without the case screen.
+    const from = new Date(Date.now() - 86400_000).toISOString(), to = new Date(Date.now() + 86400_000).toISOString();
+    const rep = JSON.stringify((await owner().get(`${C()}/audit-report?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&format=json`)).body);
+    expect(rep).toContain('Önceki karar (düzeltildi'); expect(rep).toContain('Satışa/kullanıma uygun'); expect(rep).toContain('Sıcaklık kısa süreli aştı, ürün satışa uygun.'); expect(rep).toContain('Tedarikçiye iade');
   });
 });
