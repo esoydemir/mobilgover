@@ -19,7 +19,7 @@ type Quote = { id: string; display_name: string; provider_profile_id: string; sc
 type Job = { id: string; status: string; checkin_code: string; checked_in_at: string | null; report: string | null; report_submitted_at: string | null; accepted_at: string | null;
   business_note: string | null; payment_status: string; cancel_reason: string | null };
 type Review = { id: string; quality: number; timeliness: number; communication: number; comment: string | null; show_on_profile: boolean; created_at: string };
-type Detail = { request: { id: string; title: string; description: string; category_name: string; status: string; ncr_id: string | null; created_at: string; cancel_reason: string | null };
+type Detail = { request: { id: string; title: string; description: string; category_name: string; site_name?: string | null; equipment_name?: string | null; status: string; ncr_id: string | null; created_at: string; cancel_reason: string | null };
   quotes: Quote[]; job: Job | null; review?: Review | null; canReview?: boolean; canCancel: boolean; mode: 'direct' | 'open' | 'selected'; modeNote: string; invitedProviders?: { profileId: string; name: string }[];
   comparison: { key: string; label: string }[] | null; jobProviderStatus: Quote['providerStatus'] | null;
   reportDocuments?: { document_id: string; version_id: string; version: number; review_status: string; is_latest: boolean; site_name: string; task_title: string | null }[];
@@ -64,6 +64,7 @@ export default function ServiceDetailRoute() {
       <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{d.request.title}</Text>
       <Text style={type(13.5, 400, { color: C.t2, lh: 1.5 })}>{d.request.description}</Text>
       <Text style={type(11.5, 400, { color: C.t3 })}>{d.request.category_name} · {fmtDateTime(d.request.created_at)}</Text>
+      {d.request.site_name ? <Text testID="service-where" style={type(12, 500, { color: C.t2 })}>Şube: {d.request.site_name}{d.request.equipment_name ? ` · Ekipman: ${d.request.equipment_name}` : ""}</Text> : null}
       <Text testID="svc-mode" style={type(12, 500, { color: C.t2, lh: 1.45 })}>{d.modeNote}</Text>
       {d.request.cancel_reason ? <Text style={type(12.5, 600, { color: C.crit })}>İptal edildi: {d.request.cancel_reason}</Text> : null}
       {d.request.ncr_id ? <GhostButton label="Bağlı uygunsuzluğu aç" height={40} size={12.5} onPress={() => router.push(`/ncr/${d.request.ncr_id}`)} /> : null}

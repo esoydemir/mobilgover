@@ -84,7 +84,7 @@ export async function board(tx: Tx, p: Principal, companyId: string, f: BoardFil
   const choices = {
     sites,
     hazards: [...new Set(all.map(n => n.hazard_type))],
-    equipment: [...new Map(all.filter(n => n.equipment_id).map(n => [n.equipment_id, { id: n.equipment_id, name: n.equipment_name }])).values()],
+    equipment: [...new Map(all.filter(n => n.equipment_id).map(n => [n.equipment_id, { id: n.equipment_id, name: n.equipment_name, site: n.site_name }])).values()],
     owners: [...new Map(all.filter(n => n.owner_id).map(n => [n.owner_id, { id: n.owner_id, name: n.owner_name }])).values()],
   };
   return {

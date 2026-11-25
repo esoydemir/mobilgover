@@ -255,7 +255,9 @@ export async function listRequests(tx: Tx, p: Principal, companyId: string) {
 }
 
 export async function requestDetail(tx: Tx, p: Principal, companyId: string, id: string) {
-  const r = (await tx.query(`SELECT r.*, c.name AS category_name, ip.display_name AS invited_name FROM service_requests r JOIN service_categories c ON c.code = r.category_code
+  const r = (await tx.query(`SELECT r.*, c.name AS category_name, ip.display_name AS invited_name,
+     (SELECT s.name FROM sites s WHERE s.id = r.site_id) AS site_name,
+     (SELECT e.name FROM nonconformities n JOIN equipment e ON e.id = n.equipment_id WHERE n.id = r.ncr_id) AS equipment_name FROM service_requests r JOIN service_categories c ON c.code = r.category_code
      LEFT JOIN professional_profiles ip ON ip.id = r.invited_profile_id WHERE r.id = $1 AND r.company_id = $2`, [id, companyId])).rows[0];
   if (!r || !can(p, 'service.request', { companyId, siteId: r.site_id }).ok) throw notFound('Hizmet talebi');
   // Each provider's approval for this category, as it is NOW (it may have run out or been suspended since quoting).

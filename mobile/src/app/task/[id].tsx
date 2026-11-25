@@ -30,6 +30,9 @@ const OP_TEXT: Record<Op['status'], [string, string]> = {
 
 const INSECURE_WEB = 'Bu sayfa güvenli bağlantıyla (https) açılmadığı için tarayıcı fotoğrafın özetini hesaplayamıyor; fotoğraf eklenemez. Uygulamayı https adresinden aç.';
 
+/** Where a limit comes from, said on the screen: an example value is not a legal limit; a rule limit comes from a published rule version. */
+const LIMIT_BASIS: Record<string, string> = { example: ' · ÖRNEK LİMİT, doğrulanmadı', rule: ' · yayımlanmış kural dayanağı', manufacturer: ' · üretici değeri (işletme belirledi, resmî limit değil)', haccp_plan: ' · işletmenin kendi planı (resmî limit değil)' };
+
 export default function TaskDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { company, siteId, role } = useSession();
@@ -430,7 +433,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
         <Eyebrow>ÖLÇÜM · ZORUNLU</Eyebrow>
         <Text style={[type(13, 600), { marginTop: 10 }]}>Ölçülen {quantityLabel(r.quantity)} ({r.unit})</Text>
         <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 3 }]}>
-          {limit ? `Kabul aralığı: ${limit.min ?? '—'} … ${limit.max ?? '—'} ${limit.unit}${limit.basis === 'example' ? ' · ÖRNEK LİMİT, doğrulanmadı' : ''}` : 'Bu ekipman için limit tanımlı değil; sunucu kaydı reddeder.'}
+          {limit ? `Kabul aralığı: ${limit.min ?? '—'} … ${limit.max ?? '—'} ${limit.unit}${LIMIT_BASIS[limit.basis] ?? ''}` : 'Bu ekipman için limit tanımlı değil; sunucu kaydı reddeder.'}
         </Text>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
           <View style={{ flex: 1 }}><Field testID="measure-value" value={value} onChangeText={setValue} keyboardType="decimal-pad" placeholder="ör. 3,5" /></View>

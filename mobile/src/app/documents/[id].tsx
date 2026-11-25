@@ -10,7 +10,7 @@ import { Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, Tap, short
 import { useUi } from '../../state/app';
 import { fmtDateTime } from '../../features/dates';
 import { ExtractionCard, QrCard } from '../../features/Group4';
-import { DOC_STATUS, DOC_TYPE, ISSUER_METHOD, STATUS_NOTE, fmtDay, issuerLine, type IssuerCheck } from '../../features/documents';
+import { DOC_STATUS, DOC_TYPE, ISSUER_METHOD, STATUS_NOTE, fmtDay, fmtRange, issuerLine, type IssuerCheck } from '../../features/documents';
 import { ACCEPTED, TYPE_LABEL, fileMeta, fmtSize, openEvidence, pickFile, uploadBytes, type Picked } from '../../features/files';
 import { C, tint, type } from '../../theme';
 
@@ -72,7 +72,7 @@ export default function DocumentRoute() {
             {d.stillValid ? <Text testID="doc-still-valid" style={type(12.5, 500, { color: C.t1, lh: 1.45 })}>{`Geçerli olan: sürüm ${d.stillValid.version}${d.stillValid.remainingDays !== null ? ` · ${d.stillValid.remainingDays} gün kaldı` : ' · süresiz'}.`}</Text> : null}
             {d.issuerCheck ? <Text testID="doc-issuer-line" style={type(12, 600, { color: C.t1, lh: 1.45 })}>{issuerLine(d.issuerCheck)}</Text> : null}
             {d.currentVersionId ? (
-              <Text style={type(13, 500, { lh: 1.5 })}>İncelenen sürüme göre {fmtDay(d.validFrom)} – {fmtDay(d.validUntil)}. Bitişe {d.expiryWarningDays} gün kala ve bitince yöneticilere hatırlatma gider.</Text>
+              <Text style={type(13, 500, { lh: 1.5 })}>İncelenen sürüme göre {fmtRange(d.validFrom, d.validUntil)}. Bitişe {d.expiryWarningDays} gün kala ve bitince yöneticilere hatırlatma gider.</Text>
             ) : null}
           </Card>
           {d.origin ? <OriginCard o={d.origin} /> : null}
@@ -257,7 +257,7 @@ function VersionRow({ v, d, current, onOpen, onDone }: { v: Version; d: DocDetai
           {v.file_status !== 'stored' && v.review_status === 'unreviewed' ? (v.file_status === 'rejected' ? 'DOSYA REDDEDİLDİ' : 'DOSYA YÜKLENMEDİ') : v.issuer_check_method ? 'KURUMDAN DOĞRULANDI' : label}
         </Text>
       </View>
-      <Text style={type(11.5, 400, { color: C.t3 })}>{fmtDay(v.valid_from)} – {fmtDay(v.valid_until)} · {v.uploaded_by_name}, {fmtDateTime(v.uploaded_at)}
+      <Text style={type(11.5, 400, { color: C.t3 })}>{fmtRange(v.valid_from, v.valid_until, (v as { end_kind?: string }).end_kind)} · {v.uploaded_by_name}, {fmtDateTime(v.uploaded_at)}
         {v.mime ? ` · ${TYPE_LABEL[v.mime] ?? v.mime}` : ''}{v.size_bytes ? ` · ${fmtSize(Number(v.size_bytes))}` : ''}</Text>
       {v.notes ? <Text style={type(12, 400, { color: C.t2 })}>{v.notes}</Text> : null}
       {v.file_rejection ? <Text style={type(12, 400, { color: C.crit })}>Dosya reddedildi: {v.file_rejection}</Text> : null}
