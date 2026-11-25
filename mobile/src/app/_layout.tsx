@@ -72,15 +72,32 @@ function Gate({ children }: { children: ReactNode }) {
   const providerOnly = !!me && companies.length === 0 && (path.startsWith('/pro') || path.startsWith('/network') || path.startsWith('/moderation')
     || (platform && (path.startsWith('/admin') || path.startsWith('/rule') || path.startsWith('/legislation') || path.startsWith('/institution') || path === '/more')));
   // No business and not yet known whether they are a specialist (the profile could not be read, e.g. offline): wait, do not guess.
+  // Platform pages without a platform role: say so, name what the account is, and give one way back (not a silent redirect to business setup).
+  const roles = me?.platformRoles ?? [];
+  const needsPlatform = path.startsWith('/admin') || path.startsWith('/legislation') || path.startsWith('/rule');
+  const needsModerator = path.startsWith('/moderation');
+  const platformDenied = !!token && !!me && ((needsPlatform && roles.length === 0) || (needsModerator && !roles.includes('network_moderator') && roles.length === 0 && companies.length > 0));
   const waitingProfile = !!token && !!me && companies.length === 0 && provider === null && !providerOnly && path !== '/setup' && path !== '/account';
   useEffect(() => {
     if (!ready) return;
     if (!token && !OPEN_ROUTES.includes(path)) router.replace('/login');
     // No business: a person with a professional profile goes to the provider area; everyone else to business setup.
-    else if (token && me && companies.length === 0 && !providerOnly && !waitingProfile && path !== '/setup' && path !== '/account') router.replace(provider ? '/pro' : platform ? '/admin' : '/setup');
+    else if (token && me && !platformDenied && companies.length === 0 && !providerOnly && !waitingProfile && path !== '/setup' && path !== '/account') router.replace(provider ? '/pro' : platform ? '/admin' : '/setup');
     else if (token && path === '/login') router.replace('/');
-  }, [ready, token, companies.length, me, path, providerOnly, provider, waitingProfile, platform]);
+  }, [ready, token, companies.length, me, path, providerOnly, provider, waitingProfile, platform, platformDenied]);
   if (!ready) return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={C.lime} /></View>;
+  if (ready && platformDenied) {
+    const ROLE: Record<string, string> = { owner: 'işletme sahibi', hq_manager: 'merkez yöneticisi', site_manager: 'şube yöneticisi', staff: 'çalışan' };
+    const who = [...new Set((me?.memberships ?? []).map(m => ROLE[m.role] ?? m.role))].join(', ') || (provider ? 'uzman' : 'henüz bir işletmeye bağlı değil');
+    const home = companies.length > 0 ? '/' : provider ? '/pro' : '/setup';
+    return (
+      <View testID="platform-denied" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 }}>
+        <Text style={{ color: C.t1, fontSize: 18, fontWeight: '600', textAlign: 'center' }}>Bu sayfa platform yönetimine özel</Text>
+        <Text testID="platform-denied-why" style={{ color: C.t2, fontSize: 13.5, lineHeight: 20, textAlign: 'center' }}>Hesabında platform yetkisi yok. Hesabın: {who}. Bu bir hata değil; yönetim sayfaları yalnız platform ekibi içindir.</Text>
+        <PrimaryButton testID="platform-denied-back" label={companies.length > 0 ? 'Çalışma alanıma dön' : provider ? 'Uzman alanıma dön' : 'İşletme kurulumuna git'} onPress={() => router.replace(home as never)} />
+      </View>
+    );
+  }
   if (waitingProfile) return (
     <View testID="gate-waiting-profile" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 }}>
       <ActivityIndicator color={C.lime} />

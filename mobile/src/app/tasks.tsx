@@ -19,8 +19,9 @@ import { TaskLine } from './index';
  * an obligation waits for profile answers ("bilgi eksik") or for equipment (per-unit checks).
  */
 function NoTasksReason({ companyId, siteId }: { companyId: string; siteId: string }) {
-  const { call } = useSession();
+  const { call, role } = useSession();
   const q = useApi<Obligation[]>(`/companies/${companyId}/obligations?siteId=${siteId}`);
+  const gaps = useApi<{ kind: string; siteId: string; message: string; action: { label: string }; equipmentType?: string; missing: string[] }[]>(role === 'staff' ? null : `/companies/${companyId}/gaps?siteId=${siteId}`);
   const catalog = useApi<{ key: string; label: string }[]>('/fact-catalog');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -34,14 +35,15 @@ function NoTasksReason({ companyId, siteId }: { companyId: string; siteId: strin
     try {
       const today = new Date();
       const r = await call<{ created: number }>('POST', `/companies/${companyId}/tasks/generate`, { siteId, fromDay: dayKey(today), toDay: dayKey(addDays(today, 13)) });
-      setMsg(r.created ? `${r.created} görev oluşturuldu.` : 'Yeni görev oluşmadı; aşağıdaki neden geçerli.');
-      await q.reload();
+      setMsg(r.created ? `${r.created} görev oluşturuldu.` : 'Yeni görev oluşmadı: aynı dönem için görev zaten varsa tekrar açılmaz; yoksa yukarıdaki eksik bilgi ya da ekipman giderilmeli.');
+      await q.reload(); await gaps.reload();
     } catch (e) { setMsg(errorText(e)); } finally { setBusy(false); }
   };
   const why = q.data.length === 0 ? 'Bu şube için yükümlülükler henüz hesaplanmadı. "Görevleri oluştur" hesaplamayı başlatır.'
     : applies === 0 && waiting.length ? `Görev üretimi ${waiting.length} yükümlülüğün bilgisini bekliyor${missing.length ? ` (eksik: ${missing.map(labelOf).join(' · ')})` : ''}. Bu şubenin profil sorularını yanıtlayınca görevler oluşur.`
     : applies === 0 ? 'Bu şubeye uygulanan bir yükümlülük yok.'
-    : 'Uygulanan yükümlülükler var ama bu aralıkta görev çıkmadı; ekipman bekleniyor olabilir (ör. soğutucu eklenince sıcaklık kontrolü oluşur).';
+    : gaps.data?.some(g => g.kind === 'equipment') ? `Uygulanan yükümlülükler var ama görev çıkmadı. ${gaps.data.filter(g => g.kind === 'equipment').map(g => g.message).join(' ')}`
+    : 'Uygulanan yükümlülükler var ama bu aralıkta (14 gün) zamanı gelen görev yok; eksik bir bilgi ya da ekipman görünmüyor.';
   return (
     <View testID="tasks-no-tasks-reason" style={{ borderWidth: 1, borderColor: tint.warn(0.3), backgroundColor: tint.warn(0.06), borderRadius: 18, padding: 15, gap: 10 }}>
       <Text style={type(12.5, 600, { color: C.warn })}>Bu şubede neden görev yok?</Text>
@@ -50,7 +52,8 @@ function NoTasksReason({ companyId, siteId }: { companyId: string; siteId: strin
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {waiting.length || q.data.length === 0 ? <GhostButton testID="tasks-reason-profile" label="Şube profilini doldur" height={36} size={12} onPress={() => router.push('/profile')} /> : null}
         {applies > 0 ? <GhostButton testID="tasks-reason-equipment" label="Ekipman" height={36} size={12} onPress={() => router.push('/equipment')} /> : null}
-        <GhostButton testID="tasks-reason-generate" label={busy ? 'Oluşturuluyor…' : 'Görevleri oluştur'} height={36} size={12} disabled={busy} onPress={generate} />
+        {role === 'staff' ? <Text testID="tasks-reason-staff" style={type(12, 500, { color: C.t3, lh: 1.45 })}>Görevleri şube yöneticisi oluşturur; bu şubede görev çıkmasını ona ilet.</Text>
+          : <GhostButton testID="tasks-reason-generate" label={busy ? 'Oluşturuluyor…' : 'Görevleri oluştur'} height={36} size={12} disabled={busy} onPress={generate} />}
       </View>
     </View>
   );
