@@ -56,7 +56,7 @@ describe('e-mail sign-in', () => {
   });
 
   it('the environment endpoint tells the app whether it is demo or pilot', async () => {
-    expect((await anon().get('/env')).body).toMatchObject({ mode: 'demo', mailTransport: 'dev_outbox' });
+    expect((await anon().get('/env')).body).toMatchObject({ mode: 'demo', mailTransport: 'dev_outbox', platformMfaRequired: true }); // same policy that platformGate enforces: the screen warns only when the server would refuse
   });
 });
 

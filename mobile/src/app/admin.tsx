@@ -23,7 +23,7 @@ type Queue = {
 
 /** Platform work: rule review/approval/publishing and marketplace checks. Needs a second factor. */
 export default function AdminRoute() {
-  const { me, call } = useSession();
+  const { me, call, env } = useSession();
   const { showToast } = useUi();
   const roles = me?.platformRoles ?? [];
   const desktop = useDesktop();
@@ -45,14 +45,15 @@ export default function AdminRoute() {
     if (note.trim().length === 0) { setError(`${what} için gerekçe yazmalısın.`); return; }
     await act(fn, msg);
   };
-  const mfaMissing = !me?.mfaSatisfied;
+  // Warn only when the server really refuses platform actions without the second factor (env.platformMfaRequired); unknown policy → warn.
+  const mfaMissing = !me?.mfaSatisfied && env?.platformMfaRequired !== false;
 
   return (
     <Screen title={only ? 'Yönetim · pazar yeri' : 'Yönetim'} titleEn="Platform" contentStyle={desktop ? { maxWidth: 1240, width: '100%', alignSelf: 'center' } : undefined}>
       {mfaMissing ? (
         <View style={{ borderWidth: 1, borderColor: tint.warn(0.35), backgroundColor: tint.warn(0.06), borderRadius: 16, padding: 13, gap: 8 }}>
-          <Text style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Bu oturum ek doğrulamadan geçmedi. Platform işlemleri sunucu tarafından reddedilir.</Text>
-          <GhostButton label="Ek doğrulamayı kur" height={38} size={12} onPress={() => router.push('/account')} />
+          <Text testID="admin-mfa-warning" style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Bu oturum ek doğrulamadan geçmedi. Ek doğrulama tamamlanana kadar sunucu platform listelerini ve işlemlerini (onay, ret, atama, yayın) reddeder.</Text>
+          <GhostButton testID="admin-mfa-setup" label={me?.mfaEnabled ? 'Ek doğrulamayı tamamla' : 'Ek doğrulamayı kur'} height={38} size={12} onPress={() => router.push('/account')} />
         </View>
       ) : null}
       {error ? <ErrorBox message={error} /> : null}

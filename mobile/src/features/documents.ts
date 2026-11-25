@@ -36,6 +36,8 @@ export const ISSUER_METHOD: Record<string, string> = {
   issuer_written_confirmation: 'Kurumdan yazılı teyit', other: 'Diğer',
 };
 
+/** A validity range that never reads as "unlimited from the start": an empty start is "not stated", an empty end is "none / not known yet" (by end kind). */
+export const fmtRange = (from: string | null, until: string | null, endKind?: string | null) => `${from ? `başlangıç ${from.split('-').reverse().join('.')}` : 'başlangıç belirtilmemiş'} · ${until ? `bitiş ${until.split('-').reverse().join('.')}` : endKind === 'none' ? 'bitiş tarihi yok (süresiz)' : endKind === 'unknown' ? 'bitiş tarihi henüz bilinmiyor' : 'bitiş tarihi yok'}`;
 export const fmtDay = (d: string | null) => (d ? d.split('-').reverse().join('.') : 'süresiz');
 
 export type IssuerCheck = { recordedBy: string | null; method: string; reference: string; recordedAt: string; queriedByApp: boolean } | null;

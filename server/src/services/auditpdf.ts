@@ -164,7 +164,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
       awaiting: awaiting.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), what: n.status === 'awaiting_verification' ? 'Kapanış doğrulaması' : `${n.declared} aksiyon beyanı` })),
       closures: {
         tasks: closedTasks.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), closed: tr(t.completed_at), by: t.by ?? '—', outcome: t.outcome ?? null,
-          measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', at: tr(m.measured_at) })),
+          measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', basis: m.basis ?? null, at: tr(m.measured_at) })),
           basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
             relation: b.relation as string, sourceCase: b.case_title ?? null, linkedCase: b.linked_case_title ?? null, linkedBy: b.linked_by ?? null, linkedAt: b.linked_at ?? null, linkBasis: b.link_basis ?? null, basisNote: b.basis_note ?? null })) })),
         cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), product: productOf(n.id), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
@@ -241,7 +241,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     if (!r.sections.closures.tasks.length && !r.sections.closures.cases.length) none();
     for (const t of r.sections.closures.tasks) {
       p(`${t.title} · ${t.site} · kapanış ${t.closed} · ${t.by}`, { bold: true });
-      for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'}${m.example ? ' (ÖRNEK limit, doğrulanmamış)' : ''} · ${m.at}`, { color: '#555' });
+      for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'}${m.example ? ' (ÖRNEK limit, doğrulanmamış)' : m.basis === 'rule' ? ' (limit: yayımlanmış kural)' : m.basis === 'manufacturer' ? ' (limit: üretici değeri, işletme belirledi)' : m.basis === 'haccp_plan' ? ' (limit: işletmenin kendi planı)' : ''} · ${m.at}`, { color: '#555' });
       for (const b of t.basis) {
         p(`   Dayanak: ${b.title} · sürüm ${b.version} · ${b.review}${b.sha256 ? ` · özet ${b.sha256.slice(0, 12)}…` : ''}`, { color: '#555' });
         if (b.relation === 'linked') p(`   Rapor başka bir vakanın servisine ait (${b.sourceCase ?? '—'}); servis ${b.linkedCase ?? '—'} vakasıyla ${b.linkedBy ?? '—'} tarafından ilişkilendirildi; dayanak: ${b.linkBasis ?? '—'}`, { color: '#555' });

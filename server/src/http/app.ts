@@ -209,6 +209,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
     mode: config.demoMode ? 'demo' : 'pilot',
     ...(config.demoMode && config.demoLoginDomain ? { demoLoginDomain: config.demoLoginDomain } : {}),
     exampleRulesAllowed: config.allowExampleRules,
+    // The same policy platformGate enforces: the screen warns about a missing second factor only when the server would refuse the action.
+    platformMfaRequired: config.mfaRequiredForPlatform,
     // Shown before a file is picked; the server enforces it too.
     upload: { maxBytes: config.maxUploadBytes, types: ALLOWED_MIME },
     mailTransport: mailer.kind,

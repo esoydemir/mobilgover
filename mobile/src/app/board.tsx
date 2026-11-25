@@ -20,7 +20,7 @@ type Repeat = { id: string; later: { id: string; title: string; detectedAt: stri
 type Indicator = { key: string; label: string; value: number | null; denominator: number; basis: string; note: string | null };
 type Manager = {
   scope: 'manager'; note: string; priority: { key: string; label: string; why: string }[];
-  choices: { sites: { id: string; name: string }[]; hazards: string[]; equipment: { id: string; name: string }[]; owners: { id: string; name: string }[] };
+  choices: { sites: { id: string; name: string }[]; hazards: string[]; equipment: { id: string; name: string; site?: string }[]; owners: { id: string; name: string }[] };
   sections: { critical: Ref[]; overdueActions: { id: string; ncrId: string; description: string; ncrTitle: string; site: string; owner: string | null; dueAt: string; lateDays: number }[];
     awaitingVerification: Ref[]; documents: { id: string; title: string; site: string; status: string; expiring: boolean; validUntil: string | null }[]; repeats: Repeat[] };
   indicators: Indicator[];
@@ -62,7 +62,7 @@ export default function BoardRoute() {
         {b.choices.sites.length > 1 ? <ChipRow label="Şube" items={[[null, 'Tümü'], ...b.choices.sites.map(s => [s.id, s.name] as [string, string])]} value={siteId} onChange={setSiteId} id="board-site" /> : null}
         <ChipRow label="Tarih" items={PERIODS.map(([l, d]) => [d == null ? null : String(d), l] as [string | null, string])} value={period == null ? null : String(period)} onChange={v => setPeriod(v ? Number(v) : null)} id="board-period" />
         {b.choices.hazards.length > 1 || hazard ? <ChipRow label="Konu" items={[[null, 'Tümü'], ...b.choices.hazards.map(h => [h, hazardName(h)] as [string, string])]} value={hazard} onChange={setHazard} id="board-hazard" /> : null}
-        {b.choices.equipment.length || equipmentId ? <ChipRow label="Ekipman" items={[[null, 'Tümü'], ...b.choices.equipment.map(e => [e.id, e.name] as [string, string])]} value={equipmentId} onChange={setEquipmentId} id="board-eq" /> : null}
+        {b.choices.equipment.length || equipmentId ? <ChipRow label="Ekipman" items={[[null, 'Tümü'], ...b.choices.equipment.map(e => [e.id, b.choices.equipment.filter(x => x.name === e.name).length > 1 && e.site ? `${e.name} · ${e.site}` : e.name] as [string, string])]} value={equipmentId} onChange={setEquipmentId} id="board-eq" /> : null}
         {b.choices.owners.length || ownerId ? <ChipRow label="Sorumlu" items={[[null, 'Tümü'], ...b.choices.owners.map(o => [o.id, o.name] as [string, string])]} value={ownerId} onChange={setOwnerId} id="board-owner" /> : null}
         {siteId ? <Text testID="board-report" onPress={() => router.push({ pathname: '/report', params: { siteId } } as never)} style={type(12, 600, { color: C.info })}>Bu şubenin uyum raporunu aç ›</Text> : null}
         {filtered ? <Text testID="board-clear" onPress={() => { setSiteId(null); setPeriod(null); setHazard(null); setEquipmentId(null); setOwnerId(null); }} style={type(12, 600, { color: C.info })}>Filtreleri temizle</Text> : null}
