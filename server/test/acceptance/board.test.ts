@@ -91,6 +91,8 @@ describe('board', () => {
     await env.db.system(tx => topUpSite(tx, demo.companyId, demo.siteId, 14));
     const ids = (await env.ownerDb.query(`SELECT id FROM tasks WHERE company_id = $1 AND site_id = $2 AND status = 'open' ORDER BY created_at LIMIT 3`, [demo.companyId, demo.siteId])).rows.map(r => r.id as string);
     expect(ids.length).toBeGreaterThanOrEqual(2);
+    // Other open tasks of the site must not be due yet, whatever the time of day the suite runs at (daily 18:00 tasks are already due late in the evening).
+    await env.ownerDb.query(`UPDATE tasks SET due_at = now() + interval '3 days' WHERE company_id = $1 AND site_id = $2 AND status = 'open' AND id <> ALL($3)`, [demo.companyId, demo.siteId, ids.slice(0, 2)]);
     await env.ownerDb.query(`UPDATE tasks SET due_at = now() - interval '2 days' WHERE id = ANY($1)`, [ids.slice(0, 2)]);
     await env.ownerDb.query(`UPDATE tasks SET status = 'done', outcome = 'conforming', completed_by = $2, completed_at = now() - interval '1 day' WHERE id = $1`, [ids[0], demo.users.manager.id]);
     const cmp = (await owner().get(`${C()}/board`)).body.comparison.sites;
