@@ -168,6 +168,7 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
       <div className="gh-panel-scroll" data-testid="leg-detail">
         <NowBox testid="leg-now" title={open ? 'Neden bekliyor' : 'Durum'} why={d.nextInLine ? trText(d.nextInLine) : stL} can={open ? now : null}
           note={open && !isReviewer ? 'Onay, ret ve iade bu hesapta kapalı: kararı yalnız kural inceleyici verir.' : null}>
+          {open ? <p data-testid="leg-now-impact"><b>Etki: </b>{imp ? `${imp.affectedSites} şube etkilenir, ${imp.outOfScopeSites} şube kapsam dışı (${dayTr(imp.onDate)}).` : 'henüz hesaplanamıyor (kapsam koşulu yazılmadı).'}</p> : null}
           {open && d.cannot?.assign === null ? <div style={{ marginTop: 6 }}><Btn size="sm" kind="pri" testid="leg-goto-assign" onClick={jumpAssign}>Atamaya git</Btn></div> : null}
         </NowBox>
         {d.exampleNote ? <p className="gh-note" style={{ margin: '0 0 6px' }}>{d.exampleNote}</p> : null}

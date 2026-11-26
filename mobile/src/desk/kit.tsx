@@ -1,4 +1,5 @@
 import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { useApi } from '../api/useApi';
 import { Icon } from './icons';
 
@@ -90,13 +91,19 @@ export const dateTimeTr = (iso: string | null | undefined) => { if (!iso) return
 const KEEP = 'gh.desk.keep.';
 const readKept = (ws: string): Record<string, string> => { try { return JSON.parse(globalThis.sessionStorage?.getItem(KEEP + ws) ?? '{}'); } catch { return {}; } };
 export function useWsState(ws: string, defaults: Record<string, string>) {
+  // Uygulama içi gezinmede ekran, adres çubuğu güncellenmeden kurulur: parametreler yönlendiriciden okunur.
+  const params = useLocalSearchParams() as Record<string, string | string[] | undefined>;
+  const keys = [...Object.keys(defaults), 'sel'];
+  const fromRoute = () => { const o: Record<string, string> = {}; for (const k of keys) { const v = params[k]; if (typeof v === 'string') o[k] = v; } return o; };
+  const sig = JSON.stringify(fromRoute()); const seen = useRef(sig);
   const [st, setSt] = useState<Record<string, string>>(() => {
-    const url = new URLSearchParams(globalThis.location?.search ?? ''); const kept = readKept(ws); const out: Record<string, string> = { ...defaults };
-    const fromUrl = [...url.keys()].some(k => k in defaults || k === 'sel');
-    for (const k of [...Object.keys(defaults), 'sel']) { const v = fromUrl ? url.get(k) : kept[k]; if (v !== null && v !== undefined) out[k] = v; else if (k === 'sel') out[k] = ''; }
+    const url = fromRoute(); const has = Object.keys(url).length > 0; const kept = readKept(ws);
     // adreste hiç parametre yoksa (kenar çubuğundan gelindi) son kullanılan durum geri yüklenir
-    return out;
+    return { ...defaults, sel: '', ...(has ? url : kept) };
   });
+  useEffect(() => { if (sig === seen.current) return; seen.current = sig; const url = fromRoute(); if (Object.keys(url).length) setSt({ ...defaults, sel: '', ...url }); }, [sig]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Sayaçtan gelinen durum da "son durum" olarak saklanır.
+  useEffect(() => { try { globalThis.sessionStorage?.setItem(KEEP + ws, JSON.stringify(st)); } catch { /* depolama yok */ } }, [ws, st]);
   const set = useCallback((patch: Record<string, string>) => {
     setSt(prev => {
       const next = { ...prev, ...patch };
