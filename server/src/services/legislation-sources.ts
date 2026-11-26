@@ -283,6 +283,9 @@ export function daysBack(today: string, n: number): string[] {
   return Array.from({ length: n + 1 }, (_, i) => new Date(t - (n - i) * 86_400_000).toISOString().slice(0, 10));
 }
 
+/** Record key of a gazette file. The announcements section reuses the file names of the main section, so it gets its own prefix. */
+export const gazetteKey = (url: string) => `rg:${/\/ilanlar\//i.test(url) ? 'ilan-' : ''}${url.split('/').pop()!.replace(/\.(html?|pdf)$/i, '')}`;
+
 /** Extra (mükerrer) issues of a day are separate lists; five a day is far above anything the gazette publishes. */
 const MAX_EXTRA_ISSUES = 5;
 export async function scanGazette(o: { baseUrl: string; today: string; lookbackDays: number; fetcher: Fetcher; readPdf?: PdfReader; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
@@ -320,7 +323,7 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
     }
     out.seen += items.length;
     for (const it of items) {
-      const itemUrl = new URL(it.url, base + '/').toString(); const itemKey = `rg:${itemUrl.split('/').pop()!.replace(/\.(html?|pdf)$/i, '')}`;
+      const itemUrl = new URL(it.url, base + '/').toString(); const itemKey = gazetteKey(itemUrl);
       let rel: SectorMatch & { bodySectors?: Sector[] } = sectorRelevance(it.title);
       const mustRead = rel.level !== 'out' || AMENDMENT_TITLE.test(it.title); // an amendment title may hide its sector: read the text before deciding
       if (!mustRead) { out.skipped.push({ key: itemKey, url: itemUrl, title: it.title.slice(0, 160), why: rel.why }); continue; }
@@ -354,11 +357,10 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
         }
         // Machine-read text is never trusted with a date: a person reads the official file and decides.
         if (ocr) eff = { status: 'unclear', date: null, note: `PDF görüntüsünden makineyle okundu (güven %${Math.round(ocr.confidence)}); yürürlük tarihini yönetici resmî metinden belirlemeli.${eff.date ? ` Okumadaki aday tarih: ${trDate(eff.date)}.` : ''}` };
-        const file = url.split('/').pop()!.replace(/\.(html?|pdf)$/i, '');
         const body = type === 'repeal' ? null : doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).map(a => `MADDE ${a.id} – ${a.text}`).join('\n\n') || doc.text.slice(0, 4000);
         const newText = ocr && body ? `[PDF görüntüsünden makineyle okundu; harf ve sayı hataları olabilir. Resmî PDF'i açıp doğrulayın.]\n\n${body}` : body;
         out.changes.push({
-          sourceCode: 'resmi_gazete', externalKey: `rg:${file}`, changeType: type,
+          sourceCode: 'resmi_gazete', externalKey: itemKey, changeType: type,
           docRef: `Resmî Gazete ${doc.sayi ?? '(sayı okunamadı)'} · ${trDate(day)}`, docTitle: it.title, articleRef: null, sourceUrl: url, publishedOn: day, effective: eff,
           oldText: null, newText,
           suggestion: { relevance: rel.why, sectors: rel.sectors, matchLevel: rel.level, bodySectors: rel.bodySectors ?? [], needsHumanClassification: rel.level === 'uncertain', category: it.category, issuer: doc.issuer, kind: type, effectiveDetail: effectiveDetail(doc, day),

@@ -137,7 +137,7 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
 export function oldestUnverifiedDay(results: { source?: string; code?: string; errors?: string[]; unreadable?: { key: string }[] }[]): string | null {
   const days = results.flatMap(r => [
     ...(r.errors ?? []).map(e => /^(\d{4}-\d{2}-\d{2}):/.exec(e)?.[1]),
-    ...(r.unreadable ?? []).map(u => { const m = /^rg:(\d{4})(\d{2})(\d{2})/.exec(u.key); return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined; }),
+    ...(r.unreadable ?? []).map(u => { const m = /^rg:(?:ilan-)?(\d{4})(\d{2})(\d{2})/.exec(u.key); return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined; }),
   ]).filter((d): d is string => !!d).sort();
   return days[0] ?? null;
 }

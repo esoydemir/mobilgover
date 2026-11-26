@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { readGazettePdf } from '../src/services/filetext';
 import { oldestUnverifiedDay } from '../src/services/legislation';
-import { scanGazette, type Fetcher, type FetchResult, type PdfReader } from '../src/services/legislation-sources';
+import { gazetteKey, scanGazette, type Fetcher, type FetchResult, type PdfReader } from '../src/services/legislation-sources';
 
 /*
  * Regression for the November 2026 outage: the gazette serves board and presidential decisions as PDF only. The scan refused
@@ -65,6 +65,12 @@ describe('Resmî Gazete publications served as PDF', () => {
     const r = await scan(site(url => url.endsWith('&mukerrer=1') ? text(extra, url) : url.endsWith('M1-1.pdf') ? ok(PDF, 'application/pdf', url) : null), stub(BODY));
     expect(r.changes.map(c => c.externalKey)).toContain('rg:20261120M1-1');
     expect(r.notes.join()).toContain('mükerrer');
+  });
+
+  it('keeps an announcement apart from the publication that has the same file name', () => {
+    expect(gazetteKey(`${BASE}/eskiler/2026/11/20261120-3.pdf`)).toBe('rg:20261120-3');
+    expect(gazetteKey(`${BASE}/ilanlar/eskiilanlar/2026/11/20261120-3.htm`)).toBe('rg:ilan-20261120-3');
+    expect(oldestUnverifiedDay([{ unreadable: [{ key: 'rg:ilan-20261112-2' }] }])).toBe('2026-11-12');
   });
 
   it('finds the oldest day a run could not verify', () => {
