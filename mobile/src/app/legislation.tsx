@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useDesktop } from '../features/desktop';
-import { LegislationDesk } from '../features/LegislationDesk';
+import { Legislation } from '../desk/Legislation';
 import { Linking, Text, View } from 'react-native';
 import { errorText } from '../api/client';
 import { useSession } from '../api/session';
@@ -31,7 +31,7 @@ const SOURCE_TR: Record<string, string> = { resmi_gazete: 'Resmî Gazete', mevzu
 /** Legislation watch: daily scan health, review queue, manual rescan. Platform staff only. */
 export default function LegislationRoute() {
   const desktop = useDesktop();
-  return desktop ? <LegislationDesk /> : <MobileLegislation />;
+  return desktop ? <Legislation /> : <MobileLegislation />;
 }
 
 function MobileLegislation() {

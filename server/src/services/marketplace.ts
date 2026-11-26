@@ -172,7 +172,13 @@ export async function reviewQueue(tx: Tx, p: Principal) {
   const authorizations = (await tx.query(
     `SELECT a.*, pp.display_name, c.name AS category_name, c.required_credentials FROM service_authorizations a
        JOIN professional_profiles pp ON pp.id = a.profile_id JOIN service_categories c ON c.code = a.category_code WHERE a.status = 'pending' ORDER BY a.requested_at`)).rows;
-  return { verifications, authorizations };
+  // Context a reviewer needs next to the decision: the same expert's other submissions (each submission is its own record; there is no document version number) and,
+  // for a category request, the state of the expert's documents it can rest on.
+  const docs = (await tx.query(`SELECT id, profile_id, kind, credential_type, issuer, document_ref, valid_until, status, submitted_at, checked_at FROM professional_verifications
+     WHERE profile_id = ANY($1::uuid[]) ORDER BY submitted_at DESC`, [[...new Set([...verifications, ...authorizations].map((r: any) => r.profile_id))]])).rows;
+  const of = (r: any) => docs.filter((d: any) => d.profile_id === r.profile_id);
+  return { verifications: verifications.map((v: any) => ({ ...v, profile_documents: of(v).filter((d: any) => d.id !== v.id) })),
+    authorizations: authorizations.map((a: any) => ({ ...a, profile_documents: of(a) })) };
 }
 
 // ── Business: requests, quotes, jobs ──

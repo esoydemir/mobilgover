@@ -37,7 +37,7 @@ export async function overview(tx: Tx, p: Principal) {
   };
 }
 
-export type AuditFilter = { companyId?: string | null; scope?: 'platform' | 'all'; eventType?: string; actorId?: string; before?: number; limit?: number };
+export type AuditFilter = { companyId?: string | null; scope?: 'platform' | 'all'; eventType?: string; actorId?: string; entityId?: string; before?: number; limit?: number };
 
 /** Who did what, when and why, across the platform chain and company chains. Read-only; platform administrator. */
 export async function listAudit(tx: Tx, p: Principal, f: AuditFilter) {
@@ -50,6 +50,7 @@ export async function listAudit(tx: Tx, p: Principal, f: AuditFilter) {
   else if (f.scope === 'platform') where.push('a.company_id IS NULL');
   if (f.eventType) add('a.event_type LIKE ?', `${f.eventType.replace(/[%_\\]/g, m => `\\${m}`)}%`);
   if (f.actorId) add('a.actor_id = ?', f.actorId);
+  if (f.entityId) add('a.entity_id = ?', f.entityId);
   if (f.before) add('a.id < ?', f.before);
   args.push(limit + 1);
   const rows = (await tx.query(

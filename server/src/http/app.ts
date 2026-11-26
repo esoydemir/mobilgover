@@ -909,7 +909,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.get('/admin/overview', async req => { platformGate(req); return db.system(tx => padmin.overview(tx, req.principal)); });
   app.get('/admin/audit', async req => {
     platformGate(req);
-    const q = z.object({ companyId: uuid.optional(), scope: z.enum(['platform', 'all']).optional(), eventType: z.string().max(60).optional(), actorId: uuid.optional(),
+    const q = z.object({ companyId: uuid.optional(), scope: z.enum(['platform', 'all']).optional(), eventType: z.string().max(60).optional(), actorId: uuid.optional(), entityId: uuid.optional(),
       before: z.coerce.number().int().positive().optional(), limit: z.coerce.number().int().min(1).max(200).optional() }).parse(req.query);
     return db.system(tx => padmin.listAudit(tx, req.principal, q));
   });

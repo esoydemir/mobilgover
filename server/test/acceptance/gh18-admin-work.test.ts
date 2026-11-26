@@ -63,7 +63,7 @@ describe('GH-18 platform ana sayfası', () => {
     expect(area(m, 'market').total).toBe(q.verifications.length + q.authorizations.length); expect(area(m, 'market').items[0].responsible).toMatch(/atanmadı/);
     const mo = await work(mod.c); const list = (await mod.c.get('/network/moderation/reports?status=open')).body as any[];
     expect(ctr(mo, 'moderation', 'mod_open').count).toBe(list.length); expect(ctr(mo, 'moderation', 'mod_open').count).toBe(1);
-    expect(area(mo, 'moderation').items[0].waitingMinutes).toBeGreaterThanOrEqual(119); expect(area(mo, 'moderation').items[0]).toMatchObject({ action: 'Karara bağla', href: '/moderation?status=open' });
+    expect(area(mo, 'moderation').items[0].waitingMinutes).toBeGreaterThanOrEqual(119); expect(area(mo, 'moderation').items[0]).toMatchObject({ action: 'Karara bağla', href: expect.stringMatching(/^\/moderation\?status=open&sel=/) });
   });
 
   it('pazar: teklifini bekleyen talep bir "takip" sayacıdır; karar sayısına (toplam) katılmaz, ama "iş yok" da denmez', async () => {
