@@ -256,15 +256,21 @@ export async function listChanges(tx: Tx, p: Principal, f: ChangeFilter | string
   const out = [];
   for (const r of rows) {
     let waiting: string | null = null; let areas: string[] = [];
+    // Dosya ataması ayrı bir şeydir: sıradaki adım karar zincirinde kimin beklendiğini söyler.
+    let next: 'author' | 'area' | 'approver' | null = r.status === 'pending' ? 'author' : null;
     if (r.status === 'drafted' && r.rule_version_id) areas = (await tx.query<{ required_review_areas: string[] }>(`SELECT required_review_areas FROM rule_versions WHERE id = $1`, [r.rule_version_id])).rows[0]?.required_review_areas ?? [];
     else if (r.status === 'pending') areas = (r.proposal_areas as string[] | null) ?? [...new Set([...(r.sectors ?? []), ...(r.body_sectors ?? [])].map((k: string) => AREA_BY_SECTOR[k]?.area).filter(Boolean) as string[])];
     if (areas.length && ['pending', 'drafted'].includes(r.status)) {
       const none = (await areaCoverage(tx, areas)).filter(x => x.reviewers === 0).map(x => x.area);
       if (none.length) waiting = `Bekliyor: "${none.join(', ')}" alanında tanımlı inceleyici yok.`;
     }
+    if (r.status === 'drafted') {
+      const ok = new Set(r.rule_version_id ? (await tx.query<{ area: string; decision: string }>(`SELECT DISTINCT ON (area) area, decision FROM rule_area_reviews WHERE rule_version_id = $1 ORDER BY area, created_at DESC`, [r.rule_version_id])).rows.filter(x => x.decision === 'approved').map(x => x.area) : []);
+      next = areas.some(a => !ok.has(a)) ? 'area' : 'approver';
+    }
     if (q.waiting && !waiting) continue;
     const { proposal_areas: _pa, ...rest } = r;
-    out.push({ ...rest, review_areas: areas, waiting_reason: waiting, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] });
+    out.push({ ...rest, review_areas: areas, waiting_reason: waiting, next_step: next, typeLabel: CHANGE_TYPE_TR[r.change_type as keyof typeof CHANGE_TYPE_TR] });
   }
   return out;
 }

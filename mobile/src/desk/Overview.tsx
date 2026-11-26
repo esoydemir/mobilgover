@@ -53,7 +53,16 @@ export function Overview() {
                 const go = (href: string) => (e: React.MouseEvent) => { e.preventDefault(); goto(href); };
                 if (a.state === 'forbidden') return <div key={a.area} className="gh-area lock" data-testid={`home-forbidden-${a.area}`}><Icon name="lock" size={14} /><span>{a.label}: yetkin yok <span style={{ color: 'var(--ink3)' }}>(gerekli: {a.need})</span></span></div>;
                 if (a.state === 'error') return <div key={a.area} className="gh-area bad" data-testid={`home-error-${a.area}`} role="alert"><Icon name="alert" size={14} /><span><b style={{ fontSize: 13, color: 'var(--crit)' }}>{a.label}: veri okunamadı.</b> Bu “iş yok” demek değildir.</span><Btn size="sm" onClick={() => { void reload(); }}>Yeniden dene</Btn></div>;
-                return <a key={a.area} className="gh-area" href={AREA_PATH[a.area]} onClick={go(AREA_PATH[a.area]!)} data-testid={`home-area-card-${a.area}`} style={{ color: 'inherit', textDecoration: 'none' }}>{a.label}<b data-testid={`home-areatotal-${a.area}`}>{a.total}</b><span style={{ color: 'var(--ink2)' }}>{a.total ? 'karar bekliyor' : 'karar bekleyen yok'}</span></a>;
+                return (
+                  <div key={a.area} className="gh-arearow" role="group" aria-label={`${a.label} sayaçları`}>
+                    <a className="gh-area" href={AREA_PATH[a.area]} onClick={go(AREA_PATH[a.area]!)} data-testid={`home-area-card-${a.area}`}>{a.label}<b data-testid={`home-areatotal-${a.area}`}>{a.total}</b><span style={{ color: 'var(--ink2)' }}>{a.total ? 'karar bekliyor' : 'karar bekleyen yok'}</span></a>
+                    <div className="gh-chips">{a.counters.map(c => (
+                      <a key={c.key} href={c.href} className={`gh-btn sm gh-counter ${c.count ? '' : 'zero'}`} data-testid={`home-counter-${c.key}`} onClick={go(c.href)} aria-label={`${c.label}: ${c.count}`}>
+                        <b data-testid={`home-count-${c.key}`}>{c.count}</b> {c.label}
+                      </a>
+                    ))}</div>
+                  </div>
+                );
               })}
             </div>
 
@@ -89,16 +98,8 @@ export function Overview() {
                 <div className="gh-cell"><span className="gh-btn sm" style={{ pointerEvents: 'none' }}>{row.action} <Icon name="chevron" size={13} /></span></div>
               </button>
             ))}
-            <div style={{ padding: '14px 22px 0' }} data-testid="home-counters">
-              <h2 style={{ margin: '0 0 6px', fontSize: 15 }}>Sayaçlar</h2>
-              <p className="gh-note" style={{ margin: '0 0 8px' }}>Her sayaç, saydığı kayıtları açan süzgeçli bir bağlantıdır. “Takip” sayaçları başkasının sırasındaki işleri hatırlatır; karar bekleyen toplamına katılmaz.</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {okAreas.flatMap(a => a.counters.map(c => (
-                  <a key={c.key} href={c.href} className="gh-btn sm" style={{ textDecoration: 'none', color: 'inherit' }} data-testid={`home-counter-${c.key}`} onClick={e => { e.preventDefault(); goto(c.href); }} aria-label={`${c.label}: ${c.count}`}>
-                    <b data-testid={`home-count-${c.key}`} style={{ fontVariantNumeric: 'tabular-nums' }}>{c.count}</b> {c.label}{c.kind === 'follow_up' ? ' (takip)' : ''}
-                  </a>
-                )))}
-              </div>
+            <div style={{ padding: '14px 22px 0' }} data-testid="home-notes">
+              <p className="gh-note" style={{ margin: 0 }}>Üstteki her sayaç, saydığı kayıtları açan süzgeçli bir bağlantıdır. “Takip” sayaçları başkasının sırasındaki işleri hatırlatır; karar bekleyen toplamına katılmaz.</p>
               {work.missing.length ? <p className="gh-note" data-testid="home-missing" style={{ marginTop: 10 }}>Hesaplanamayan: {work.missing.map(m => `${m.label} — ${m.why}`).join(' · ')}</p> : null}
               {loading ? <p className="gh-note">Güncelleniyor…</p> : null}
               <p className="gh-note" style={{ marginTop: 10 }}>Çalışma alanların: {NAV.filter(n => n.key !== 'genel' && (!n.roles || n.roles.some(r => roles.includes(r)))).map(n => n.label).join(' · ') || 'yok'}.</p>

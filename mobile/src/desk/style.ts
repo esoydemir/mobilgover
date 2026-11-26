@@ -149,7 +149,13 @@ export const DESK_CSS = `
 .gh-prio-item:first-of-type{border-top:1px solid var(--line)}
 .gh-prio-item.first{background:var(--sel)}
 .gh-prio-item .why{font-size:12.5px;color:var(--ink2);margin-top:2px}
-.gh-areas{display:flex;gap:8px;flex-wrap:wrap;padding:14px 22px 0}
+.gh-areas{display:flex;flex-direction:column;gap:6px;padding:14px 22px 0}
+.gh-arearow{display:grid;grid-template-columns:250px minmax(0,1fr);gap:6px;align-items:start}
+.gh-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:38px}
+.gh-arearow .gh-area{color:inherit;text-decoration:none}
+.gh-counter{text-decoration:none;color:inherit}
+.gh-counter b{font-variant-numeric:tabular-nums}
+.gh-counter.zero{color:var(--ink3)}
 .gh-area{display:flex;gap:8px;align-items:baseline;border:1px solid var(--line);border-radius:10px;padding:7px 12px;background:var(--surface);font-size:13px}
 .gh-area b{font-size:16px;font-variant-numeric:tabular-nums}
 .gh-area.bad{border-color:var(--crit)}.gh-area.lock{color:var(--ink3);background:transparent}
