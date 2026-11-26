@@ -14,7 +14,9 @@ import { topUpSite } from './tasks';
 import {
   OFFICIAL_HOSTS, defaultFetcher, errorKindOf, istanbulDay, parseWatchList, scanConsolidated, scanGazette, trDate,
   type DetectedChange, type Fetcher, type ScanOutcome, type SourceCode, type WatchDoc,
+  type PdfReader,
 } from './legislation-sources';
+import { readGazettePdf } from './filetext';
 
 /*
  * Daily legislation watch → review queue → admin approval → scheduled application.
@@ -25,14 +27,14 @@ import {
 
 export type LegislationConfig = {
   rgBase: string; mevzuatBase: string; watch: WatchDoc[]; lookbackDays: number; fetcher: Fetcher; allowExampleRules: boolean;
-  sleep?: (ms: number) => Promise<void>; scanHour: number; enabled: boolean;
+  sleep?: (ms: number) => Promise<void>; scanHour: number; enabled: boolean; readPdf?: PdfReader;
 };
 export function legislationConfig(env: Record<string, string | undefined> = process.env, over: Partial<LegislationConfig> = {}): LegislationConfig {
   return {
     rgBase: env.LEGISLATION_RG_BASE?.trim() || 'https://www.resmigazete.gov.tr',
     mevzuatBase: env.LEGISLATION_MEVZUAT_BASE?.trim() || 'https://www.mevzuat.gov.tr',
     watch: parseWatchList(env.LEGISLATION_MEVZUAT_WATCH), lookbackDays: Math.min(Math.max(Number(env.LEGISLATION_LOOKBACK_DAYS ?? 3) || 3, 0), 30),
-    fetcher: defaultFetcher, allowExampleRules: env.DEMO_MODE === 'true', scanHour: Number(env.LEGISLATION_SCAN_HOUR ?? 6),
+    fetcher: defaultFetcher, readPdf: readGazettePdf, allowExampleRules: env.DEMO_MODE === 'true', scanHour: Number(env.LEGISLATION_SCAN_HOUR ?? 6),
     enabled: env.LEGISLATION_SCAN_ENABLED === '1', ...over,
   };
 }
@@ -76,23 +78,26 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
     const prev = new Map<string, Record<string, string>>();
     for (const r of (await tx.query(`SELECT doc_key, articles FROM legislation_documents WHERE source_code = 'mevzuat'`)).rows) prev.set(r.doc_key, r.articles);
     const lastRgOk = (await tx.query<{ t: Date | null }>(`SELECT last_success_at AS t FROM legislation_sources WHERE code = 'resmi_gazete'`)).rows[0]?.t ?? null;
-    return { runId: run.id, prev, lastRgOk };
+    // Days that could not be verified since the last healthy read stay inside the window until a scan reads them.
+    const pending = (await tx.query<{ results: SourceResult[] | null }>(`SELECT results FROM legislation_scan_runs WHERE status IN ('partial','failed') AND ($1::timestamptz IS NULL OR started_at > $1) AND run_date >= $2::date - 30`, [lastRgOk, today])).rows;
+    return { runId: run.id, prev, lastRgOk, oldestUnread: oldestUnverifiedDay(pending.flatMap(r => Array.isArray(r.results) ? r.results : [])) };
   });
   if (!start) return { skipped: 'already_running' as const };
 
   // Catch-up: the gazette window always reaches back to the last fully healthy read (machine off, process down, source outage),
   // never shorter than the configured look-back and never longer than 30 days.
   const gapDays = start.lastRgOk ? Math.ceil((now.getTime() - new Date(start.lastRgOk).getTime()) / 86_400_000) : 0;
-  const wanted = Math.max(cfg.lookbackDays, gapDays + 1);
+  const unreadAge = start.oldestUnread ? Math.round((Date.parse(today) - Date.parse(start.oldestUnread)) / 86_400_000) : 0;
+  const wanted = Math.max(cfg.lookbackDays, gapDays + 1, unreadAge);
   const lookbackDays = Math.min(wanted, 30);
 
   // Phase 2 (no transaction): network.
   const outcomes: Partial<Record<SourceCode, ScanOutcome>> = {};
   const thrown: Partial<Record<SourceCode, string>> = {};
   try {
-    outcomes.resmi_gazete = await scanGazette({ baseUrl: cfg.rgBase, today, lookbackDays, fetcher: cfg.fetcher, sleep: cfg.sleep });
-    if (lookbackDays > cfg.lookbackDays) outcomes.resmi_gazete.notes.push(`Kaçırılan aralık telafi edildi: son sağlıklı okumadan ${gapDays} gün geçmişti, ${lookbackDays + 1} günlük pencere okundu.`);
-    if (wanted > 30) outcomes.resmi_gazete.notes.push(`UYARI: son sağlıklı okumadan ${gapDays} gün geçti; pencere en çok 30 gün okunur, daha eski günler Resmî Gazete'den elle kontrol edilmeli.`);
+    outcomes.resmi_gazete = await scanGazette({ baseUrl: cfg.rgBase, today, lookbackDays, fetcher: cfg.fetcher, readPdf: cfg.readPdf, sleep: cfg.sleep });
+    if (lookbackDays > cfg.lookbackDays) outcomes.resmi_gazete.notes.push(start.oldestUnread && unreadAge >= lookbackDays ? `${start.oldestUnread} gününden kalan okunamamış yayın için ${lookbackDays + 1} günlük pencere okundu.` : `Kaçırılan aralık telafi edildi: son sağlıklı okumadan ${gapDays} gün geçmişti, ${lookbackDays + 1} günlük pencere okundu.`);
+    if (wanted > 30) outcomes.resmi_gazete.notes.push(`UYARI: ${Math.max(gapDays, unreadAge)} gün geriye gitmek gerekiyor; pencere en çok 30 gün okunur, daha eski günler Resmî Gazete'den elle kontrol edilmeli.`);
   } catch (e) { thrown.resmi_gazete = (e as Error).message; }
   try { outcomes.mevzuat = await scanConsolidated({ baseUrl: cfg.mevzuatBase, watch: cfg.watch, previous: start.prev, fetcher: cfg.fetcher, today, sleep: cfg.sleep }); } catch (e) { thrown.mevzuat = (e as Error).message; }
 
@@ -118,7 +123,7 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
            last_error = CASE WHEN $3 THEN NULL ELSE $4 END, last_error_at = CASE WHEN $3 THEN last_error_at ELSE now() END,
            failures_in_row = CASE WHEN $3 THEN 0 ELSE failures_in_row + 1 END WHERE code = $1`,
         [code, out?.seen ?? 0, ok, errors.join(' | ').slice(0, 1500), errorKind, out?.docsRead ?? 0]);
-      results.push({ source: code, ok, seen: out?.seen ?? 0, selected: out?.selected ?? 0, uncertain: out?.uncertain ?? 0, skipped: (out?.skipped ?? []).slice(0, 100), unreadable: (out?.unreadable ?? []).slice(0, 50), docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
+      results.push({ source: code, ok, seen: out?.seen ?? 0, selected: out?.selected ?? 0, uncertain: out?.uncertain ?? 0, skipped: (out?.skipped ?? []).slice(0, 800), unreadable: (out?.unreadable ?? []).slice(0, 200), docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
     }
     const status = results.every(r => r.ok) ? 'ok' : results.some(r => r.ok) ? 'partial' : 'failed';
     await tx.query(`UPDATE legislation_scan_runs SET finished_at = now(), status = $2, results = $3 WHERE id = $1`, [start.runId, status, JSON.stringify(results)]);
@@ -126,6 +131,15 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
       payload: { trigger: o.trigger, status, results: results.map(r => ({ source: r.source, ok: r.ok, seen: r.seen, selected: r.selected, uncertain: r.uncertain, skipped: r.skipped.length, unreadable: r.unreadable.length, docsRead: r.docsRead, created: r.created, errorKind: r.errorKind, errors: r.errors.slice(0, 3) })) } });
     return { runId: start.runId, status, results };
   });
+}
+
+/** The earliest publication day that some recorded run could not read (a day list, or one publication). */
+export function oldestUnverifiedDay(results: { source?: string; code?: string; errors?: string[]; unreadable?: { key: string }[] }[]): string | null {
+  const days = results.flatMap(r => [
+    ...(r.errors ?? []).map(e => /^(\d{4}-\d{2}-\d{2}):/.exec(e)?.[1]),
+    ...(r.unreadable ?? []).map(u => { const m = /^rg:(\d{4})(\d{2})(\d{2})/.exec(u.key); return m ? `${m[1]}-${m[2]}-${m[3]}` : undefined; }),
+  ]).filter((d): d is string => !!d).sort();
+  return days[0] ?? null;
 }
 
 async function storeChange(tx: Tx, c: DetectedChange, isExample: boolean): Promise<number> {
@@ -196,14 +210,16 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
   for (const r of (await tx.query<{ run_date: string; results: SourceResult[] | null }>(`SELECT to_char(run_date, 'YYYY-MM-DD') AS run_date, results FROM legislation_scan_runs WHERE started_at > now() - interval '14 days' AND status IN ('ok','partial','failed') ORDER BY started_at`)).rows) {
     for (const res of Array.isArray(r.results) ? r.results : []) {
       const add = (k: { key?: string; url?: string; title: string }, status: Seen['status'], why: string) => {
-        const id = `${k.key ?? k.title}`; const e = skippedMap.get(id);
+        const id = `${k.key ?? k.title}`.replace(/\.pdf$/i, ''); const e = skippedMap.get(id);
         if (e) { e.lastDay = r.run_date; e.scans += 1; e.status = status; e.why = why; } else skippedMap.set(id, { key: k.key ?? k.title, url: k.url ?? null, title: k.title, status, why, firstDay: r.run_date, lastDay: r.run_date, scans: 1 });
       };
       for (const k of res.skipped ?? []) add(k, 'out_of_scope', k.why);
       for (const k of res.unreadable ?? []) add(k, 'unreadable', `Metni okunamadı: ${k.error}. Sonraki taramada yeniden denenir; okunana kadar sınıflandırılamaz.`);
     }
   }
-  const recentSkipped = [...skippedMap.values()].sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.key.localeCompare(b.key)).slice(0, 100);
+  // A publication that has since been read and queued is no longer "unreadable" or "left out".
+  const queued = new Set((await tx.query<{ k: string }>(`SELECT external_key AS k FROM legislation_changes WHERE external_key = ANY($1::text[])`, [[...skippedMap.keys()]])).rows.map(r => r.k));
+  const recentSkipped = [...skippedMap].filter(([id]) => !queued.has(id)).map(([, e]) => e).sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.key.localeCompare(b.key)).slice(0, 100);
   const okDays = (await tx.query<{ d: string }>(`SELECT DISTINCT to_char(run_date, 'YYYY-MM-DD') AS d FROM legislation_scan_runs WHERE trigger = 'schedule' AND status = 'ok'`)).rows.map(r => r.d);
   const schedOkToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [istanbulDay()])).rowCount ?? 0) > 0;
   return {

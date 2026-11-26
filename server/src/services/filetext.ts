@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 
@@ -64,9 +65,9 @@ const longEnough = (t: string) => t.replace(/\s/g, '').length >= MIN_TEXT;
 
 async function openPdf(bytes: Buffer) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const std = path.join(path.dirname(require_.resolve('pdfjs-dist/package.json')), 'standard_fonts').split(path.sep).join('/') + '/';
+  const dir = (name: string) => path.join(path.dirname(require_.resolve('pdfjs-dist/package.json')), name).split(path.sep).join('/') + '/';
   try {
-    const task = pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: false, standardFontDataUrl: std, verbosity: 0 });
+    const task = pdfjs.getDocument({ data: new Uint8Array(bytes), useSystemFonts: false, standardFontDataUrl: dir('standard_fonts'), wasmUrl: dir('wasm'), verbosity: 0 }); // without wasmUrl JBIG2/JPX page images are silently left blank
     return { doc: await task.promise, task };
   } catch (e) { if (process.env.FT_DEBUG) console.error(e); throw new FileReadError('unreadable', 'PDF açılamadı; dosya bozuk ya da şifreli olabilir.'); }
 }
@@ -83,18 +84,45 @@ async function readPdf(bytes: Buffer): Promise<FileReading> {
     direct = normalise(direct);
     if (longEnough(direct)) return { method: 'pdf_text', text: direct, pages, confidence: null, lowWords: [] };
     // No usable text layer: a scan. Render each page and read it.
-    const parts: string[] = []; const low: LowWord[] = []; let conf = 0, n = 0;
-    for (let i = 1; i <= pages; i++) {
-      const page = await doc.getPage(i);
-      const vp = page.getViewport({ scale: 2.5 });
-      const { createCanvas } = await import('@napi-rs/canvas');
-      const canvas = createCanvas(Math.ceil(vp.width), Math.ceil(vp.height)); const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvasContext: ctx as any, canvas: canvas as any, viewport: vp }).promise;
-      const r = await recognize(canvas.toBuffer('image/png'));
-      parts.push(r.text); low.push(...r.lowWords); conf += r.confidence; n++;
-    }
-    return { method: 'ocr_pdf', text: normalise(parts.join('\n')), pages: n, confidence: n ? Math.round(conf / n) : 0, lowWords: low };
+    return await ocrPages(doc, pages);
+  } finally { await task.destroy().catch(() => undefined); }
+}
+
+async function ocrPages(doc: Awaited<ReturnType<typeof openPdf>>['doc'], pages: number): Promise<FileReading> {
+  const parts: string[] = []; const low: LowWord[] = []; let conf = 0, n = 0;
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const vp = page.getViewport({ scale: 2.5 });
+    const { createCanvas } = await import('@napi-rs/canvas');
+    const canvas = createCanvas(Math.ceil(vp.width), Math.ceil(vp.height)); const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx as any, canvas: canvas as any, viewport: vp }).promise;
+    const r = await recognize(canvas.toBuffer('image/png'));
+    parts.push(r.text); low.push(...r.lowWords); conf += r.confidence; n++;
+  }
+  return { method: 'ocr_pdf', text: normalise(parts.join('\n')), pages: n, confidence: n ? Math.round(conf / n) : 0, lowWords: low };
+}
+
+/*
+ * Official gazette annexes are page images; their text layer, when present, decodes to noise. Every page is therefore read
+ * with OCR (never the text layer), and a file that is too long is refused as a whole: a half-read publication must not look read.
+ */
+export const GAZETTE_MAX_PAGES = 40;
+const GAZETTE_MAX_BYTES = 20 * 1024 * 1024;
+const gazetteCache = new Map<string, { text: string; confidence: number; pages: number }>();
+export async function readGazettePdf(bytes: Uint8Array) {
+  if (bytes.length > GAZETTE_MAX_BYTES) throw new FileReadError('too_large', 'Dosya 20 MB sınırını aşıyor.');
+  const key = createHash('sha256').update(bytes).digest('hex'); // the same file is listed again by every scan of the window
+  const seen = gazetteCache.get(key);
+  if (seen) return seen;
+  const { doc, task } = await openPdf(Buffer.from(bytes));
+  try {
+    if (doc.numPages > GAZETTE_MAX_PAGES) throw new FileReadError('too_large', `Dosya ${doc.numPages} sayfa; en çok ${GAZETTE_MAX_PAGES} sayfa makineyle okunur.`);
+    const r = await ocrPages(doc, doc.numPages);
+    const out = { text: r.text, confidence: r.confidence ?? 0, pages: r.pages };
+    if (gazetteCache.size >= 200) gazetteCache.delete(gazetteCache.keys().next().value!);
+    gazetteCache.set(key, out);
+    return out;
   } finally { await task.destroy().catch(() => undefined); }
 }
 

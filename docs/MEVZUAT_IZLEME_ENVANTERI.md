@@ -197,3 +197,7 @@ Mevcut `LEGISLATION_MEVZUAT_WATCH` biçimi (`tür:no:tertip:ad`) bu envanteri ta
 ```
 
 Bu liste **kaynak doğrulanmış** belgelerin izlenmesidir; izlenen belgelerin herhangi bir hükmünün kural olarak yayımlanması uzman onayına bağlıdır. Kuyrukta çıkan kayıtlar gerçek kaynaktan geldiği için "örnek" değildir ama **yayım için uzman onayı** gerekir.
+
+## Resmî Gazete PDF yayınları (27.11.2026)
+
+Kurul ve Cumhurbaşkanı kararları yalnız PDF olarak yayımlanır; sayfalar görüntüdür (çoğu JBIG2). Tarama bunları yerel OCR ile okur (`readGazettePdf`, en çok 40 sayfa). En az 200 karakter ve %60 güven yoksa yayın "okunamadı" kalır. Makine okumasından gelen adayın yürürlük tarihi her zaman "belirsiz"dir ve metnin başında uyarı yazar. Mükerrer sayılar ayrı gün listesinden okunur. Okunamayan gün, okunana kadar (en çok 30 gün) tarama penceresinde kalır.

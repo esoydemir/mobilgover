@@ -111,7 +111,7 @@ describe('Resmî Gazete connector: only the configured source is contacted', () 
     const asked: string[] = [];
     const f: Fetcher = async url => { asked.push(url); return html(index('https://baska-site.example/belge.htm')); };
     const out = await scanGazette({ baseUrl: base, today: '2026-11-18', lookbackDays: 0, fetcher: f, sleep: noSleep });
-    expect(asked).toEqual([`${base}/fihrist?tarih=2026-11-18`]);
+    expect(asked).toEqual([`${base}/fihrist?tarih=2026-11-18`, `${base}/fihrist?tarih=2026-11-18&mukerrer=1`]); // day list and its extra issue, never the other host
     expect(out.errors).toHaveLength(1);
     expect(errorKindOf(out.errors[0]!)).toBe('refused_link');
     expect(out.docsRead).toBe(0);

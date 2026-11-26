@@ -6,7 +6,12 @@ import { createHash } from 'node:crypto';
  * A connector only DETECTS: it never decides what applies to a business.
  */
 
-export type FetchResult = { status: number; body: Uint8Array; contentType: string | null };
+/** `url`: the address that actually answered (after redirects). */
+export type FetchResult = { status: number; body: Uint8Array; contentType: string | null; url?: string };
+/** Reads a publication that the gazette serves only as a scanned PDF (injected: OCR in production, a stub in tests). */
+export type PdfReader = (bytes: Uint8Array) => Promise<{ text: string; confidence: number; pages: number }>;
+/** Below these an OCR reading is not trusted at all: the publication stays "unreadable" for a person. */
+export const PDF_MIN_CHARS = 200; export const PDF_MIN_CONFIDENCE = 60;
 export type Fetcher = (url: string) => Promise<FetchResult>;
 
 export const OFFICIAL_HOSTS = { resmi_gazete: 'resmigazete.gov.tr', mevzuat: 'mevzuat.gov.tr' } as const;
@@ -38,7 +43,7 @@ export const defaultFetcher: Fetcher = async url => {
   const r = await fetch(url, { headers: { 'user-agent': 'GoverHubLegislationWatch/1.0 (+yerel pilot; gunluk tarama)', accept: 'text/html,*/*' }, redirect: 'follow', signal: AbortSignal.timeout(25_000) });
   // A redirect may only stay on the host that was asked for; the watch never follows a source to another site.
   if (r.url && !sameHost(r.url, url)) throw new SourceError('refused_link', `${url} başka bir adrese yönlendirdi (${new URL(r.url).hostname}); izlenmedi`);
-  return { status: r.status, body: new Uint8Array(await r.arrayBuffer()), contentType: r.headers.get('content-type') };
+  return { status: r.status, body: new Uint8Array(await r.arrayBuffer()), contentType: r.headers.get('content-type'), url: r.url };
 };
 
 /** A fetch that retries transient failures (network error, 5xx, 429) with growing waits; returns the final answer or throws a classified SourceError. */
@@ -98,6 +103,9 @@ export function htmlToText(html: string): string {
 }
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+export const isPdf = (r: FetchResult) => /application\/pdf/i.test(r.contentType ?? '') || Buffer.from(r.body.slice(0, 5)).toString('latin1') === '%PDF-';
+/** The site answers a list that does not exist (not yet published, no extra issue) with a redirect to its home page. */
+const leftList = (r: FetchResult) => !!r.url && !/\/fihrist(\?|$)/i.test(r.url);
 /**
  * Comparison form of a text: Unicode NFC, invisible characters (zero-width, soft hyphen, BOM) removed, every kind of space
  * (non-breaking included) collapsed to one. Words, digits, punctuation and letter case are NOT touched, so nothing that
@@ -219,7 +227,9 @@ export function changeTypeFromTitle(title: string): DetectedChange['changeType']
 
 export type GazetteDocument = { sayi: string | null; publishedOn: string | null; issuer: string | null; title: string; articles: { id: string; text: string }[]; effectiveClauses: string[]; text: string };
 export function parseGazetteDocument(html: string, fallback: { title: string; publishedOn: string | null }): GazetteDocument {
-  const text = htmlToText(html);
+  return parseGazetteText(htmlToText(html), fallback);
+}
+export function parseGazetteText(text: string, fallback: { title: string; publishedOn: string | null }): GazetteDocument {
   const sayi = /Resm[iîı]\s+Gazete\s*(?:\n|\s)*Say[ıi]\s*:\s*(\d{4,6})/i.exec(text)?.[1] ?? null;
   const issuer = /\n([^\n]{3,90}?(?:Bakanlığından|Başkanlığından|Kurumundan|Kurulundan|Genel Müdürlüğünden)):?\s*\n/.exec(text)?.[1] ?? null;
   const articles: { id: string; text: string }[] = [];
@@ -273,21 +283,44 @@ export function daysBack(today: string, n: number): string[] {
   return Array.from({ length: n + 1 }, (_, i) => new Date(t - (n - i) * 86_400_000).toISOString().slice(0, 10));
 }
 
-export async function scanGazette(o: { baseUrl: string; today: string; lookbackDays: number; fetcher: Fetcher; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
+/** Extra (mükerrer) issues of a day are separate lists; five a day is far above anything the gazette publishes. */
+const MAX_EXTRA_ISSUES = 5;
+export async function scanGazette(o: { baseUrl: string; today: string; lookbackDays: number; fetcher: Fetcher; readPdf?: PdfReader; sleep?: (ms: number) => Promise<void> }): Promise<ScanOutcome> {
   const out: ScanOutcome = { seen: 0, selected: 0, uncertain: 0, skipped: [], unreadable: [], docsRead: 0, changes: [], errors: [], snapshots: [], notes: [] };
   const base = o.baseUrl.replace(/\/+$/, '');
   for (const day of daysBack(o.today, o.lookbackDays)) {
     let items: GazetteItem[];
     try {
       const idxUrl = `${base}/fihrist?tarih=${day}`;
-      const html = requireHtml(await fetchWithRetry(o.fetcher, idxUrl, { sleep: o.sleep }), idxUrl);
+      const answer = await fetchWithRetry(o.fetcher, idxUrl, { sleep: o.sleep });
+      // A redirect away from the list is NOT "nothing published": today's issue may still be missing; a past day is unverified.
+      if (leftList(answer)) {
+        if (day === o.today) { out.notes.push(`${day}: günün sayısı henüz yayımlanmamış (liste adresi ana sayfaya yönlendiriyor); sonraki taramada yeniden bakılır.`); continue; }
+        throw new SourceError('not_found', `${idxUrl} gün listesi yerine ana sayfaya yönlendirdi; bu gün doğrulanamadı`);
+      }
+      const html = requireHtml(answer, idxUrl);
       items = parseGazetteIndex(html);
       // A day list with no items AND none of the page's list markers is a changed/broken page, not "nothing published".
       if (!items.length && !/gunluk-akis|fihrist-item|html-content/i.test(html)) throw new SourceError('unexpected_format', `${idxUrl} günlük fihrist biçiminde değil (liste bulunamadı)`);
     } catch (e) { out.errors.push(`${day}: ${(e as Error).message}`); continue; }
+    const listed = new Set(items.map(i => i.url));
+    for (let n = 1; n <= MAX_EXTRA_ISSUES; n++) {
+      const url = `${base}/fihrist?tarih=${day}&mukerrer=${n}`;
+      try {
+        const answer = await fetchWithRetry(o.fetcher, url, { sleep: o.sleep });
+        if (leftList(answer)) break;
+        const fresh = parseGazetteIndex(requireHtml(answer, url)).filter(i => !listed.has(i.url));
+        if (!fresh.length) break;
+        for (const i of fresh) { listed.add(i.url); items.push(i); }
+        out.notes.push(`${day}: ${n}. mükerrer sayıda ${fresh.length} yayın.`);
+      } catch (e) {
+        if (!(e instanceof SourceError && e.kind === 'not_found')) out.errors.push(`${day}: mükerrer sayı listesi: ${(e as Error).message}`);
+        break;
+      }
+    }
     out.seen += items.length;
     for (const it of items) {
-      const itemUrl = new URL(it.url, base + '/').toString(); const itemKey = `rg:${itemUrl.split('/').pop()!.replace(/\.html?$/i, '')}`;
+      const itemUrl = new URL(it.url, base + '/').toString(); const itemKey = `rg:${itemUrl.split('/').pop()!.replace(/\.(html?|pdf)$/i, '')}`;
       let rel: SectorMatch & { bodySectors?: Sector[] } = sectorRelevance(it.title);
       const mustRead = rel.level !== 'out' || AMENDMENT_TITLE.test(it.title); // an amendment title may hide its sector: read the text before deciding
       if (!mustRead) { out.skipped.push({ key: itemKey, url: itemUrl, title: it.title.slice(0, 160), why: rel.why }); continue; }
@@ -295,7 +328,14 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
         const url = new URL(it.url, base + '/').toString();
         // Links inside the day list are followed only when they stay on the configured source host.
         if (!sameHost(url, base)) throw new SourceError('refused_link', `${url} yapılandırılmış kaynak adresinin dışında; izlenmedi`);
-        const doc = parseGazetteDocument(requireHtml(await fetchWithRetry(o.fetcher, url, { sleep: o.sleep }), url), { title: it.title, publishedOn: day });
+        const answer = await fetchWithRetry(o.fetcher, url, { sleep: o.sleep });
+        let ocr: Awaited<ReturnType<PdfReader>> | null = null; let doc: GazetteDocument;
+        if (isPdf(answer) && o.readPdf) {
+          try { ocr = await o.readPdf(answer.body); } catch (e) { throw new SourceError('unexpected_format', `${url} PDF okunamadı: ${(e as Error).message}`); }
+          const chars = ocr.text.replace(/\s/g, '').length;
+          if (chars < PDF_MIN_CHARS || ocr.confidence < PDF_MIN_CONFIDENCE) throw new SourceError('corrupt', `${url} PDF okuması güvenilir değil (${chars} karakter, güven %${Math.round(ocr.confidence)})`);
+          doc = parseGazetteText(ocr.text, { title: it.title, publishedOn: day });
+        } else doc = parseGazetteDocument(requireHtml(answer, url), { title: it.title, publishedOn: day });
         out.docsRead += 1;
         if (rel.level === 'out') {
           const hits = sectorsInText(doc.text);
@@ -312,13 +352,17 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
           const later = [...new Set(doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).flatMap(a => datesIn(a.text)).filter(d => d > day))].sort();
           if (later.length) eff = { status: 'unclear', date: null, note: `Yürürlük maddesi ${trDate(eff.date)} gösteriyor, ancak metinde ileri tarihli/geçiş hükümleri var (${later.slice(0, 4).map(trDate).join(', ')}). Hangi tarihin uygulanacağını yönetici metinden belirlemeli.` };
         }
-        const file = url.split('/').pop()!.replace(/\.html?$/i, '');
-        const newText = type === 'repeal' ? null : doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).map(a => `MADDE ${a.id} – ${a.text}`).join('\n\n') || doc.text.slice(0, 4000);
+        // Machine-read text is never trusted with a date: a person reads the official file and decides.
+        if (ocr) eff = { status: 'unclear', date: null, note: `PDF görüntüsünden makineyle okundu (güven %${Math.round(ocr.confidence)}); yürürlük tarihini yönetici resmî metinden belirlemeli.${eff.date ? ` Okumadaki aday tarih: ${trDate(eff.date)}.` : ''}` };
+        const file = url.split('/').pop()!.replace(/\.(html?|pdf)$/i, '');
+        const body = type === 'repeal' ? null : doc.articles.filter(a => !doc.effectiveClauses.includes(a.text)).map(a => `MADDE ${a.id} – ${a.text}`).join('\n\n') || doc.text.slice(0, 4000);
+        const newText = ocr && body ? `[PDF görüntüsünden makineyle okundu; harf ve sayı hataları olabilir. Resmî PDF'i açıp doğrulayın.]\n\n${body}` : body;
         out.changes.push({
           sourceCode: 'resmi_gazete', externalKey: `rg:${file}`, changeType: type,
           docRef: `Resmî Gazete ${doc.sayi ?? '(sayı okunamadı)'} · ${trDate(day)}`, docTitle: it.title, articleRef: null, sourceUrl: url, publishedOn: day, effective: eff,
           oldText: null, newText,
           suggestion: { relevance: rel.why, sectors: rel.sectors, matchLevel: rel.level, bodySectors: rel.bodySectors ?? [], needsHumanClassification: rel.level === 'uncertain', category: it.category, issuer: doc.issuer, kind: type, effectiveDetail: effectiveDetail(doc, day),
+            ...(ocr ? { readMethod: 'ocr_pdf', readConfidence: Math.round(ocr.confidence), readPages: ocr.pages } : {}),
             hint: type === 'article_amendment' ? 'Değişiklik metni var; değişen maddenin eski metni için ilgili mevzuatın birleştirilmiş metnine bakın.' : type === 'repeal' ? 'Yürürlükten kaldırma: ilgili kural sürümü için bitiş tarihi önerilir.' : 'Yeni düzenleme: kural koşulunu ve görevleri uzman yazmalı.',
             ...compareTexts(null, newText) },
         });
