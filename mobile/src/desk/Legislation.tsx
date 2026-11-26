@@ -12,7 +12,7 @@ type Skipped = { key: string; url: string | null; status: 'out_of_scope' | 'unre
 type Overview = { sources: Source[]; recentSkipped?: Skipped[]; pendingReview: number; unclearDates: number; counts: Record<string, number>; canScan: boolean; lastSuccessfulScan: { finished_at: string } | null;
   schedule: { enabled: boolean; nextRunAt?: string | null; retry?: { attempts: number; maxAttempts: number; nextAttemptAt: string | null; exhausted: boolean; lastErrors: string[] } | null } };
 type Row = { id: string; source_code: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null; status: string; is_example: boolean; detected_at: string;
-  match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null; waiting_reason?: string | null; review_areas?: string[]; assigned_to?: string | null; assignee_name?: string | null; date_status: 'known' | 'unclear' };
+  match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null; waiting_reason?: string | null; review_areas?: string[]; assigned_to?: string | null; assignee_name?: string | null; date_status: 'known' | 'unclear'; next_step?: 'author' | 'area' | 'approver' | null };
 type Site = { siteId: string; site: string; company: string; effect: string; reason: string; missingQuestions?: { key: string; label: string }[]; openTaskEffect?: string; plannedText?: string; plannedTasks?: { code: string; title: string; firstDue: string | null; unset: boolean }[] };
 type Detail = {
   id: string; status: string; typeLabel: string; docRef: string; docTitle: string; articleRef: string | null; sourceUrl: string; sourceCode: string; publishedOn: string | null; effectiveFrom: string | null; dateStatus: 'known' | 'unclear'; dateNote: string | null;
@@ -32,6 +32,7 @@ type Cands = { needAreas: string[]; assignedTo: string | null; note: string | nu
 
 const OPEN_Q = ['open', 'mine', 'unowned', 'review', 'uncertain', 'unreadable'];
 const VIEWS = [['open', 'Açık'], ['scheduled', 'Yürürlük bekliyor'], ['applied', 'Uygulandı'], ['rejected', 'Reddedildi']] as const;
+const NEXT_TR = { author: 'kural yazarı', area: 'alan incelemesi', approver: 'kural onaylayıcısı' } as const;
 const SUBS = [['open', 'Hepsi'], ['mine', 'Bana atanan'], ['unowned', 'Sahipsiz'], ['review', 'Onay bekleyen'], ['uncertain', 'Belirsiz eşleşme']] as const;
 const BASIS: Record<string, [string, 'official' | 'plan' | 'example']> = { source: ['Resmî kaynak', 'official'], rule: ['Resmî kaynak (yayımlanmış kural)', 'official'], business_plan: ['İşletme planı', 'plan'], haccp_plan: ['İşletmenin kendi planı', 'plan'],
   manufacturer: ['Üretici değeri', 'plan'], admin_choice: ['Yönetici seçimi (resmî kaynak değil)', 'example'], example_scenario: ['ÖRNEK senaryo', 'example'], example: ['ÖRNEK, doğrulanmadı', 'example'] };
@@ -67,7 +68,11 @@ export function Legislation() {
         {r.waiting_reason ? <div className="gh-why" data-testid={`leg-waiting-${r.id}`}>{trText(r.waiting_reason)}</div> : null}
       </>) },
     { key: 'st', label: 'Durum', w: '150px', render: r => { const [l, t] = STATUS_LEG[r.status] ?? [r.status, undefined]; return <Badge tone={t}>{l}</Badge>; } },
-    { key: 'who', label: 'Sorumlu', w: '112px', render: r => r.assignee_name ? <span>{r.assignee_name}</span> : <span style={{ color: 'var(--warn)' }}>Sahipsiz</span> },
+    { key: 'who', label: 'Dosya sorumlusu', w: '136px', render: r => (
+      <>
+        {r.assignee_name ? <span>{r.assignee_name}</span> : <span style={{ color: 'var(--warn)' }}>Sahipsiz</span>}
+        {r.next_step ? <div className="s" data-testid={`leg-next-${r.id}`}>Sırada: {NEXT_TR[r.next_step]}</div> : null}
+      </>) },
     { key: 'eff', label: 'Yürürlük', w: '88px', opt: true, render: r => (r.date_status === 'unclear' ? <span style={{ color: 'var(--warn)' }}>Belirsiz</span> : dayTr(r.effective_from)) },
     { key: 'w', label: 'Bekleme', w: '68px', opt: true, render: r => waitFrom(r.detected_at) },
   ];
@@ -166,7 +171,7 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
         title={`${d.docTitle}${d.articleRef ? ` · md. ${d.articleRef}` : ''}`}
         badges={<><span data-testid="leg-status"><Badge tone={stT}>{stL}</Badge></span>{d.dateStatus === 'unclear' ? <Badge tone="warn">Yürürlük tarihi belirsiz</Badge> : <Badge>Yürürlük {dayTr(d.effectiveFrom)}</Badge>}</>} />
       <div className="gh-panel-scroll" data-testid="leg-detail">
-        <NowBox testid="leg-now" title={open ? 'Neden bekliyor' : 'Durum'} why={d.nextInLine ? trText(d.nextInLine) : stL} can={open ? now : null}
+        <NowBox testid="leg-now" title={open ? 'Neden bekliyor' : 'Durum'} why={`${d.nextInLine ? trText(d.nextInLine) : stL}${open && !d.assignment ? ' Dosya sorumlusu atanmamış; bu, yukarıdaki inceleme sırasından ayrıdır.' : ''}`} can={open ? now : null}
           note={open && !isReviewer ? 'Onay, ret ve iade bu hesapta kapalı: kararı yalnız kural inceleyici verir.' : null}>
           {open ? <p data-testid="leg-now-impact"><b>Etki: </b>{imp ? `${imp.affectedSites} şube etkilenir, ${imp.outOfScopeSites} şube kapsam dışı (${dayTr(imp.onDate)}).` : 'henüz hesaplanamıyor (kapsam koşulu yazılmadı).'}</p> : null}
           {open && d.cannot?.assign === null ? <div style={{ marginTop: 6 }}><Btn size="sm" kind="pri" testid="leg-goto-assign" onClick={jumpAssign}>Atamaya git</Btn></div> : null}

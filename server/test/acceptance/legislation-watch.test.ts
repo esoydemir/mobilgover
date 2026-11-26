@@ -200,7 +200,10 @@ describe('approval gate', () => {
     expect(prep.status, JSON.stringify(prep.body)).toBe(200);
     expect((await author().post(`/admin/legislation/changes/${id}/prepare`)).status).toBe(409);
     expect((await reviewer().post(`/admin/legislation/changes/${id}/approve`, { reason: 'Alan incelemesi eksik' })).body.error.code).toBe('AREA_REVIEW_MISSING');
+    // Dosya ataması ile karar zincirindeki sıra ayrıdır: liste sıradaki adımı söyler.
+    expect(((await reviewer().get('/admin/legislation/changes?status=drafted')).body as any[]).find(r => r.id === id).next_step).toBe('area');
     expect((await specialist().post(`/admin/rule-versions/${prep.body.ruleVersionId}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Gıda güvenliği açısından uygun (sentetik).' })).status).toBe(200);
+    expect(((await reviewer().get('/admin/legislation/changes?status=drafted')).body as any[]).find(r => r.id === id).next_step).toBe('approver');
     expect(await tasksOf('EX-LEG-LPG')).toBe(0);
     expect(await notifsOf(id)).toBe(0);
     const ok = await reviewer().post(`/admin/legislation/changes/${id}/approve`, { reason: 'Resmî kaynak okundu, yürürlük bugün; kapsam LPG kullanan gıda işletmeleri.' });
