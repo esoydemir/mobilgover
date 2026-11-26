@@ -45,10 +45,13 @@ export default function DocumentRoute() {
     try { await openEvidence(token, company!.id, v.evidence_id!, { download, name: fileName(d!, v) }); } catch (e) { setErr((e as Error).message); }
   };
   const st = d ? DOC_STATUS[d.status] ?? DOC_STATUS.no_file! : null;
+  // A renewal that is uploaded but not reviewed: the status above still speaks for the older version.
+  const waiting = d?.currentVersionId ? d.versions.find(v => v.isLatest && v.id !== d.currentVersionId && v.review_status === 'unreviewed') : undefined;
+  const basisNo = d?.versions.find(v => v.id === d.currentVersionId)?.version;
   return (
     <Screen title="Belge" titleEn="Document" onRefresh={q.reload} refreshing={q.loading}>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
-      {!d || !st ? <Loading /> : (
+      {!d || !st ? (q.error ? null : <Loading />) : (
         <>
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <Pill label={st[0]} fg={st[1]} bg={st[2]} />
@@ -63,6 +66,7 @@ export default function DocumentRoute() {
           <Card style={{ gap: 6 }}>
             <Eyebrow>DURUM VE GEÇERLİLİK</Eyebrow>
             <Text testID="doc-status-note" style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{STATUS_NOTE[d.status]}</Text>
+            {waiting ? <Text testID="doc-pending-version" style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>{waiting.file_status === 'stored' ? `Sürüm ${waiting.version} yüklendi, inceleme bekliyor.` : `Sürüm ${waiting.version} için dosya yüklenmesi tamamlanmadı.`} İncelenene kadar esas alınan sürüm {basisNo}.</Text> : null}
             {d.endKind === 'none' ? <Text testID="doc-end-none" style={type(12.5, 600, { color: C.t1, lh: 1.45 })}>Bu belgenin bitiş tarihi yok; süre aşımı uyarısı üretilmez.</Text> : null}
             {d.infoNeeded ? <Text testID="doc-end-unknown" style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Bitiş tarihi henüz bilinmiyor. İnceleyen kişi belgeden okuyup yazana ya da “bitişi yok” diyene kadar bilgi tamamlama listesinde kalır.</Text> : null}
             {d.reviewOn ? <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>Gözden geçirme tarihi: {fmtDay(d.reviewOn)} (bitişten ayrıdır)</Text> : null}
@@ -81,7 +85,7 @@ export default function DocumentRoute() {
             <Card style={{ gap: 8 }}>
               <Eyebrow>UZMAN DESTEĞİ</Eyebrow>
               <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Bu belgeyi yenilemek ya da eksiğini tamamlamak için doğrulanmış uzmandan teklif iste. Teklif kabul etmeden iş başlamaz.</Text>
-              <PrimaryButton testID="doc-find-service" label="Servis bul" height={44} size={13.5} onPress={() => router.push(`/service/new?title=${encodeURIComponent(`${d.title} · yenileme / uygunluk desteği`)}` as Href)} />
+              <PrimaryButton testID="doc-find-service" label="Servis bul" height={44} size={13.5} onPress={() => router.push(`/service/new?${d.siteId ? `siteId=${d.siteId}&` : ''}title=${encodeURIComponent(`${d.title} · yenileme / uygunluk desteği`)}` as Href)} />
             </Card>
           ) : null}
           {err ? <ErrorBox message={err} /> : null}

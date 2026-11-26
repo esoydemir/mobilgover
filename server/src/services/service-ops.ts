@@ -4,7 +4,7 @@ import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { notify, notifyUser, siteManagers } from './notifications';
 import { currentFacts } from './profile';
-import { providersFor } from './marketplace';
+import { ACCEPTABLE_QUOTE, providersFor } from './marketplace';
 
 /**
  * GH-06 · GoverUp: need-based service suggestions, complaints from both sides, and the operations lists.
@@ -167,11 +167,14 @@ export async function operations(tx: Tx, p: Principal, now = new Date()) {
   const d = (t: Date | string) => daysBetween(t, now);
 
   const open = (await tx.query(
-    `SELECT r.id, r.title, r.created_at, c.name AS category, r.city, (SELECT count(*)::int FROM quotes q WHERE q.request_id = r.id AND q.status = 'submitted') AS quotes
-       FROM service_requests r JOIN service_categories c ON c.code = r.category_code WHERE r.status = 'open' ORDER BY r.created_at`)).rows
+    `SELECT r.id, r.title, r.created_at, c.name AS category, r.city, (SELECT count(*)::int FROM quotes q WHERE q.request_id = r.id AND q.status = 'submitted') AS quotes,
+            (SELECT count(*)::int FROM quotes q WHERE q.request_id = r.id AND ${ACCEPTABLE_QUOTE('q', 'r.category_code', 1)}) AS acceptable
+       FROM service_requests r JOIN service_categories c ON c.code = r.category_code WHERE r.status = 'open' ORDER BY r.created_at`, [now.toISOString().slice(0, 10)])).rows
     .map((r): OpsRow => ({ id: r.id, title: `${r.title} · ${r.category} · ${r.city}`, waitingDays: d(r.created_at),
-      responsible: r.quotes ? 'İşletme (teklif seçimi)' : 'Kategorideki onaylı uzmanlar (teklif)',
-      nextAction: r.quotes ? 'İşletmeye teklifleri karşılaştırıp kabul etmesini hatırlat.' : 'Onaylı uzman var mı kontrol et; yoksa işletmeye kategori/konum değişikliği öner.',
+      responsible: r.acceptable ? 'İşletme (teklif seçimi)' : 'Kategorideki onaylı uzmanlar (teklif)',
+      nextAction: r.acceptable ? 'İşletmeye teklifleri karşılaştırıp kabul etmesini hatırlat.'
+        : r.quotes ? 'Gelen teklif artık kabul edilemiyor (süresi ya da uzman onayı); onaylı başka uzman var mı kontrol et ve işletmeye bildir.'
+        : 'Onaylı uzman var mı kontrol et; yoksa işletmeye kategori/konum değişikliği öner.',
       record: { type: 'service_request', id: r.id } }));
 
   const lateAppts = (await tx.query(

@@ -112,8 +112,9 @@ export default function NcrRoute() {
             ) : n.permissions.act ? <EffectivenessForm n={n} onSave={(notes, value) => step('effectiveness_check', notes, 'Etkinlik kontrolü', value)} />
               : <Text style={type(12.5, 400, { color: C.t2 })}>Sorumlu kişi kaydeder.</Text>}
         </Card>
-      ) : effectiveness && n.status === 'awaiting_verification' ? (
-        <Callout tone="info" title="Etkinlik kontrolü" body={`${effectiveness.notes}${effectiveness.data?.measurement ? ` · yeni ölçüm ${effectiveness.data.measurement.value} ${effectiveness.data.measurement.unit ?? ''}${effectiveness.data.measurement.within ? ' (limit içinde)' : ''}` : ''} · ${effectiveness.done_by_name}, ${fmtDateTime(effectiveness.done_at)}`} />
+      ) : effectiveness ? (
+        // Stays after closure: what was measured, in which unit, against which limit.
+        <View testID="ncr-effectiveness-record"><Callout tone="info" title="Etkinlik kontrolü" body={effectivenessText(effectiveness, n.measurement)} /></View>
       ) : null}
 
       {n.product ? <ProductCard product={n.product} base={base} reload={q.reload} closed={n.status === 'closed'} /> : null}
@@ -121,7 +122,7 @@ export default function NcrRoute() {
       <ServiceLinkCard n={n} base={base} reload={q.reload} />
       {n.status !== 'closed' && n.permissions.serviceRequest ? (
         <GhostButton testID="ncr-service-request" label="Bu sorun için uzman hizmeti iste"
-          onPress={() => router.push(`/service/new?ncrId=${n.id}&title=${encodeURIComponent(n.title)}`)} />
+          onPress={() => router.push(`/service/new?ncrId=${n.id}&siteId=${n.site_id}&title=${encodeURIComponent(n.title)}`)} />
       ) : null}
       {n.permissions.manage && n.permissions.inviteVerifier ? (
         <GhostButton testID="ncr-share-case" label="Vakayı mesleki ağda paylaş (önizlemeli, anonim)"
@@ -131,6 +132,15 @@ export default function NcrRoute() {
       <HistoryCard n={n} />
     </Screen>
   );
+}
+
+/** The effectiveness record in one readable line; the limit is the finding's own, and an example limit is called an example. */
+function effectivenessText(e: NcrDetail['steps'][number], finding: NcrDetail['measurement']) {
+  const m = e.data?.measurement;
+  const num = (v: number) => String(v).replace('.', ',');
+  const limit = m && (m.limitMin != null || m.limitMax != null)
+    ? ` (limit ${m.limitMin != null ? num(m.limitMin) : '—'}…${m.limitMax != null ? num(m.limitMax) : '—'} ${m.unit ?? ''} · ilk bulgunun limiti${finding?.limit_basis === 'example' ? ' · ÖRNEK limit, doğrulanmadı' : finding?.limit_basis === 'rule' ? ' · yayımlanmış kural' : ''}${m.within ? ' · limit içinde' : ''})` : '';
+  return `${e.notes}${m ? ` · yeni ölçüm ${num(m.value)} ${m.unit ?? ''}${limit}` : ''} · ${e.done_by_name}, ${fmtDateTime(e.done_at)}`;
 }
 
 function StepForm({ placeholder, label, onSave, testID }: { placeholder: string; label: string; onSave: (notes: string) => void; testID: string }) {

@@ -43,7 +43,7 @@ export type NcrDetail = {
   firstAction: { level: string; items: { key: 'containment' | 'assignment'; text: string }[]; note: string } | null;
   closureMissing: { stage: StageKey; missing: string | null }[];
   progress: { done: number; total: number };
-  measurement: { value: string; unit: string; limit_min: string | null; limit_max: string | null; measured_at: string } | null;
+  measurement: { value: string; unit: string; limit_min: string | null; limit_max: string | null; measured_at: string; limit_basis?: string | null } | null;
   documents: { id: string; title: string; docType: string }[];
   permissions: { act: boolean; manage: boolean; verify: boolean; selfVerify: boolean; verifyBlockedReason: string | null; reopen: boolean; serviceRequest: boolean; inviteVerifier: boolean };
 };
@@ -81,7 +81,7 @@ export function historyLine(h: NcrDetail['history'][number]): string {
   switch (h.event_type) {
     case 'nonconformity.opened': return p.source === 'manual' ? 'Elle bildirildi' : 'Görevden açıldı';
     case 'nonconformity.assigned': return `Sorumlu / termin belirlendi${p.reason ? ` · gerekçe: ${p.reason}` : ''}`;
-    case 'nonconformity.step_done': return p.step === 'containment' ? 'İlk müdahale kaydedildi' : p.step === 'effectiveness_check' ? 'Etkinlik kontrolü kaydedildi' : `Adım: ${p.step}`;
+    case 'nonconformity.step_done': return p.step === 'containment' ? 'İlk müdahale kaydedildi' : p.step === 'effectiveness_check' ? `Etkinlik kontrolü kaydedildi${p.measurement ? ` · yeni ölçüm ${String(p.measurement.value).replace('.', ',')} ${p.measurement.unit ?? ''}`.trimEnd() : ''}${p.notes ? `: ${p.notes}` : ''}` : `Adım: ${p.step}`;
     case 'nonconformity.cause_assessed': return `${p.stage === 'verified' ? 'Kök neden doğrulandı' : 'İlk değerlendirme'}: ${(p.categories ?? []).map((c: Cause) => CAUSE_LABEL[c]?.[0] ?? c).join(', ')}`;
     case 'nonconformity.suggestion_decided': return `Öneri ${p.decision === 'dismissed' ? 'kenara konuldu' : 'geri alındı'}: ${p.reason}${p.replacement ? ` · yerine: ${p.replacement}` : ''}`;
     case 'nonconformity.action_added': return `${ACTION_KIND[p.kind] ?? 'Aksiyon'} eklendi: ${p.description}`;

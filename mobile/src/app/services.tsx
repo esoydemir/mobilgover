@@ -9,15 +9,19 @@ import { fmtDateTime } from '../features/dates';
 import { ServiceSuggestions } from '../features/ServiceExtras';
 import { C, tint, type } from '../theme';
 
-type Req = { id: string; title: string; category_name: string; status: string; open_quotes: number; job_status: string | null; created_at: string };
+type Req = { id: string; title: string; category_name: string; status: string; open_quotes: number; acceptable_quotes: number; job_status: string | null; created_at: string };
 
 export const REQ_STATUS: Record<string, [string, string, string]> = {
   open: ['TEKLİF BEKLİYOR', C.info, tint.info(0.14)], awarded: ['İŞ VERİLDİ', C.warn, tint.warn(0.14)],
   completed: ['TAMAMLANDI', C.lime, tint.lime(0.14)], cancelled: ['İPTAL', C.t2, tint.white(0.08)],
 };
 
-/** Whose turn it is: with no quote yet the request waits for an expert; once a quote is in, the decision is the business's. */
-export const reqStatus = (status: string, quotes: number): [string, string, string] => (status === 'open' && quotes > 0 ? ['SIRA SENDE · TEKLİFİ DEĞERLENDİR', C.warn, tint.warn(0.14)] : REQ_STATUS[status]!);
+/**
+ * Whose turn it is: with no quote yet the request waits for an expert; a quote that can be accepted puts the decision on the business.
+ * A quote that ran out, or whose provider lost the approval, is not something the business can act on.
+ */
+export const reqStatus = (status: string, acceptable: number, quotes: number): [string, string, string] => (status !== 'open' ? REQ_STATUS[status]!
+  : acceptable > 0 ? ['SIRA SENDE · TEKLİFİ DEĞERLENDİR', C.warn, tint.warn(0.14)] : quotes > 0 ? ['KABUL EDİLEBİLİR TEKLİF YOK', C.t2, tint.white(0.08)] : REQ_STATUS.open!);
 
 export default function ServicesRoute() {
   const { company } = useSession();
@@ -33,7 +37,7 @@ export default function ServicesRoute() {
       {(q.data ?? []).map(r => (
         <Tap key={r.id} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <Pill label={reqStatus(r.status, r.open_quotes)[0]} fg={reqStatus(r.status, r.open_quotes)[1]} bg={reqStatus(r.status, r.open_quotes)[2]} />
+            <Pill label={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[0]} fg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[1]} bg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[2]} />
             <Text style={type(11, 500, { color: C.t3 })}>{r.category_name}</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>

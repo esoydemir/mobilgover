@@ -24,6 +24,10 @@ const trDay = (d: string | Date | null) => (d ? new Date(d).toLocaleDateString('
 
 const CAUSE_TR: Record<string, string> = { knowledge: 'bilgi', equipment: 'ekipman', resource: 'kaynak', process: 'süreç' };
 const ACTION_TR: Record<string, string> = { correction: 'düzeltme', corrective_action: 'düzeltici faaliyet', follow_up: 'takip' };
+/** Same-titled checks on two units are told apart only by this. */
+const unit = (name: string | null) => (name ? ` · ekipman: ${name}` : '');
+/** Rule decisions as the business reads them; the JSON export keeps the codes. */
+const RULE_DECISION_TR: Record<string, string> = { applies: 'uygulanıyor', not_applicable: 'bu şubede uygulanmıyor', needs_info: 'bilgi eksik', needs_review: 'uzman incelemesi bekliyor', not_in_force: 'yürürlükte değil' };
 const clip = (x: unknown, n = 150) => { const t = String(x ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
 /** One readable line per audit event of a closed case; null for events that add nothing to the sequence. */
 type LineCtx = { action: (id: unknown) => string | null; effect: (ncrId: string, iteration: unknown) => any };
@@ -75,8 +79,8 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
      WHERE e.company_id = $1 AND e.entity_id = ANY($2::text[]) AND e.event_type IN ('nonconformity.step_done','nonconformity.closed','nonconformity.reopened','nonconformity.verification_failed') ORDER BY e.occurred_at`, [companyId, critIds])).rows : [];
   const critSvc = critIds.length ? (await tx.query(`SELECT r.ncr_id, r.status, j.status AS job_status FROM service_requests r LEFT JOIN service_jobs j ON j.request_id = r.id WHERE r.ncr_id = ANY($1) ORDER BY r.created_at`, [critIds])).rows : [];
   const critActs = critIds.length ? (await tx.query(`SELECT ncr_id, count(*)::int AS total, count(*) FILTER (WHERE verification_status IN ('declared','legacy') AND status = 'done')::int AS declared FROM ncr_actions WHERE ncr_id = ANY($1) AND status <> 'cancelled' GROUP BY ncr_id`, [critIds])).rows : [];
-  const overdue = (await tx.query(`SELECT t.id, t.site_id, tt.title, t.due_at, u.display_name AS assignee FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
-     LEFT JOIN users u ON u.id = t.assignee_id WHERE t.company_id = $1 AND t.site_id = ANY($2) AND t.status IN ('open','missed') AND t.due_at < now()
+  const overdue = (await tx.query(`SELECT t.id, t.site_id, tt.title, t.due_at, u.display_name AS assignee, eq.name AS equipment FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
+     LEFT JOIN users u ON u.id = t.assignee_id LEFT JOIN equipment eq ON eq.id = t.equipment_id WHERE t.company_id = $1 AND t.site_id = ANY($2) AND t.status IN ('open','missed') AND t.due_at < now()
        AND t.due_at >= $3 AND t.due_at < $4 ORDER BY t.due_at`, [companyId, siteIds, q.from, q.to])).rows
     .filter(t => can(p, 'task.read', { companyId, siteId: t.site_id, assigneeId: p.userId }).ok);
   const documents = (await listDocuments(tx, p, companyId, {})).filter(d => d.siteId == null || siteIds.includes(d.siteId));
@@ -89,7 +93,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
       // Link to the file of the reviewed version; the app checks access again when it is opened.
       attachment: latest ? `/companies/${companyId}/evidence/${latest.evidence_id}/content` : null };
   });
-  const awaiting = (await tx.query(`SELECT n.id, n.site_id, n.title, n.status,
+  const awaiting = (await tx.query(`SELECT n.id, n.site_id, n.title, n.status, (SELECT name FROM equipment q WHERE q.id = n.equipment_id) AS equipment,
        (SELECT count(*)::int FROM ncr_actions a WHERE a.ncr_id = n.id AND a.status = 'done' AND a.verification_status IN ('declared','legacy')) AS declared
      FROM nonconformities n WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status <> 'closed' ORDER BY n.detected_at`, [companyId, siteIds])).rows
     .filter(n => (n.status === 'awaiting_verification' || n.declared > 0) && can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id }).ok);
@@ -99,14 +103,14 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
      FROM obligations o JOIN rule_versions rv ON rv.id = o.rule_version_id JOIN rules r ON r.id = o.rule_id
      WHERE o.company_id = $1 AND o.site_id = ANY($2) ORDER BY o.site_id, o.rule_id, o.decided_at DESC`, [companyId, siteIds])).rows;
   // Closure trail: what was closed in the period, by whom, and the document version it rested on.
-  const closedTasks = (await tx.query(`SELECT t.id, t.site_id, tt.title, t.completed_at, t.outcome, u.display_name AS by FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
+  const closedTasks = (await tx.query(`SELECT t.id, t.site_id, tt.title, t.completed_at, t.outcome, u.display_name AS by, (SELECT name FROM equipment q WHERE q.id = t.equipment_id) AS equipment FROM tasks t JOIN task_templates tt ON tt.id = t.template_id
      LEFT JOIN users u ON u.id = t.completed_by WHERE t.company_id = $1 AND t.site_id = ANY($2) AND t.status = 'done' AND t.completed_at >= $3 AND t.completed_at < $4
      ORDER BY t.completed_at DESC LIMIT 200`, [companyId, siteIds, q.from, q.to])).rows
     .filter(t => can(p, 'task.read', { companyId, siteId: t.site_id, assigneeId: p.userId }).ok);
   const basis = closedTasks.length ? (await tx.query(`SELECT r.task_id, r.document_id, d.title, r.version_number, r.file_sha256, v.review_status, v.reviewed_at, r.relation, r.basis_note, cn.title AS case_title, scl.basis AS link_basis, scl.linked_at, lu.display_name AS linked_by, ltn.title AS linked_case_title FROM task_report_evidence r
      JOIN documents d ON d.id = r.document_id JOIN document_versions v ON v.id = r.document_version_id LEFT JOIN nonconformities cn ON cn.id = r.case_id
      LEFT JOIN service_case_links scl ON scl.id = r.service_link_id LEFT JOIN users lu ON lu.id = scl.linked_by LEFT JOIN nonconformities ltn ON ltn.id = scl.ncr_id WHERE r.task_id = ANY($1) AND r.completion_basis ORDER BY r.version_number`, [closedTasks.map(t => t.id)])).rows : [];
-  const closedCases = (await tx.query(`SELECT n.id, n.site_id, n.title, n.closed_at, u.display_name AS by,
+  const closedCases = (await tx.query(`SELECT n.id, n.site_id, n.title, n.closed_at, u.display_name AS by, (SELECT name FROM equipment q WHERE q.id = n.equipment_id) AS equipment,
        (SELECT v.verification_mode FROM ncr_verifications v WHERE v.ncr_id = n.id ORDER BY v.verified_at DESC LIMIT 1) AS mode
      FROM nonconformities n LEFT JOIN users u ON u.id = n.closed_by WHERE n.company_id = $1 AND n.site_id = ANY($2) AND n.status = 'closed' AND n.closed_at >= $3 AND n.closed_at < $4
      ORDER BY n.closed_at DESC LIMIT 200`, [companyId, siteIds, q.from, q.to])).rows.filter(n => can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id }).ok);
@@ -159,15 +163,15 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
         history: critEvents.filter(e => e.ref === n.id && ['nonconformity.closed', 'nonconformity.reopened', 'nonconformity.verification_failed'].includes(e.event_type))
           .map(e => `${tr(e.occurred_at)} · ${e.actor ?? '—'} · ${caseLine(e.event_type, e.payload)}`),
         detected: tr(n.detected_at), owner: n.owner ?? '—' })),
-      overdue: overdue.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), due: tr(t.due_at), assignee: t.assignee ?? 'atanmamış' })),
+      overdue: overdue.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), equipment: (t.equipment ?? null) as string | null, due: tr(t.due_at), assignee: t.assignee ?? 'atanmamış' })),
       documents: docRows,
-      awaiting: awaiting.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), what: n.status === 'awaiting_verification' ? 'Kapanış doğrulaması' : `${n.declared} aksiyon beyanı` })),
+      awaiting: awaiting.map(n => ({ id: n.id, title: n.title, site: siteName(n.site_id), equipment: (n.equipment ?? null) as string | null, what: n.status === 'awaiting_verification' ? 'Kapanış doğrulaması' : `${n.declared} aksiyon beyanı` })),
       closures: {
-        tasks: closedTasks.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), closed: tr(t.completed_at), by: t.by ?? '—', outcome: t.outcome ?? null,
+        tasks: closedTasks.map(t => ({ id: t.id, title: t.title, site: siteName(t.site_id), equipment: (t.equipment ?? null) as string | null, closed: tr(t.completed_at), by: t.by ?? '—', outcome: t.outcome ?? null,
           measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', basis: m.basis ?? null, at: tr(m.measured_at) })),
           basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
             relation: b.relation as string, sourceCase: b.case_title ?? null, linkedCase: b.linked_case_title ?? null, linkedBy: b.linked_by ?? null, linkedAt: b.linked_at ?? null, linkBasis: b.link_basis ?? null, basisNote: b.basis_note ?? null })) })),
-        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), product: productOf(n.id), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
+        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), equipment: (n.equipment ?? null) as string | null, product: productOf(n.id), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
           sequence: caseEvents.filter(e => e.ref === n.id || caseLink.some(l => l.ncr_id === n.id && (l.request_id === e.ref || l.job_id === e.ref)))
             .map(e => ({ at: tr(e.occurred_at), who: e.actor ?? '—', text: caseLine(e.event_type, e.payload, e.ref, ctx) })).filter(x => x.text) })),
       },
@@ -217,7 +221,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
 
     h1(`2. Geciken kontroller (${r.sections.overdue.length})`);
     if (!r.sections.overdue.length) none();
-    for (const t of r.sections.overdue) p(`${t.title} · ${t.site} · son saat ${t.due} · ${t.assignee}`);
+    for (const t of r.sections.overdue) p(`${t.title} · ${t.site}${unit(t.equipment)} · son saat ${t.due} · ${t.assignee}`);
 
     h1(`3. Belgeler: süresi dolan, yaklaşan, inceleme bekleyen, reddedilen (${r.sections.documents.length})`);
     if (!r.sections.documents.length) none();
@@ -228,19 +232,19 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
 
     h1(`4. Doğrulama bekleyen işlemler (${r.sections.awaiting.length})`);
     if (!r.sections.awaiting.length) none();
-    for (const n of r.sections.awaiting) p(`${n.title} · kayıt no ${n.id.slice(0, 8)} · ${n.site} · ${n.what}`);
+    for (const n of r.sections.awaiting) p(`${n.title} · kayıt no ${n.id.slice(0, 8)} · ${n.site}${unit(n.equipment)} · ${n.what}`);
 
     h1(`5. Kaynak ve kural sürümleri (${r.sections.sources.length})`);
     if (!r.sections.sources.length) none();
     for (const s of r.sections.sources) {
       p(`${s.rule} · ${s.title}${s.example ? ' · ÖRNEK KURAL' : ''}`, { bold: true });
-      p(`${s.site} · ${s.kind} · karar: ${s.decision} · kaynak: ${s.source}`, { color: '#555' });
+      p(`${s.site} · ${s.kind} · karar: ${RULE_DECISION_TR[s.decision] ?? s.decision} · kaynak: ${s.source}`, { color: '#555' });
     }
 
     h1(`6. Kapanış izi: dönemde kapanan görevler ve kayıtlar (${r.sections.closures.tasks.length + r.sections.closures.cases.length})`);
     if (!r.sections.closures.tasks.length && !r.sections.closures.cases.length) none();
     for (const t of r.sections.closures.tasks) {
-      p(`${t.title} · ${t.site} · kapanış ${t.closed} · ${t.by}`, { bold: true });
+      p(`${t.title} · ${t.site}${unit(t.equipment)} · kapanış ${t.closed} · ${t.by}`, { bold: true });
       for (const m of t.measurements) p(`   Ölçüm: ${String(m.value).replace('.', ',')} ${m.unit ?? ''} · ${m.within === false ? 'LİMİT DIŞI' : m.within ? 'limit içinde' : 'limit yok'}${m.example ? ' (ÖRNEK limit, doğrulanmamış)' : m.basis === 'rule' ? ' (limit: yayımlanmış kural)' : m.basis === 'manufacturer' ? ' (limit: üretici değeri, işletme belirledi)' : m.basis === 'haccp_plan' ? ' (limit: işletmenin kendi planı)' : ''} · ${m.at}`, { color: '#555' });
       for (const b of t.basis) {
         p(`   Dayanak: ${b.title} · sürüm ${b.version} · ${b.review}${b.sha256 ? ` · özet ${b.sha256.slice(0, 12)}…` : ''}`, { color: '#555' });
@@ -251,7 +255,7 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
       }
     }
     for (const n of r.sections.closures.cases) {
-      p(`Kayıt kapandı: ${n.title} · kayıt no ${n.ref} · ${n.site} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
+      p(`Kayıt kapandı: ${n.title} · kayıt no ${n.ref} · ${n.site}${unit(n.equipment)} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
       for (const sr of n.serviceReports) p(`   Servis raporu: ${sr}`, { color: '#555', size: 8.5 });
       if (n.sequence.length) p('   Cihaz / düzeltme kararı ve adımları', { bold: true, size: 8.5 });
       for (const e of n.sequence) p(`   ${e.at} · ${e.who} · ${e.text}`, { color: '#555', size: 8.5 });

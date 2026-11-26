@@ -31,6 +31,14 @@ const LIVE_AUTH = (alias: string, n: number) => `${alias}.status = 'approved' AN
   AND NOT EXISTS (SELECT 1 FROM professional_verifications bv WHERE bv.id = ANY(${alias}.basis_verification_ids)
                    AND (bv.status <> 'verified' OR bv.valid_until < $${n}::date))`;
 
+/**
+ * SQL condition for a quote the business could accept right now: still submitted, in date, from an active provider with a live
+ * approval for the request's category. Same checks as acceptQuote.
+ */
+export const ACCEPTABLE_QUOTE = (q: string, category: string, n: number) => `${q}.status = 'submitted' AND ${q}.valid_until >= now()
+  AND EXISTS (SELECT 1 FROM service_authorizations a JOIN professional_profiles ap ON ap.id = a.profile_id
+               WHERE a.profile_id = ${q}.provider_profile_id AND a.category_code = ${category} AND ap.status = 'active' AND ${LIVE_AUTH('a', n)})`;
+
 async function ownProfile(tx: Tx, p: Principal) {
   const r = (await tx.query(`SELECT * FROM professional_profiles WHERE user_id = $1`, [p.userId])).rows[0];
   if (!r) throw notFound('Mesleki profil');
@@ -206,12 +214,21 @@ export async function providersFor(tx: Tx, categoryCode: string, f: { q?: string
     .map(r => ({ ...r, sponsored: false }));
 }
 
+/** A request opened from a case or a check belongs to that record's branch; it is never filed under another one. */
+async function assertSourceSite(tx: Tx, companyId: string, siteId: string, ncrId?: string | null, taskId?: string | null) {
+  for (const [id, table, label] of [[ncrId, 'nonconformities', 'Uygunsuzluk'], [taskId, 'tasks', 'Görev']] as const) {
+    if (!id) continue;
+    const row = (await tx.query<{ site_id: string }>(`SELECT site_id FROM ${table} WHERE id = $1 AND company_id = $2`, [id, companyId])).rows[0];
+    if (!row) throw notFound(label);
+    if (row.site_id !== siteId) throw new AppError(422, 'SOURCE_OTHER_SITE', 'Bu talebin kaynak kaydı başka bir şubeye ait; talep o şube için açılmalı.');
+  }
+}
+
 export async function createRequest(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; ncrId?: string | null; taskId?: string | null; city: string; shareNcrSummary?: boolean;
   invitedProfileId?: string | null; invitedProfileIds?: string[] }) {
   if (!can(p, 'service.request', { companyId, siteId: b.siteId }).ok) throw forbidden();
   if (!(await tx.query(`SELECT 1 FROM service_categories WHERE code = $1`, [b.categoryCode])).rowCount) throw notFound('Hizmet kategorisi');
-  if (b.ncrId && !(await tx.query(`SELECT 1 FROM nonconformities WHERE id = $1 AND company_id = $2`, [b.ncrId, companyId])).rowCount) throw notFound('Uygunsuzluk');
-  if (b.taskId && !(await tx.query(`SELECT 1 FROM tasks WHERE id = $1 AND company_id = $2 AND site_id = $3`, [b.taskId, companyId, b.siteId])).rowCount) throw notFound('Görev');
+  await assertSourceSite(tx, companyId, b.siteId, b.ncrId, b.taskId);
   if (b.shareNcrSummary && !b.ncrId) throw invalid('Paylaşmak için bir uygunsuzluk seç.');
   // From a network profile: the request goes to that provider only, and only within a category they hold
   // a live approval for. A network profile alone is not an approval.
@@ -253,9 +270,10 @@ export async function listRequests(tx: Tx, p: Principal, companyId: string) {
   if (!can(p, 'service.request', { companyId, siteId: null }).ok && !p.memberships.some(m => m.companyId === companyId && m.role === 'site_manager')) throw forbidden();
   const rows = (await tx.query(
     `SELECT r.*, c.name AS category_name, (SELECT count(*)::int FROM quotes q WHERE q.request_id = r.id AND q.status = 'submitted') AS open_quotes,
+     (SELECT count(*)::int FROM quotes q WHERE q.request_id = r.id AND ${ACCEPTABLE_QUOTE('q', 'r.category_code', 2)}) AS acceptable_quotes,
             j.id AS job_id, j.status AS job_status
        FROM service_requests r JOIN service_categories c ON c.code = r.category_code LEFT JOIN service_jobs j ON j.request_id = r.id
-      WHERE r.company_id = $1 ORDER BY r.created_at DESC`, [companyId])).rows;
+      WHERE r.company_id = $1 ORDER BY r.created_at DESC`, [companyId, today()])).rows;
   // Same rule as requestDetail: a site manager lists only their own site's requests (title, description and case link are site data).
   return rows.filter(r => can(p, 'service.request', { companyId, siteId: r.site_id }).ok);
 }
@@ -272,7 +290,7 @@ export async function requestDetail(tx: Tx, p: Principal, companyId: string, id:
             EXISTS (SELECT 1 FROM service_authorizations a WHERE a.profile_id = q.provider_profile_id AND a.category_code = $2 AND ${LIVE_AUTH('a', 3)}) AS authorization_live,
             (SELECT a.status FROM service_authorizations a WHERE a.profile_id = q.provider_profile_id AND a.category_code = $2 ORDER BY a.decided_at DESC NULLS LAST LIMIT 1) AS authorization_status
        FROM quotes q JOIN professional_profiles pp ON pp.id = q.provider_profile_id WHERE q.request_id = $1 ORDER BY q.created_at`, [id, r.category_code, today()])).rows
-    .map(q => ({ ...q, providerStatus: providerStatus(q) }));
+    .map(q => { const st = providerStatus(q); return { ...q, providerStatus: st, acceptable: q.status === 'submitted' && !q.expired && st.live }; });
   const job = (await tx.query(`SELECT * FROM service_jobs WHERE request_id = $1`, [id])).rows[0] ?? null;
   const reports = job ? (await tx.query(`SELECT sr.version, sr.document_version_id, sr.report, sr.submitted_at, sr.decision, sr.decision_note, sr.decided_at, u.display_name AS decided_by_name
      FROM service_job_reports sr LEFT JOIN users u ON u.id = sr.decided_by WHERE sr.job_id = $1 ORDER BY sr.version`, [job.id])).rows : [];
@@ -336,9 +354,10 @@ export async function cancelService(tx: Tx, p: Principal, companyId: string, req
  * details and business documents are never part of a request in this version.
  */
 export async function requestPreview(tx: Tx, p: Principal, companyId: string, b: { siteId: string; categoryCode: string; title: string; description: string; city: string;
-  ncrId?: string | null; shareNcrSummary?: boolean; invitedProfileId?: string | null; invitedProfileIds?: string[] }) {
+  ncrId?: string | null; taskId?: string | null; shareNcrSummary?: boolean; invitedProfileId?: string | null; invitedProfileIds?: string[] }) {
   if (!can(p, 'service.request', { companyId, siteId: b.siteId }).ok) throw forbidden();
   const cat = (await tx.query(`SELECT name FROM service_categories WHERE code = $1`, [b.categoryCode])).rows[0];
+  await assertSourceSite(tx, companyId, b.siteId, b.ncrId, b.taskId);
   const ncr = b.ncrId && b.shareNcrSummary ? (await tx.query(`SELECT title, risk_level, hazard_type FROM nonconformities WHERE id = $1 AND company_id = $2`, [b.ncrId, companyId])).rows[0] : null;
   const invited = b.invitedProfileId ? (await tx.query(`SELECT display_name FROM professional_profiles WHERE id = $1`, [b.invitedProfileId])).rows[0] : null;
   return {

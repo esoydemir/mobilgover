@@ -14,7 +14,7 @@ import { C, tint, type } from '../../theme';
 import { DECISION } from '../obligations';
 
 type Explanation = {
-  obligation: { id: string; decision: keyof typeof DECISION; reason: string; decidedBy: string; decidedByName: string | null; decidedAt: string; missingFacts: string[];
+  obligation: { id: string; siteName?: string | null; decision: keyof typeof DECISION; reason: string; decidedBy: string; decidedByName: string | null; decidedAt: string; missingFacts: string[];
     isCurrent: boolean; currentId: string; manual: boolean; canOverride: boolean; mandatory: boolean };
   pendingReview: { id: string; reason: string; basis: string | null; disputedFacts: { key: string; proposed: unknown }[] | null; requestedByName: string; requestedAt: string; canReview: boolean } | null;
   conditionFacts: { key: string; label: string; type: 'boolean' | 'number' | 'string' | 'string[]'; current: unknown; source: string | null; verification: string | null }[];
@@ -48,6 +48,7 @@ export default function ObligationRoute() {
             {e.rule.isExample ? <ExampleBadge /> : null}
           </View>
           <Text style={type(23, 600, { family: 'outfit', ls: -0.03, lh: 1.15 })}>{e.rule.title}</Text>
+          {e.obligation.siteName ? <Text testID="obl-detail-site" style={type(13, 600, { color: C.t2 })}>Şube: {e.obligation.siteName}</Text> : null}
           <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>{e.obligation.reason}</Text>
           {!e.obligation.isCurrent ? (
             <View style={{ borderWidth: 1, borderColor: tint.warn(0.3), backgroundColor: tint.warn(0.06), borderRadius: 16, padding: 13, gap: 8 }}>

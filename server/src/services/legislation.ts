@@ -123,7 +123,7 @@ export async function runScan(db: Db, cfg: LegislationConfig, o: { trigger: 'sch
            last_error = CASE WHEN $3 THEN NULL ELSE $4 END, last_error_at = CASE WHEN $3 THEN last_error_at ELSE now() END,
            failures_in_row = CASE WHEN $3 THEN 0 ELSE failures_in_row + 1 END WHERE code = $1`,
         [code, out?.seen ?? 0, ok, errors.join(' | ').slice(0, 1500), errorKind, out?.docsRead ?? 0]);
-      results.push({ source: code, ok, seen: out?.seen ?? 0, selected: out?.selected ?? 0, uncertain: out?.uncertain ?? 0, skipped: (out?.skipped ?? []).slice(0, 800), unreadable: (out?.unreadable ?? []).slice(0, 200), docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [] });
+      results.push({ source: code, ok, seen: out?.seen ?? 0, selected: out?.selected ?? 0, uncertain: out?.uncertain ?? 0, skipped: (out?.skipped ?? []).slice(0, 800), unreadable: (out?.unreadable ?? []).slice(0, 200), docsRead: out?.docsRead ?? 0, created, errors, errorKind, notes: out?.notes ?? [], ...(out?.awaitingToday ? { awaitingToday: true } : {}) });
     }
     const status = results.every(r => r.ok) ? 'ok' : results.some(r => r.ok) ? 'partial' : 'failed';
     await tx.query(`UPDATE legislation_scan_runs SET finished_at = now(), status = $2, results = $3 WHERE id = $1`, [start.runId, status, JSON.stringify(results)]);
@@ -221,12 +221,13 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
   const queued = new Set((await tx.query<{ k: string }>(`SELECT external_key AS k FROM legislation_changes WHERE external_key = ANY($1::text[])`, [[...skippedMap.keys()]])).rows.map(r => r.k));
   const recentSkipped = [...skippedMap].filter(([id]) => !queued.has(id)).map(([, e]) => e).sort((a, b) => b.lastDay.localeCompare(a.lastDay) || a.key.localeCompare(b.key)).slice(0, 100);
   const okDays = (await tx.query<{ d: string }>(`SELECT DISTINCT to_char(run_date, 'YYYY-MM-DD') AS d FROM legislation_scan_runs WHERE trigger = 'schedule' AND status = 'ok'`)).rows.map(r => r.d);
-  const schedOkToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [istanbulDay()])).rowCount ?? 0) > 0;
+  const schedOkToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND ${SCHEDULE_DONE}`, [istanbulDay()])).rowCount ?? 0) > 0;
+  const retry = await retryInfo(tx, cfg);
   return {
     sources, lastSuccessfulScan: lastOk, lastRun, recentSkipped,
     pendingReview: (counts.pending ?? 0) + (counts.drafted ?? 0), counts: { pending: counts.pending ?? 0, drafted: counts.drafted ?? 0, scheduled: counts.scheduled ?? 0, applied: counts.applied ?? 0, rejected: counts.rejected ?? 0 },
     unclearDates: unclear,
-    schedule: { retry: await retryInfo(tx, cfg), enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday), missedDays: cfg?.enabled ? missedScheduledDays(okDays, istanbulDay()) : [] },
+    schedule: { retry, enabled: cfg?.enabled ?? false, timezone: 'Europe/Istanbul', dailyAtHour: cfg?.scanHour ?? 6, nextRunAt: nextScheduledRun(cfg, schedOkToday || !!retry?.exhausted), missedDays: cfg?.enabled ? missedScheduledDays(okDays, istanbulDay()) : [] },
     baselineNote: 'İlk okuma yalnız TABAN kaydeder: o gün mevcut metinler "değişiklik" sayılmaz, kuyruğa kayıt düşmez. Kuyruğa yalnız sonraki okumalardaki farklar ve yeni yayınlar girer.',
     canScan: has(p, 'platform_admin') || has(p, 'rule_reviewer'),
     exampleNote: 'Örnek/sentetik kaynaktan gelen kayıtlar ÖRNEKTİR; gerçek veya uzman onaylı mevzuat olarak yayımlanamaz.',
@@ -236,13 +237,14 @@ export async function adminOverview(tx: Tx, p: Principal, cfg?: LegislationConfi
 async function retryInfo(tx: Tx, cfg?: LegislationConfig) {
   if (!cfg?.enabled) return null;
   const today = istanbulDay();
-  const okToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [today])).rowCount ?? 0) > 0;
+  const okToday = ((await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND ${SCHEDULE_DONE}`, [today])).rowCount ?? 0) > 0;
   if (okToday) return null;
   const a = (await tx.query<{ n: number; last: Date | null; res: any }>(`SELECT count(*)::int AS n, max(started_at) AS last, (array_agg(results ORDER BY started_at DESC))[1] AS res FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule'`, [today])).rows[0]!;
   if (!a.n) return null;
   const plan = retryPlan(a.n, a.last ? new Date(a.last) : null, new Date());
   const errs = (Array.isArray(a.res) ? a.res : []).flatMap((r: any) => [...(r.errors ?? []), ...(r.error ? [r.error] : [])]).slice(0, 3);
-  return { attempts: a.n, maxAttempts: RETRY_MAX_ATTEMPTS, nextAttemptAt: plan.nextAttemptAt, exhausted: plan.exhausted, lastErrors: errs };
+  const awaitingToday = errs.length === 0 && (Array.isArray(a.res) ? a.res : []).some((r: any) => r.awaitingToday);
+  return { attempts: a.n, awaitingToday, maxAttempts: RETRY_MAX_ATTEMPTS, nextAttemptAt: plan.nextAttemptAt, exhausted: plan.exhausted, lastErrors: errs };
 }
 
 export type ChangeFilter = { status?: string; source?: string; area?: string; q?: string; dateStatus?: 'known' | 'unclear'; effectiveFrom?: string; effectiveTo?: string; reviewer?: string; assignee?: string; waiting?: boolean; match?: 'uncertain' };
@@ -739,6 +741,9 @@ export async function applyDue(db: Db, cfg: Pick<LegislationConfig, 'allowExampl
 
 // ───────────── Scheduler ─────────────
 
+/** A scheduled run finishes its day only when the sources answered AND that day's list was out. A late issue keeps the retries running. */
+const SCHEDULE_DONE = `trigger = 'schedule' AND status = 'ok' AND NOT results @> '[{"awaitingToday": true}]'::jsonb`;
+
 /** One scheduler tick: apply what is due, then run the daily scan when its hour has come and today's has not succeeded (limited retries). */
 export async function legislationTick(db: Db, cfg: LegislationConfig, now = new Date(), log: (l: Record<string, unknown>) => void = () => {}) {
   const out: Record<string, unknown> = {};
@@ -749,7 +754,7 @@ export async function legislationTick(db: Db, cfg: LegislationConfig, now = new 
     const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }).format(now));
     const due = await db.system(async tx => {
       if (hour < cfg.scanHour) return false;
-      const okToday = (await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule' AND status = 'ok'`, [today])).rowCount;
+      const okToday = (await tx.query(`SELECT 1 FROM legislation_scan_runs WHERE run_date = $1 AND ${SCHEDULE_DONE}`, [today])).rowCount;
       if (okToday) return false;
       const attempts = (await tx.query<{ n: number; last: string | null }>(`SELECT count(*)::int AS n, max(started_at) AS last FROM legislation_scan_runs WHERE run_date = $1 AND trigger = 'schedule'`, [today])).rows[0]!;
       return retryPlan(attempts.n, attempts.last ? new Date(attempts.last) : null, now).due;

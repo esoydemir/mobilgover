@@ -124,8 +124,9 @@ export async function explain(tx: Tx, p: Principal, companyId: string, obligatio
   const siteFacts = await currentFacts(tx, companyId, o.site_id);
   const manualName = o.decided_by !== 'engine'
     ? (await tx.query<{ display_name: string }>(`SELECT display_name FROM users WHERE id::text = $1`, [o.decided_by])).rows[0]?.display_name ?? null : null;
+  const siteName = (await tx.query<{ name: string }>(`SELECT name FROM sites WHERE id = $1`, [o.site_id])).rows[0]?.name ?? null;
   return {
-    obligation: { id: o.id, decision: o.decision, reason: o.reason, decidedBy: o.decided_by, decidedByName: manualName, decidedAt: o.decided_at, missingFacts: o.missing_facts,
+    obligation: { id: o.id, siteId: o.site_id as string, siteName, decision: o.decision, reason: o.reason, decidedBy: o.decided_by, decidedByName: manualName, decidedAt: o.decided_at, missingFacts: o.missing_facts,
       isCurrent: latest?.id === o.id, currentId: latest?.id ?? o.id, manual: o.decided_by !== 'engine',
       canOverride: can(p, 'obligation.override', { companyId, siteId: o.site_id }).ok,
       mandatory: rv.kind !== 'good_practice' },
