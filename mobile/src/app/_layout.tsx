@@ -11,7 +11,8 @@ import { PrimaryButton } from '../components/ui';
 import { SessionProvider, useSession } from '../api/session';
 import { TabBar } from '../components/TabBar';
 import { ToastView } from '../components/ToastView';
-import { DESKTOP_MIN, isDeskPath } from '../features/desktop';
+import { DeskShell } from '../desk/Shell';
+import { DESKTOP_MIN, isDeskPath, isShellPath } from '../features/desktop';
 import { UiProvider } from '../state/app';
 import { C } from '../theme';
 
@@ -30,17 +31,21 @@ export default function RootLayout() {
   const path = usePathname();
   // Platform yönetim ekranları (mevzuat masası, yönetim) geniş pencerede telefon çerçevesi olmadan, tam genişlikte açılır.
   const desk = Platform.OS === 'web' && win.width >= DESKTOP_MIN && isDeskPath(path);
+  const shell = desk && isShellPath(path);
   const framed = Platform.OS === 'web' && win.width > 520 && !desk;
   const frame = { width: PHONE.width, height: Math.min(PHONE.height, win.height - 40) };
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
 
+  const stack = (
+    <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: C.bg } }}>
+      <Stack.Screen name="task/[id]" options={{ animation: 'fade_from_bottom' }} />
+    </Stack>
+  );
   const app = (
     <View style={framed ? { ...frame, borderRadius: 46, overflow: 'hidden', backgroundColor: C.bg, boxShadow: '0 0 0 11px #0a0a0a, 0 0 0 13px #1c1c1c, 0 60px 120px rgba(0,0,0,0.7)' } : { flex: 1, backgroundColor: C.bg }}>
       <Gate>
-        <Stack screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: C.bg } }}>
-          <Stack.Screen name="task/[id]" options={{ animation: 'fade_from_bottom' }} />
-        </Stack>
+        <DeskShell active={shell}>{stack}</DeskShell>
         {desk ? null : <Tabs />}
         <ToastView />
       </Gate>
@@ -70,11 +75,11 @@ function Gate({ children }: { children: ReactNode }) {
   const platform = (me?.platformRoles.length ?? 0) > 0;
   // People without a business: specialists, network users and platform staff (rules, review, institution demo).
   const providerOnly = !!me && companies.length === 0 && (path.startsWith('/pro') || path.startsWith('/network') || path.startsWith('/moderation')
-    || (platform && (path.startsWith('/admin') || path.startsWith('/rule') || path.startsWith('/legislation') || path.startsWith('/institution') || path === '/more')));
+    || (platform && (isShellPath(path) || path.startsWith('/admin') || path.startsWith('/rule') || path.startsWith('/legislation') || path.startsWith('/institution') || path === '/more')));
   // No business and not yet known whether they are a specialist (the profile could not be read, e.g. offline): wait, do not guess.
   // Platform pages without a platform role: say so, name what the account is, and give one way back (not a silent redirect to business setup).
   const roles = me?.platformRoles ?? [];
-  const needsPlatform = path.startsWith('/admin') || path.startsWith('/legislation') || path.startsWith('/rule');
+  const needsPlatform = path.startsWith('/admin') || path.startsWith('/legislation') || path.startsWith('/rule') || ['/pazar', '/kullanicilar', '/denetim', '/kurallar'].some(x => path.startsWith(x));
   const needsModerator = path.startsWith('/moderation');
   const platformDenied = !!token && !!me && ((needsPlatform && roles.length === 0) || (needsModerator && !roles.includes('network_moderator') && roles.length === 0 && companies.length > 0));
   const waitingProfile = !!token && !!me && companies.length === 0 && provider === null && !providerOnly && path !== '/setup' && path !== '/account';

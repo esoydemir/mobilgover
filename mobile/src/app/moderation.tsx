@@ -1,4 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { useDesktop } from '../features/desktop';
+import { Moderation } from '../desk/Moderation';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
@@ -21,7 +23,7 @@ const TARGET: Record<string, string> = { post: 'Paylaşım', comment: 'Yorum', p
 const DECISION: Record<string, string> = { hide: 'İçeriği gizle', dismiss: 'Şikâyeti reddet', suspend_profile: 'Profili askıya al' };
 
 /** Network moderation: every decision needs a reason and is recorded in the audit log. */
-export default function ModerationRoute() {
+function MobileModeration() {
   const params = useLocalSearchParams<{ status?: string }>();
   const [status, setStatus] = useState<'open' | 'closed' | 'appeals'>(params.status === 'closed' || params.status === 'appeals' ? params.status : 'open');
   const q = useApi<Report[]>(status === 'appeals' ? null : `/network/moderation/reports?status=${status}`);
@@ -101,4 +103,10 @@ function AppealCard({ a, reload }: { a: Appeal; reload: () => Promise<void> }) {
       )}
     </Card>
   );
+}
+
+/** Masaüstü tarayıcıda yeni çalışma alanı; telefonda mevcut ekran korunur. */
+export default function ModerationRoute() {
+  const desktop = useDesktop();
+  return desktop ? <Moderation /> : <MobileModeration />;
 }

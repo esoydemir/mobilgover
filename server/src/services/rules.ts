@@ -173,7 +173,7 @@ export async function listRuleVersions(tx: Tx, p: Principal, status?: string) {
       const names = (await tx.query<{ n: string; id: string }>(`SELECT u.display_name AS n, u.id FROM reviewer_areas a JOIN users u ON u.id = a.user_id WHERE a.area = $1 ORDER BY u.display_name`, [area])).rows;
       const mine = names.some(x => x.id === p.userId);
       r.pendingAreaAccess.push({ area, canReview: mine && r.author_id !== p.userId, reviewers: names.map(x => x.n), waiting: names.length === 0 ? `"${area}" alanında tanımlı inceleyici yok; kayıt bir inceleyici atanana kadar bekler.` : null,
-        note: mine ? (r.author_id === p.userId ? 'Bu alanın inceleyicisisin ama kuralı sen yazdın; başka biri incelemeli.' : 'Bu alanda inceleme yetkin var.') : names.length ? `Bu alanda inceleme yetkin yok. Yetkili: ${names.join(', ')}.` : 'Bu alanda inceleme yetkin yok ve alanda tanımlı inceleyici de yok; bir platform yöneticisi alan ataması yapmalı.' });
+        note: mine ? (r.author_id === p.userId ? 'Bu alanın inceleyicisisin ama kuralı sen yazdın; başka biri incelemeli.' : 'Bu alanda inceleme yetkin var.') : names.length ? `Bu alanda inceleme yetkin yok. Yetkili: ${names.map(x => x.n).join(', ')}.` : 'Bu alanda inceleme yetkin yok ve alanda tanımlı inceleyici de yok; bir platform yöneticisi alan ataması yapmalı.' });
     }
   }
   return rows;
