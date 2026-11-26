@@ -28,6 +28,9 @@ export class SyntheticSource {
     if (this.fail === 'pdf') return { status: 200, body: new TextEncoder().encode('%PDF-1.7 ' + 'x'.repeat(400)), contentType: 'application/pdf' };
     if (this.fail === 'robot') return { status: 200, body: new TextEncoder().encode('<html><body><h1>Access Denied</h1><p>Request blocked. ' + 'x '.repeat(80) + '</p></body></html>'), contentType: 'text/html' };
     const html = (s: string): FetchResult => ({ status: 200, body: new TextEncoder().encode(s), contentType: 'text/html; charset=utf-8' });
+    // The real site answers a list that does not exist (no extra issue) by redirecting to its home page.
+    const home = (): FetchResult => ({ ...html('<div id="gunluk-akis"><div id="html-content" class="html-content"></div></div>'), url: `${this.rg}/` });
+    if (/\/rg\/fihrist\?tarih=\d{4}-\d{2}-\d{2}&mukerrer=\d+/.test(url)) return home();
     const idx = /\/rg\/fihrist\?tarih=(\d{4}-\d{2}-\d{2})/.exec(url);
     if (idx) {
       const items = this.days.get(idx[1]!) ?? [];

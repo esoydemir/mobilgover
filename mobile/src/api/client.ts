@@ -15,7 +15,8 @@ export type Api = <T = any>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: stri
 /** A client for one server. Tests use it against a server started on a random port. */
 export const makeApi = (baseUrl: string): Api => async <T = any>(method: 'GET' | 'POST' | 'PUT' | 'PATCH', path: string, o: Options = {}): Promise<T> => {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20_000);
+  // A manual legislation scan reads two official sites and OCRs scanned annexes: it may take minutes.
+  const timer = setTimeout(() => ctrl.abort(), path === '/admin/legislation/scan' ? 600_000 : 20_000);
   const headers: Record<string, string> = {};
   if (o.token) headers.authorization = `Bearer ${o.token}`;
   if (o.idempotencyKey) headers['idempotency-key'] = o.idempotencyKey;

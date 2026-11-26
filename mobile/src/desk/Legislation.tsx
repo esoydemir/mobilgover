@@ -45,6 +45,7 @@ export function Legislation() {
   const { me, call } = useSession(); const { toast } = useDesk(); const { reload: reloadWork } = useWork();
   const roles = me?.platformRoles ?? []; const ok = roles.some(r => ['platform_admin', 'rule_author', 'rule_reviewer'].includes(r));
   const [st, set] = useWsState('mevzuat', { quick: 'open', q: '', src: '', health: '' });
+  const [scanning, setScanning] = useState(false); // bir tarama dakikalar sürebilir (PDF okuma)
   const quick = st.quick || 'open'; const view = OPEN_Q.includes(quick) ? 'open' : quick;
   const filt = `${st.src ? `&source=${encodeURIComponent(st.src)}` : ''}${st.q.trim() ? `&q=${encodeURIComponent(st.q.trim())}` : ''}${quick === 'mine' ? '&assignee=me' : ''}${quick === 'uncertain' ? '&match=uncertain' : ''}`;
   const sA = quick === 'review' ? 'drafted' : ['scheduled', 'applied', 'rejected'].includes(quick) ? quick : 'pending'; const both = ['open', 'mine', 'unowned', 'uncertain'].includes(quick);
@@ -84,7 +85,7 @@ export function Legislation() {
         <span style={{ color: 'var(--ink3)', fontSize: 12.5 }} data-testid="desk-lastscan">Son başarılı tarama: {o?.lastSuccessfulScan ? dateTimeTr(o.lastSuccessfulScan.finished_at) : 'yok'}</span>
         <Btn size="sm" onClick={() => set({ health: st.health ? '' : '1' })} testid="desk-health-toggle">{failing.length ? 'Kaynak sağlığı (uyarı)' : 'Kaynak sağlığı'}</Btn>
         <Btn size="sm" onClick={() => router.push('/kurallar' as never)} testid="desk-rules" title="Kural sürümleri: yazar ve inceleyici akışı">Kural sürümleri</Btn>
-        {o?.canScan ? <Btn kind="pri" size="sm" testid="leg-scan" onClick={async () => { try { const r = await call<{ results: { created: number }[] }>('POST', '/admin/legislation/scan'); toast(`Tarama bitti: ${r.results.reduce((a, x) => a + (x.created ?? 0), 0)} yeni kayıt`); await reloadAll(); } catch (e) { toast(errorText(e)); } }}>Şimdi tara</Btn> : null}
+        {o?.canScan ? <Btn kind="pri" size="sm" testid="leg-scan" disabled={scanning} onClick={async () => { setScanning(true); try { const r = await call<{ results?: { created: number }[] }>('POST', '/admin/legislation/scan'); toast(r.results ? `Tarama bitti: ${r.results.reduce((a, x) => a + (x.created ?? 0), 0)} yeni kayıt` : 'Başka bir tarama sürüyor; bitince liste güncellenir.'); await reloadAll(); } catch (e) { toast(errorText(e)); } finally { setScanning(false); } }}>{scanning ? 'Taranıyor… (birkaç dakika sürebilir)' : 'Şimdi tara'}</Btn> : null}
       </>}
       tools={<>
         <Seg label="Durum" testid="leg-view" value={view} onChange={setView} items={VIEWS.map(([k, l]) => ({ key: k, label: l }))} />
