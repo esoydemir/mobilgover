@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { FileReadError } from './filetext';
 
 /*
  * Source connectors for the legislation watch. Pure parsing + an injected fetcher, so the same code runs against the
@@ -337,7 +338,11 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
         const answer = await fetchWithRetry(o.fetcher, url, { sleep: o.sleep });
         let ocr: Awaited<ReturnType<PdfReader>> | null = null; let doc: GazetteDocument;
         if (isPdf(answer) && o.readPdf) {
-          try { ocr = await o.readPdf(answer.body); } catch (e) { throw new SourceError('unexpected_format', `${url} PDF okunamadı: ${(e as Error).message}`); }
+          try { ocr = await o.readPdf(answer.body); } catch (e) {
+            // Too long for machine reading fails the same way on every retry: a person gets it in the queue, marked as unread.
+            if (e instanceof FileReadError && e.kind === 'too_large') { queueUnread(out, it, { key: itemKey, url, day, rel, why: e.message }); continue; }
+            throw new SourceError('unexpected_format', `${url} PDF okunamadı: ${(e as Error).message}`);
+          }
           const chars = ocr.text.replace(/\s/g, '').length;
           if (chars < PDF_MIN_CHARS || ocr.confidence < PDF_MIN_CONFIDENCE) throw new SourceError('corrupt', `${url} PDF okuması güvenilir değil (${chars} karakter, güven %${Math.round(ocr.confidence)})`);
           doc = parseGazetteText(ocr.text, { title: it.title, publishedOn: day });
@@ -375,6 +380,23 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
     }
   }
   return out;
+}
+
+/** A publication nobody has read yet: queued with no text of its own, so it can be assigned, opened and decided by a person. */
+function queueUnread(out: ScanOutcome, it: GazetteItem, p: { key: string; url: string; day: string; rel: SectorMatch; why: string }) {
+  const level = p.rel.level === 'clear' ? 'clear' : 'uncertain';
+  if (level === 'clear') out.selected += 1; else out.uncertain += 1;
+  const type = changeTypeFromTitle(it.title);
+  const title = p.rel.level === 'out' ? 'Başlık hangi iş koluna ait olduğunu söylemiyor.' : p.rel.why;
+  out.notes.push(`${p.day}: bir yayın uzunluk sınırı nedeniyle makineyle okunmadı, elle inceleme için kuyruğa alındı: ${it.title.slice(0, 160)}`);
+  out.changes.push({
+    sourceCode: 'resmi_gazete', externalKey: p.key, changeType: type,
+    docRef: `Resmî Gazete · ${trDate(p.day)}`, docTitle: it.title, articleRef: null, sourceUrl: p.url, publishedOn: p.day,
+    effective: { status: 'unclear', date: null, note: 'Metin makineyle okunmadı; yürürlük tarihini yönetici resmî metinden belirlemeli.' },
+    oldText: null, newText: `[Metin makineyle okunmadı: ${p.why} Resmî PDF'i açıp tamamını elle inceleyin.]`,
+    suggestion: { relevance: `${title} Metin okunmadı; uygulanabilirlik resmî PDF'ten incelenmeli.`, sectors: p.rel.sectors, matchLevel: level, bodySectors: [], needsHumanClassification: true, category: it.category, issuer: null, kind: type,
+      readMethod: 'not_read', hint: 'Resmî PDF açılıp okunmadan kural taslağı hazırlanmamalı.', ...compareTexts(null, null) },
+  });
 }
 
 // ── Mevzuat Bilgi Sistemi (consolidated text, compared with the last snapshot) ──

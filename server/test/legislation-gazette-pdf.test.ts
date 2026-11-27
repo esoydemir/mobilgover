@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { readGazettePdf } from '../src/services/filetext';
+import { FileReadError, readGazettePdf } from '../src/services/filetext';
 import { oldestUnverifiedDay } from '../src/services/legislation';
 import { gazetteKey, scanGazette, type Fetcher, type FetchResult, type PdfReader } from '../src/services/legislation-sources';
 
@@ -48,6 +48,22 @@ describe('Resmî Gazete publications served as PDF', () => {
       expect(r.unreadable.map(u => u.key)).toContain('rg:20261120-3');
       expect(r.errors.length).toBeGreaterThan(0);
     }
+  });
+
+  // 27.11.2026: a 113 page regulation (Bina Yangın Yönetmeliği) was refused for its length on every attempt and never reached a person.
+  it('queues a publication that is too long to machine-read, clearly marked as unread, for a person to open', async () => {
+    const tooLong: PdfReader = async () => { throw new FileReadError('too_large', 'Dosya 113 sayfa; en çok 40 sayfa makineyle okunur.'); };
+    const r = await scan(site(), tooLong);
+    const c = r.changes.find(x => x.externalKey === 'rg:20261120-3')!;
+    expect(c).toBeTruthy();
+    expect(c.newText).toMatch(/^\[Metin makineyle okunmadı: Dosya 113 sayfa/);
+    expect(c.effective).toMatchObject({ status: 'unclear', date: null });
+    expect(c.suggestion).toMatchObject({ readMethod: 'not_read', needsHumanClassification: true });
+    expect((c.suggestion as { relevance: string }).relevance).toContain('Metin okunmadı');
+    expect(r.unreadable).toEqual([]);
+    expect(r.errors).toEqual([]);
+    expect(r.notes.join()).toContain('elle inceleme');
+    expect(r.docsRead).toBe((await scan(site(), stub(BODY))).docsRead - r.changes.filter(x => x.suggestion.readMethod === 'not_read').length);
   });
 
   it('does not count a day list redirected to the home page as an empty healthy day', async () => {
