@@ -73,7 +73,7 @@ function MarketPanel({ item, onDone }: { item: Item; onDone: () => Promise<void>
         <NowBox testid="pazar-now"
           why={v ? `Uzman bu belgeyi ${dateTimeTr(v.submitted_at)} tarihinde sundu; henüz kontrol edilmedi. Sıra pazar yeri inceleyicisinde.`
             : a ? `${dateTimeTr(a.requested_at)} tarihli kategori başvurusu karar bekliyor. Sıra pazar yeri inceleyicisinde.${missing.length ? ` Onay için eksik doğrulanmış belge: ${missing.join(', ')}.` : ''}`
-              : item.tab === 'takip' ? `${item.kindLabel}: sıra ${o!.responsible} tarafında. Sıradaki adım: ${o!.nextAction}.` : `Hizmet şikâyeti ${o!.waitingDays} gündür karar bekliyor. Sıra: ${o!.responsible}.`}
+              : item.tab === 'takip' ? `${item.kindLabel}: sıra ${o!.responsible} tarafında. Sıradaki adım: ${o!.nextAction}` : `Hizmet şikâyeti ${o!.waitingDays} gündür karar bekliyor. Sıra: ${o!.responsible}.`}
           can={v ? ['Kontrol yöntemini yazıp belgeyi doğrulayabilir ya da reddedebilirsin.']
             : a ? (missing.length ? ['Gerekçe yazıp başvuruyu reddedebilirsin. Onay, eksik belge doğrulanana kadar kapalı.'] : ['Gerekçe ve bitiş tarihi yazıp onaylayabilir ya da reddedebilirsin.'])
               : item.tab === 'sikayetler' ? ['Gerekçe yazıp şikâyeti karara bağlayabilirsin.'] : []} />

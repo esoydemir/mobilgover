@@ -37,7 +37,7 @@ export default function HomeRoute() {
 
 /** Command center: today's checks, the one thing that matters most, and the score with its caveats. */
 function HomeScreen() {
-  const { company, siteId, role } = useSession();
+  const { company, siteId, role, sites, selectSite } = useSession();
   const base = company ? `/companies/${company.id}` : null;
   const today = startOfDay();
   const weekFrom = addDays(today, -6);
@@ -72,7 +72,11 @@ function HomeScreen() {
   const critical = (ncrs.data ?? []).find(n => n.risk_level === 'high' || n.risk_level === 'critical');
   // The one thing that matters most: the first critical risk item (any kind), not only a nonconformity.
   const topRisk = risk.items.find(i => i.sev === 'crit');
-  const needsInfo = (obligations.data ?? []).filter(o => o.decision === 'needs_info' || o.decision === 'needs_review');
+  // The profile page answers for the selected branch, so this card counts only its gaps; other branches are named separately.
+  const waiting = (obligations.data ?? []).filter(o => o.decision === 'needs_info' || o.decision === 'needs_review');
+  const needsInfo = waiting.filter(o => o.siteId === siteId);
+  const otherSites = sites.filter(s => s.id !== siteId).map(s => ({ ...s, n: waiting.filter(o => o.siteId === s.id).length })).filter(s => s.n > 0);
+  const siteLabel = sites.length > 1 ? sites.find(s => s.id === siteId)?.name : undefined;
   const firstMissing = needsInfo.flatMap(o => o.missingFacts ?? [])[0];
   const total = derived.todays.length;
   const remaining = total - derived.done;
@@ -190,7 +194,7 @@ function HomeScreen() {
         </Tap>
       ) : null}
 
-      {!isStaff && gaps.data ? gaps.data.filter(g => g.ruleCode === 'EX-COLD-CHAIN' || g.kind === 'equipment').map(g => <GapCard key={`${g.kind}-${g.siteId}-${g.ruleCode}-${g.missing.join()}`} gap={g} onDone={reload} />) : null}
+      {!isStaff && gaps.data ? gaps.data.filter(g => g.ruleCode === 'EX-COLD-CHAIN' || g.kind === 'equipment').map(g => <GapCard key={`${g.kind}-${g.siteId}-${g.ruleCode}-${g.missing.join()}`} gap={g} onDone={reload} onOpenSite={selectSite} />) : null}
 
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, gap: 10 }}>
         <Text numberOfLines={1} style={[type(10.5, 600, { ls: 0.12, color: C.t3 }), { flexShrink: 1 }]}>BUGÜNÜN GÖREVLERİ</Text>
@@ -210,10 +214,15 @@ function HomeScreen() {
 
       {!isStaff && needsInfo.length > 0 && (
         <Tap testID="home-profile-missing" onPress={() => router.push(`/profile${firstMissing ? `?focus=${firstMissing}` : ''}` as never)} style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: tint.lime(0.32), borderRadius: 22, backgroundColor: tint.lime(0.04), paddingVertical: 16, paddingHorizontal: 18, marginTop: 4 }}>
-          <Text style={type(10, 600, { ls: 0.11, color: C.lime })}>PROFİL EKSİK</Text>
+          <Text testID="home-profile-missing-site" style={type(10, 600, { ls: 0.11, color: C.lime })}>PROFİL EKSİK{siteLabel ? ` · ${siteLabel.toLocaleUpperCase('tr')}` : ''}</Text>
           <Text style={[type(14.5, 600, { ls: -0.01 }), { marginTop: 8 }]}>{needsInfo.length} yükümlülük için bilgi veya inceleme bekleniyor</Text>
           <Text testID="home-profile-missing-list" style={[type(12, 400, { color: C.t2, lh: 1.45 }), { marginTop: 4 }]}>{needsInfo.slice(0, 3).map(o => o.title).join(' · ')}{needsInfo.length > 3 ? ` · +${needsInfo.length - 3}` : ''}</Text>
           <Text style={[type(12, 400, { color: C.t2 }), { marginTop: 4 }]}>Eksik bilgi "uygulanmaz" sayılmaz; ilk soruyu açmak için dokun.</Text>
+        </Tap>
+      )}
+      {!isStaff && otherSites.length > 0 && (
+        <Tap testID="home-profile-missing-other" onPress={() => router.push('/obligations')} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 18, paddingVertical: 12, paddingHorizontal: 18, marginTop: 4 }}>
+          <Text style={type(12, 500, { color: C.t2, lh: 1.45 })}>Diğer şubelerde bilgi veya inceleme bekleyen: {otherSites.map(s => `${s.name} (${s.n})`).join(' · ')} ›</Text>
         </Tap>
       )}
     </Screen>
@@ -260,7 +269,7 @@ export function TaskLine({ t, showAssignee = false, note }: { t: Task; showAssig
 }
 
 /** An obligation that cannot become work yet says what is missing and offers the direct action, so nobody is left on an empty screen. */
-function GapCard({ gap, onDone }: { gap: Gap; onDone: () => void }) {
+function GapCard({ gap, onDone, onOpenSite }: { gap: Gap; onDone: () => void; onOpenSite: (id: string) => void }) {
   const { company, call } = useSession();
   const [open, setOpen] = useState(false); const [name, setName] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const base = company ? `/companies/${company.id}` : null;
@@ -282,7 +291,7 @@ function GapCard({ gap, onDone }: { gap: Gap; onDone: () => void }) {
           {err ? <ErrorBox message={err} /> : null}
         </View>
       ) : <PrimaryButton testID="gap-equipment-add" label={gap.action.label} glow={false} height={42} size={13} onPress={() => setOpen(true)} />)
-        : <GhostButton testID="gap-answer" label={gap.action.label} height={40} size={12.5} onPress={() => router.push(`/profile${gap.action.factKey ? `?focus=${gap.action.factKey}` : ''}` as never)} />}
+        : <GhostButton testID="gap-answer" label={gap.action.label} height={40} size={12.5} onPress={() => { onOpenSite(gap.siteId); router.push(`/profile${gap.action.factKey ? `?focus=${gap.action.factKey}` : ''}` as never); }} />}
     </Card>
   );
 }

@@ -15,6 +15,8 @@ export class SyntheticSource {
   calls: string[] = [];
   /** Item ids whose text cannot be read (empty answer): the index lists them, the document fetch fails. */
   unreadable = new Set<string>();
+  /** Days whose issue is not out yet: like the real site, the list address redirects to the home page. */
+  late = new Set<string>();
   readonly rg = 'https://sentetik.test/rg';
   readonly mv = 'https://sentetik.test/mv';
 
@@ -33,6 +35,7 @@ export class SyntheticSource {
     if (/\/rg\/fihrist\?tarih=\d{4}-\d{2}-\d{2}&mukerrer=\d+/.test(url)) return home();
     const idx = /\/rg\/fihrist\?tarih=(\d{4}-\d{2}-\d{2})/.exec(url);
     if (idx) {
+      if (this.late.has(idx[1]!)) return home();
       const items = this.days.get(idx[1]!) ?? [];
       const by = new Map<string, SynthItem[]>();
       for (const it of items) by.set(it.category, [...(by.get(it.category) ?? []), it]);

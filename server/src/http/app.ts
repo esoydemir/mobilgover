@@ -1180,7 +1180,7 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   app.post('/companies/:companyId/service-requests/preview', async req => {
     const companyId = company(req);
     const b = z.object({ siteId: uuid, categoryCode: z.string(), title: z.string().max(200), description: z.string().max(4000), city: z.string().max(60),
-      ncrId: uuid.nullable().optional(), shareNcrSummary: z.boolean().default(false), invitedProfileId: uuid.nullable().default(null), invitedProfileIds: z.array(uuid).max(5).default([]) }).parse(req.body);
+      ncrId: uuid.nullable().optional(), taskId: uuid.nullable().optional(), shareNcrSummary: z.boolean().default(false), invitedProfileId: uuid.nullable().default(null), invitedProfileIds: z.array(uuid).max(5).default([]) }).parse(req.body);
     return db.tenant(companyId, tx => mk.requestPreview(tx, req.principal, companyId, b));
   });
   app.post('/companies/:companyId/service-requests/:id/cancel', async (req, reply) => {

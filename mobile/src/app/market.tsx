@@ -13,7 +13,7 @@ import { reqStatus } from './services';
 
 type Category = { code: string; name: string; description: string; is_example: boolean };
 type Provider = { id: string; display_name: string; headline: string; city: string; district: string | null; verified_credentials: number };
-type Req = { id: string; title: string; category_name: string; status: string; open_quotes: number; job_status: string | null; created_at: string };
+type Req = { id: string; title: string; category_name: string; status: string; open_quotes: number; acceptable_quotes: number; job_status: string | null; created_at: string };
 type Section = 'experts' | 'quotes' | 'feed';
 
 /**
@@ -29,7 +29,7 @@ export default function MarketRoute() {
   const [section, setSection] = useState<Section>(params.section === 'quotes' || params.section === 'feed' ? params.section : 'experts');
   const { company } = useSession();
   const reqs = useApi<Req[]>(company ? `/companies/${company.id}/service-requests` : null);
-  const waiting = (reqs.data ?? []).filter(r => r.status === 'open' && r.open_quotes > 0).length;
+  const waiting = (reqs.data ?? []).filter(r => r.status === 'open' && r.acceptable_quotes > 0).length;
 
   return (
     <Screen title="Pazar" titleEn="Marketplace" gap={12} onRefresh={() => void reqs.reload()} refreshing={reqs.loading}>
@@ -104,7 +104,7 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
       <PrimaryButton testID="market-new-request" label="Yeni hizmet talebi" onPress={() => router.push('/service/new')} />
       {reqs.data ? (
         <View testID="market-summary" style={{ flexDirection: 'row', gap: 8 }}>
-          {([['Açık talep', reqs.data.filter(r => r.status === 'open').length], ['Karşılaştır', reqs.data.filter(r => r.status === 'open' && r.open_quotes > 0).length], ['İş verildi', reqs.data.filter(r => r.status === 'awarded').length], ['Tamamlanan', reqs.data.filter(r => r.status === 'completed').length]] as const).map(([l, n]) => (
+          {([['Açık talep', reqs.data.filter(r => r.status === 'open').length], ['Karşılaştır', reqs.data.filter(r => r.status === 'open' && r.acceptable_quotes > 0).length], ['İş verildi', reqs.data.filter(r => r.status === 'awarded').length], ['Tamamlanan', reqs.data.filter(r => r.status === 'completed').length]] as const).map(([l, n]) => (
             <View key={l} style={{ flex: 1, borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 10, gap: 3 }}>
               <Text style={type(9, 700, { ls: 0.06, color: C.t3 })}>{String(l).toUpperCase()}</Text>
               <Text style={type(20, 600, { family: 'outfit', ls: -0.03 })}>{n}</Text>
@@ -116,17 +116,17 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
       {!reqs.data && reqs.loading ? <Loading /> : null}
       {reqs.data?.length === 0 ? <Empty title="Henüz talep yok" body="Bir uzmandan teklif istediğinde talepler ve gelen teklifler burada toplanır." /> : null}
       {(reqs.data ?? []).map(r => (
-        <Tap key={r.id} testID={`market-req-${r.id}`} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: r.status === 'open' && r.open_quotes > 0 ? tint.lime(0.3) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
+        <Tap key={r.id} testID={`market-req-${r.id}`} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: r.status === 'open' && r.acceptable_quotes > 0 ? tint.lime(0.3) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Pill label={reqStatus(r.status, r.open_quotes)[0]} fg={reqStatus(r.status, r.open_quotes)[1]} bg={reqStatus(r.status, r.open_quotes)[2]} />
+            <Pill label={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[0]} fg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[1]} bg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[2]} />
             <Text style={type(11, 500, { color: C.t3 })}>{r.category_name}</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Text style={[type(14, 600), { flex: 1 }]}>{r.title}</Text>
             <Chevron />
           </View>
-          <Text style={type(11.5, 400, { color: r.status === 'open' && r.open_quotes > 0 ? C.lime : C.t3 })}>
-            {fmtDateTime(r.created_at)} · {r.open_quotes} teklif{r.status === 'open' && r.open_quotes > 0 ? ' · karşılaştır' : ''}{r.job_status ? ` · iş: ${r.job_status}` : ''}
+          <Text style={type(11.5, 400, { color: r.status === 'open' && r.acceptable_quotes > 0 ? C.lime : C.t3 })}>
+            {fmtDateTime(r.created_at)} · {r.open_quotes} teklif{r.status === 'open' && r.acceptable_quotes > 0 ? ' · karşılaştır' : ''}{r.job_status ? ` · iş: ${r.job_status}` : ''}
           </Text>
         </Tap>
       ))}

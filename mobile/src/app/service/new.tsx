@@ -14,9 +14,12 @@ type Provider = { id: string; display_name: string; headline: string; city: stri
 
 /** The user describes the problem in their own words; the category is a routing choice, not a diagnosis. */
 export default function NewServiceRoute() {
-  const params = useLocalSearchParams<{ ncrId?: string; taskId?: string; title?: string; category?: string; providerId?: string; providerName?: string; categories?: string }>();
+  const params = useLocalSearchParams<{ ncrId?: string; taskId?: string; title?: string; category?: string; providerId?: string; providerName?: string; categories?: string; siteId?: string }>();
   const only = params.categories ? params.categories.split(',') : null;
-  const { company, siteId, call } = useSession();
+  const { company, siteId: selectedSite, sites, call } = useSession();
+  // Opened from a case, a check or a document: the request stays with that record's branch, not the one selected now.
+  const siteId = params.siteId || selectedSite;
+  const siteName = sites.length > 1 ? sites.find(s => s.id === siteId)?.name : undefined;
   const cats = useApi<Category[]>('/service-categories');
   const [cat, setCat] = useState<string | null>(params.category ?? (only?.length === 1 ? only[0]! : null));
   const [title, setTitle] = useState(params.title ?? '');
@@ -62,6 +65,7 @@ export default function NewServiceRoute() {
 
   return (
     <Screen title="Hizmet talebi" titleEn="New service request">
+      {siteName ? <Text testID="svc-site" style={type(13, 600, { color: C.t2 })}>Talep şubesi: {siteName}</Text> : null}
       {params.providerId ? <Text testID="svc-invited" style={type(12.5, 600, { color: C.lime, lh: 1.45 })}>Talep yalnız {params.providerName ? `${params.providerName} adlı uzmana` : 'bu uzmana'} gidecek. Formu açmak sipariş ya da ücretli işlem oluşturmaz; teklif kabul etmedikçe iş başlamaz. Kategori onayı sunucuda yeniden kontrol edilir.</Text> : null}
       {params.ncrId ? <Text style={type(12.5, 600, { color: C.warn })}>Bu talep açık bir uygunsuzluğa bağlanacak. "Talebi aç"a basmadıkça talep oluşmaz; teklif kabul etmedikçe iş başlamaz. Uygunsuzluk, hizmet tamamlanınca kendiliğinden kapanmaz.</Text> : null}
       <Field label="Sorunu kendi cümlelerinle anlat" testID="svc-desc" value={description} onChangeText={setDescription} multiline placeholder="ör. Mutfak arkadaki buzdolabı 12 °C gösteriyor, kapı contası açık kalıyor." />
@@ -78,7 +82,7 @@ export default function NewServiceRoute() {
         </View>
       ) : null}
       <Text style={type(12.5, 600)}>Hangi hizmet?</Text>
-      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Seçtiğin kategori bir teşhis değildir; yalnızca talebin hangi uzmanlara gideceğini belirler. Emin değilsen en yakın olanı seç, uzman kapsamı teklifinde netleştirir.</Text>
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Seçtiğin kategori bir teşhis değildir; yalnızca talebin hangi uzmanlara gideceğini belirler. Listede ihtiyacına uyan hizmet yoksa ilgisiz bir kategori seçme: o hizmet şu an burada tanımlı değil, talep açılmaz. Aynı konuda iki kategori arasında kaldıysan birini seç; uzman kapsamı teklifinde netleştirir.</Text>
       {!cats.data ? <Loading /> : cats.data.filter(c => !only || only.includes(c.code)).map(c => (
         <Tap key={c.code} testID={`svc-cat-${c.code}`} onPress={() => setCat(c.code)} style={{ borderWidth: 1, borderColor: cat === c.code ? tint.lime(0.4) : C.bd, backgroundColor: cat === c.code ? tint.lime(0.06) : C.card, borderRadius: 18, padding: 14, gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

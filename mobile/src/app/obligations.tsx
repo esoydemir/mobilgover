@@ -17,15 +17,23 @@ export const DECISION: Record<Obligation['decision'], [string, string, string]> 
 };
 
 export default function ObligationsRoute() {
-  const { company, role, siteId } = useSession();
+  const { company, role, siteId, sites } = useSession();
   // A site manager may read only their own site's obligations; asking for all sites is refused (403).
   const q = useApi<Obligation[]>(company ? `/companies/${company.id}/obligations${role === 'site_manager' && siteId ? `?siteId=${siteId}` : ''}` : null);
+  // With more than one branch the same rule appears once per branch: each group says which one it is about.
+  const rows = q.data ?? [];
+  const nameOf = (id: string) => sites.find(s => s.id === id)?.name ?? 'Diğer şube';
+  const order = [...new Set([...sites.map(s => s.id), ...rows.map(o => o.siteId)])].filter(id => rows.some(o => o.siteId === id));
+  const grouped = order.length > 1;
   return (
     <Screen title="Yükümlülükler" titleEn="Obligations" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       {q.stale ? <StaleNote /> : null}
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
-      {(q.data ?? []).map(o => (
+      {order.map(sid => (
+        <View key={sid} testID={`obl-site-${sid}`} style={{ gap: 11 }}>
+          {grouped ? <Text testID={`obl-site-name-${sid}`} style={[type(10.5, 600, { ls: 0.12, color: C.t3 }), { marginTop: 8 }]}>{nameOf(sid).toLocaleUpperCase('tr')} · {rows.filter(o => o.siteId === sid && o.decision === 'applies').length} uygulanıyor</Text> : null}
+          {rows.filter(o => o.siteId === sid).map(o => (
         <Tap key={o.id} testID={`obl-${o.rule}`} onPress={() => router.push(`/obligation/${o.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Pill label={DECISION[o.decision][0]} fg={DECISION[o.decision][1]} bg={DECISION[o.decision][2]} />
@@ -38,6 +46,8 @@ export default function ObligationsRoute() {
           </View>
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{o.rule} · sürüm {o.version}{o.missingFacts.length ? ` · eksik: ${factLabels(o.missingFacts)}` : ''}</Text>
         </Tap>
+          ))}
+        </View>
       ))}
     </Screen>
   );

@@ -263,6 +263,12 @@ function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; o
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const re = t.reportEvidence;
+  // No report section for someone without document access: say who can pick the report instead of leaving the instruction hanging.
+  if (!re && t.status === 'open' && t.requirements.some(r => r.kind === 'document' && r.acceptsServiceReport)) return (
+    <View testID="task-report-restricted"><Card radius={22} border={tint.info(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16 }}>
+      <Text style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>Belge kasasındaki servis raporunu bu hesap göremez. İncelenmiş raporu belge okuma yetkisi olan yönetici kanıt olarak seçer; yöneticine ilet.</Text>
+    </Card></View>
+  );
   if (!re || !re.accepted) return null;
   const open = t.status === 'open';
   const missing = t.progress.missing;
@@ -403,7 +409,7 @@ Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonrak
             </Tap>
           ))}
           {manager && t.status === 'open' ? <GhostButton testID="task-find-service" label="Servis bul" height={40} size={12.5} color={C.lime} border={tint.lime(0.35)}
-            onPress={() => router.push(`/service/new?taskId=${t.id}&title=${encodeURIComponent(`${t.title}${t.equipment ? ` · ${t.equipment.name}` : ''}`)}` as never)} /> : null}
+            onPress={() => router.push(`/service/new?taskId=${t.id}&siteId=${t.siteId ?? ''}&title=${encodeURIComponent(`${t.title}${t.equipment ? ` · ${t.equipment.name}` : ''}`)}` as never)} /> : null}
         </Card>
       ) : null}
     </>

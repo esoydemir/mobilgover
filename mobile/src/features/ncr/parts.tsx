@@ -260,7 +260,7 @@ export function SupportCard({ n, base, reload, onFollowUp, onAssign }: { n: NcrD
   );
   const go = (kind: string, cat: string | null) => {
     if (kind === 'explanation' && n.task) router.push(`/obligation/${n.task.obligation_id}`);
-    else if (kind === 'service_request') router.push(`/service/new?ncrId=${n.id}&title=${encodeURIComponent(n.title)}${cat ? `&category=${cat}` : ''}`);
+    else if (kind === 'service_request') router.push(`/service/new?ncrId=${n.id}&siteId=${n.site_id}&title=${encodeURIComponent(n.title)}${cat ? `&category=${cat}` : ''}`);
     else if (kind === 'equipment') router.push('/equipment');
     else if (kind === 'equipment_history' && n.equipment) router.push(`/equipment/${n.equipment.id}`);
     else if (kind === 'team') router.push('/team');
@@ -276,7 +276,7 @@ export function SupportCard({ n, base, reload, onFollowUp, onAssign }: { n: NcrD
       {n.suggestions.length > 1 ? <Text style={type(11.5, 500, { color: C.t2 })}>{new Set(n.suggestions.map(s => s.category)).size} neden için {n.suggestions.length} öneri.</Text> : null}
       {n.suggestions.map((s, i) => s.dismissed ? (
         <View key={i} testID={`support-${s.kind}`} style={{ borderWidth: 1, borderColor: C.bd, borderStyle: 'dashed', borderRadius: 16, padding: 12, gap: 4 }}>
-          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{CAUSE_LABEL[s.category][0].toUpperCase()} · KENARA KONULDU</Text>
+          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{CAUSE_LABEL[s.category][0].toLocaleUpperCase('tr')} · KENARA KONULDU</Text>
           <Text style={type(12.5, 600, { color: C.t2 })}>{s.title}</Text>
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Gerekçe: {s.dismissed.reason}{s.dismissed.replacement ? ` · Yerine: ${s.dismissed.replacement}` : ''} · {s.dismissed.by}</Text>
           {n.permissions.act ? <Text testID={`support-restore-${s.key}`} onPress={() => setDeciding(`restore:${s.key}`)} style={type(11.5, 600, { color: C.info })}>Geri al</Text> : null}
@@ -285,7 +285,7 @@ export function SupportCard({ n, base, reload, onFollowUp, onAssign }: { n: NcrD
         </View>
       ) : (
         <View key={i} testID={`support-${s.kind}`} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, padding: 12, gap: 6 }}>
-          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{CAUSE_LABEL[s.category][0].toUpperCase()}</Text>
+          <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{CAUSE_LABEL[s.category][0].toLocaleUpperCase('tr')}</Text>
           <Text style={type(13.5, 600)}>{s.title}</Text>
           <Text style={type(12, 400, { color: C.t2, lh: 1.45 })}>{s.body}</Text>
           {s.kind === 'training' && n.relatedTraining.length ? <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İlgili: {n.relatedTraining.slice(0, 3).map(t => t.title).join(' · ')}</Text> : null}
@@ -503,7 +503,7 @@ function ActionRow({ a, n, base, reload, me }: { a: NcrDetail['actions'][number]
   return (
     <View testID={`action-${a.id}`} style={{ borderWidth: 1, borderColor: a.overdue && a.status === 'open' ? tint.crit(0.3) : a.can_verify ? tint.warn(0.35) : C.bd, borderRadius: 16, padding: 12, gap: 5 }}>
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-        <Text style={[type(10, 700, { ls: 0.08, color: C.t3 }), { flex: 1 }]}>{ACTION_KIND[a.kind]!.toUpperCase()}</Text>
+        <Text style={[type(10, 700, { ls: 0.08, color: C.t3 }), { flex: 1 }]}>{ACTION_KIND[a.kind]!.toLocaleUpperCase('tr')}</Text>
         <Text testID={`action-state-${a.id}`} style={type(10, 700, { ls: 0.08, color: st.color })}>{st.label}</Text>
       </View>
       <Text style={type(13.5, 600, { lh: 1.35 })}>{a.description}</Text>

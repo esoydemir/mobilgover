@@ -10,7 +10,7 @@ import { Page } from './Shell';
 type Source = { code: string; name: string; last_attempt_at: string | null; last_success_at: string | null; last_error: string | null; last_error_at: string | null; failures_in_row: number; queue_open?: number };
 type Skipped = { key: string; url: string | null; status: 'out_of_scope' | 'unreadable'; title: string; why: string; firstDay: string; lastDay: string; scans: number };
 type Overview = { sources: Source[]; recentSkipped?: Skipped[]; pendingReview: number; unclearDates: number; counts: Record<string, number>; canScan: boolean; lastSuccessfulScan: { finished_at: string } | null;
-  schedule: { enabled: boolean; nextRunAt?: string | null; retry?: { attempts: number; maxAttempts: number; nextAttemptAt: string | null; exhausted: boolean; lastErrors: string[] } | null } };
+  schedule: { enabled: boolean; nextRunAt?: string | null; retry?: { attempts: number; awaitingToday?: boolean; maxAttempts: number; nextAttemptAt: string | null; exhausted: boolean; lastErrors: string[] } | null } };
 type Row = { id: string; source_code: string; typeLabel: string; doc_ref: string; doc_title: string; article_ref: string | null; published_on: string | null; effective_from: string | null; status: string; is_example: boolean; detected_at: string;
   match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null; waiting_reason?: string | null; review_areas?: string[]; assigned_to?: string | null; assignee_name?: string | null; date_status: 'known' | 'unclear'; next_step?: 'author' | 'area' | 'approver' | null };
 type Site = { siteId: string; site: string; company: string; effect: string; reason: string; missingQuestions?: { key: string; label: string }[]; openTaskEffect?: string; plannedText?: string; plannedTasks?: { code: string; title: string; firstDue: string | null; unset: boolean }[] };
@@ -117,7 +117,7 @@ function Health({ o }: { o: Overview }) {
         <div key={s.code} data-testid={`leg-source-${s.code}`}><b>{SOURCE_TR[s.code] ?? s.name}</b> <span style={{ color: 'var(--ink2)' }}>· son deneme {dateTimeTr(s.last_attempt_at)} · son başarılı okuma {dateTimeTr(s.last_success_at)}</span>
           {s.last_error ? <div className="gh-why" style={{ color: 'var(--crit)' }} data-testid={`leg-source-error-${s.code}`}>Son hata ({s.failures_in_row} kez üst üste{s.last_error_at ? ` · ${dateTimeTr(s.last_error_at)}` : ''}): {s.last_error}</div> : null}</div>
       ))}
-      {r ? <div className="gh-why" data-testid="desk-retry">Bugünkü planlı tarama başarısız: {r.attempts}/{r.maxAttempts} deneme.{r.exhausted ? ' Bugün için deneme hakkı doldu; yarın planlı saatte yeniden denenir.' : r.nextAttemptAt ? ` Sonraki deneme: ${dateTimeTr(r.nextAttemptAt)}.` : ''}</div> : <div style={{ color: 'var(--ok)' }}>Bugünkü planlı tarama sorunsuz ya da henüz başlamadı.</div>}
+      {r ? <div className="gh-why" data-testid="desk-retry">{r.awaitingToday ? 'Bugünkü sayı henüz yayımlanmamış, gün tamamlanmadı' : 'Bugünkü planlı tarama başarısız'}: {r.attempts}/{r.maxAttempts} deneme.{r.exhausted ? ' Bugün için deneme hakkı doldu; yarın planlı saatte yeniden denenir (okuma penceresi bu günü de kapsar).' : r.nextAttemptAt ? ` Sonraki deneme: ${dateTimeTr(r.nextAttemptAt)}.` : ''}</div> : <div style={{ color: 'var(--ok)' }}>Bugünkü planlı tarama sorunsuz ya da henüz başlamadı.</div>}
     </div>
   );
 }
@@ -206,7 +206,7 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
         </Section>
 
         <Section no={3} title="Kapsam" testid="leg-sec-kapsam">
-          <Kv rows={[['İlgili sektör', d.suggestion?.sectors?.length ? d.suggestion.sectors.map(s => SECTOR_TR[s] ?? s).join(', ') : 'Sektör belirlenemedi (yalnız öneridir)'], ['İnceleme alanı', d.reviewAreas?.required.length ? d.reviewAreas.required.map(r => AREA_TR[r.area] ?? r.area).join(', ') : 'Henüz seçilmedi']]} />
+          <Kv rows={[[d.status === 'pending' ? 'Sözcük eşleşmesi (uygulanabilirlik incelenmedi)' : 'İlgili sektör', d.suggestion?.sectors?.length ? d.suggestion.sectors.map(s => SECTOR_TR[s] ?? s).join(', ') : 'Sektör belirlenemedi (yalnız öneridir)'], ['İnceleme alanı', d.reviewAreas?.required.length ? d.reviewAreas.required.map(r => AREA_TR[r.area] ?? r.area).join(', ') : 'Henüz seçilmedi']]} />
           {d.suggestion?.matchLevel === 'uncertain' ? <Callout tone="warn" testid="leg-uncertain-note">Eşleşme belirsiz: başlıktan hangi iş koluna ait olduğu kesin anlaşılmıyor.</Callout> : null}
           {imp ? (
             <>

@@ -15,7 +15,7 @@ import { reqStatus } from '../services';
 
 type Quote = { id: string; display_name: string; provider_profile_id: string; scope: string; exclusions: string; price_net: number; vat_rate: number; price_gross: number;
   materials: string; duration_text: string; warranty_text: string; deliverable: string; valid_until: string; status: string; expired: boolean;
-  providerStatus: { live: boolean; label: string; note: string | null } };
+  providerStatus: { live: boolean; label: string; note: string | null }; acceptable: boolean };
 type Job = { id: string; status: string; checkin_code: string; checked_in_at: string | null; report: string | null; report_submitted_at: string | null; accepted_at: string | null;
   business_note: string | null; payment_status: string; cancel_reason: string | null };
 type Review = { id: string; quality: number; timeliness: number; communication: number; comment: string | null; show_on_profile: boolean; created_at: string };
@@ -58,7 +58,7 @@ export default function ServiceDetailRoute() {
   return (
     <Screen title="Hizmet talebi" titleEn="Service request" onRefresh={q.reload} refreshing={q.loading}>
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Pill label={reqStatus(d.request.status, live.length)[0]} fg={reqStatus(d.request.status, live.length)[1]} bg={reqStatus(d.request.status, live.length)[2]} />
+        <Pill label={reqStatus(d.request.status, d.quotes.filter(x => x.acceptable).length, live.length)[0]} fg={reqStatus(d.request.status, d.quotes.filter(x => x.acceptable).length, live.length)[1]} bg={reqStatus(d.request.status, d.quotes.filter(x => x.acceptable).length, live.length)[2]} />
         <Pill label={d.mode === 'direct' ? 'DOĞRUDAN TEK UZMAN' : d.mode === 'selected' ? 'SEÇİLİ UZMANLAR' : 'ÇOK TEKLİFLİ'} fg={C.info} bg={tint.info(0.12)} />
       </View>
       <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{d.request.title}</Text>

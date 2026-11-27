@@ -244,7 +244,10 @@ export function parseGazetteText(text: string, fallback: { title: string; publis
 }
 
 /** `docsRead`: documents (gazette items / watched consolidated texts) read and parsed in this scan, separate from `seen` (items or articles). */
-export type ScanOutcome = { seen: number; /** items matching a supported sector (clear) */ selected: number; /** items a person must classify */ uncertain: number; /** items outside every supported sector, with the reason */ skipped: { key: string; url: string; title: string; why: string }[]; /** items whose text could not be read: shown as such, retried by the next scan */ unreadable: { key: string; url: string; title: string; error: string }[]; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
+export type ScanOutcome = {
+  /** Today's day list is not out yet: the sources answered, but this day still has to be read. */
+  awaitingToday?: boolean;
+  seen: number; /** items matching a supported sector (clear) */ selected: number; /** items a person must classify */ uncertain: number; /** items outside every supported sector, with the reason */ skipped: { key: string; url: string; title: string; why: string }[]; /** items whose text could not be read: shown as such, retried by the next scan */ unreadable: { key: string; url: string; title: string; error: string }[]; docsRead: number; changes: DetectedChange[]; errors: string[]; snapshots: { docKey: string; title: string; url: string; articles: Record<string, string> }[]; notes: string[] };
 
 /**
  * The effective-date parts of a gazette instrument, kept in SEPARATE fields: the general entry-into-force clause, the
@@ -298,7 +301,7 @@ export async function scanGazette(o: { baseUrl: string; today: string; lookbackD
       const answer = await fetchWithRetry(o.fetcher, idxUrl, { sleep: o.sleep });
       // A redirect away from the list is NOT "nothing published": today's issue may still be missing; a past day is unverified.
       if (leftList(answer)) {
-        if (day === o.today) { out.notes.push(`${day}: günün sayısı henüz yayımlanmamış (liste adresi ana sayfaya yönlendiriyor); sonraki taramada yeniden bakılır.`); continue; }
+        if (day === o.today) { out.awaitingToday = true; out.notes.push(`${day}: günün sayısı henüz yayımlanmamış (liste adresi ana sayfaya yönlendiriyor); sonraki taramada yeniden bakılır.`); continue; }
         throw new SourceError('not_found', `${idxUrl} gün listesi yerine ana sayfaya yönlendirdi; bu gün doğrulanamadı`);
       }
       const html = requireHtml(answer, idxUrl);

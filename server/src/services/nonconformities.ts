@@ -166,7 +166,7 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
   const closure = closureOptions(n, d.input, p.userId, canVerify && n.status === 'awaiting_verification');
   const perms = { act: can(p, 'ncr.act', target).ok, manage: can(p, 'ncr.manage', target).ok };
   // The finding's own measurement: its limits are what a new measurement in the effectiveness check is compared with.
-  const measurement = n.measurement_id ? (await tx.query(`SELECT value, unit, limit_min, limit_max, measured_at FROM measurements WHERE id = $1`, [n.measurement_id])).rows[0] ?? null : null;
+  const measurement = n.measurement_id ? (await tx.query(`SELECT value, unit, limit_min, limit_max, measured_at, limit_source->>'basis' AS limit_basis FROM measurements WHERE id = $1`, [n.measurement_id])).rows[0] ?? null : null;
   // Linked records the person may open from the case (each checked for their own access).
   const equipmentHistory = equipment ? (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM nonconformities WHERE company_id = $1 AND equipment_id = $2 AND id <> $3`,
     [companyId, equipment.id, id])).rows[0]!.n : 0;
@@ -321,6 +321,7 @@ export async function recordStep(tx: Tx, p: Principal, companyId: string, id: st
   const n = await load(tx, p, companyId, id, 'ncr.act', true);
   if (n.status === 'closed') throw conflict('NCR_CLOSED', 'Kapalı uygunsuzlukta adım eklenemez.');
   if (notes.trim().length < 5) throw invalid('Ne yapıldığını yaz.');
+  let recorded: Record<string, unknown> | undefined;
   if (step === 'containment') {
     if ((await tx.query(`SELECT 1 FROM ncr_steps WHERE ncr_id = $1 AND step = 'containment'`, [id])).rowCount) throw conflict('STEP_ALREADY_DONE', 'İlk müdahale zaten kaydedilmiş.');
     await tx.query(`INSERT INTO ncr_steps (company_id, ncr_id, step, notes, done_by, iteration) VALUES ($1,$2,'containment',$3,$4,$5)`, [companyId, id, notes.trim(), p.userId, n.iteration]);
@@ -339,6 +340,7 @@ export async function recordStep(tx: Tx, p: Principal, companyId: string, id: st
       const within = m ? (lo == null || measurement.value >= lo) && (hi == null || measurement.value <= hi) : null;
       data = { measurement: { value: measurement.value, unit: m?.unit ?? measurement.unit ?? null, limitMin: lo, limitMax: hi, within,
         basis: m ? 'İlk bulgunun limitleriyle karşılaştırıldı.' : 'Karşılaştırılacak limit yok; değer yalnız kaydedildi.' } };
+      recorded = data.measurement as Record<string, unknown>;
       if (within === false) throw new AppError(422, 'MEASUREMENT_OUT_OF_LIMIT', `Yeni ölçüm (${measurement.value} ${m.unit}) hâlâ limit dışında (${lo ?? '—'}…${hi ?? '—'} ${m.unit}). Sorun giderilmemiş: yeni aksiyon ekle ya da ölçümü tekrarla.`);
     }
     await tx.query(`INSERT INTO ncr_steps (company_id, ncr_id, step, notes, done_by, iteration, data) VALUES ($1,$2,'effectiveness_check',$3,$4,$5,$6)`,
@@ -349,7 +351,8 @@ export async function recordStep(tx: Tx, p: Principal, companyId: string, id: st
       dedupeKey: `ncr_verification_requested:${id}:${n.iteration}`, title: 'Doğrulama isteği', body: `${n.title} · etkinlik kontrolü kaydedildi, doğrulaman bekleniyor` });
   }
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.step_done', entityType: 'nonconformity', entityId: id,
-    payload: { step, notes: notes.trim(), iteration: n.iteration, ...(step === 'effectiveness_check' && measurement ? { measurement } : {}) } });
+    // The recorded measurement carries its unit and limits, so the history line can say what was measured.
+    payload: { step, notes: notes.trim(), iteration: n.iteration, ...(step === 'effectiveness_check' && measurement ? { measurement: recorded ?? measurement } : {}) } });
 }
 
 /**

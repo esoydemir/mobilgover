@@ -15,6 +15,7 @@ let env: Env;
 let demo: Awaited<ReturnType<typeof seedDemoCompany>>;
 let pro: { id: string; token: string }, pro2: { id: string; token: string };
 let mod1: { id: string; token: string }, mod2: { id: string; token: string };
+let reviewerToken: string;
 let pp1: string, pp2: string;
 const C = () => `/companies/${demo.companyId}`;
 const owner = () => client(env, demo.users.owner.token);
@@ -40,6 +41,7 @@ beforeAll(async () => {
   pp1 = (await env.ownerDb.query(`SELECT id FROM professional_profiles WHERE user_id = $1`, [pro.id])).rows[0].id;
   pp2 = (await env.ownerDb.query(`SELECT id FROM professional_profiles WHERE user_id = $1`, [pro2.id])).rows[0].id;
   await env.ownerDb.query(`UPDATE professional_profiles SET display_name = 'Deniz Kaya' WHERE id = $1`, [pp2]);
+  reviewerToken = await env.db.system(tx => createSession(tx, platform.marketReviewer.id));
   mod1 = await newUser('Moderatör Bir', 'mod1.6c@ornek.test', 'network_moderator');
   mod2 = await newUser('Moderatör İki', 'mod2.6c@ornek.test', 'network_moderator');
   await owner().post('/network/profile', { displayName: 'Ahmet (işletme)', city: 'İstanbul' });
@@ -96,6 +98,22 @@ describe('request → quotes → revision → acceptance', () => {
     expect(d.comparison.map((r: any) => r.key)).toEqual(['scope', 'exclusions', 'price', 'duration_text', 'deliverable', 'warranty_text', 'valid_until']);
     expect(d.quotes).toHaveLength(2);
     expect(d.quotes.every((x: any) => x.providerStatus.live)).toBe(true);
+  });
+
+  it('when no quote can be accepted any more, neither side is told to evaluate or accept one', async () => {
+    const listed = async () => (await owner().get(`${C()}/service-requests`)).body.find((x: any) => x.id === req);
+    const followUp = async () => JSON.stringify((await client(env, reviewerToken).get('/admin/marketplace/operations')).body);
+    expect(await listed()).toMatchObject({ open_quotes: 2, acceptable_quotes: 2 });
+    expect(await followUp()).toContain('teklifleri karşılaştırıp kabul etmesini');
+    await env.ownerDb.query(`UPDATE service_authorizations SET valid_until = current_date - 1 WHERE profile_id = ANY($1)`, [[pp1, pp2]]);
+    expect(await listed()).toMatchObject({ open_quotes: 2, acceptable_quotes: 0 });
+    const d = (await owner().get(`${C()}/service-requests/${req}`)).body;
+    expect(d.quotes.map((x: any) => x.acceptable)).toEqual([false, false]);
+    const text = await followUp();
+    expect(text).not.toContain('teklifleri karşılaştırıp kabul etmesini');
+    expect(text).toContain('Gelen teklif artık kabul edilemiyor');
+    await env.ownerDb.query(`UPDATE service_authorizations SET valid_until = current_date + 365 WHERE profile_id = ANY($1)`, [[pp1, pp2]]);
+    expect(await listed()).toMatchObject({ acceptable_quotes: 2 });
   });
 
   it('an approval suspended after quoting is shown and the quote cannot be accepted', async () => {
