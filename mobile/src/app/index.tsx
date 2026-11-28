@@ -107,6 +107,7 @@ function HomeScreen() {
         <Card testID="home-clear" style={{ gap: 4 }}>
           <Text style={type(17, 700)}>{(gaps.data?.length ?? 0) > 0 && !isStaff ? 'Önce eksik bilgiyi tamamla' : 'Şu an bekleyen kontrol yok'}</Text>
           <Text style={type(13, 400, { color: C.t2, lh: 1.45 })}>{(gaps.data?.length ?? 0) > 0 && !isStaff ? 'Aşağıdaki kart tamamlanınca ilgili görevler oluşur.' : isStaff ? 'Sana yeni bir kontrol atandığında burada görünür.' : 'Yeni görev oluştuğunda burada görünür.'}</Text>
+          {!isStaff && needsInfo.length > 0 ? <PrimaryButton testID="home-clear-action" label="Eksik bilgiyi tamamla" height={48} style={{ marginTop: 8 }} onPress={() => router.push(`/profile${firstMissing ? `?focus=${firstMissing}` : ''}` as never)} /> : null}
         </Card>
       ) : null}
 

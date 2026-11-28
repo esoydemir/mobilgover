@@ -382,13 +382,12 @@ function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
         </Text>
       </Card>
       <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
-        <Eyebrow>TARİHLER VE SORUMLU</Eyebrow>
+        <Eyebrow>TARİHLER</Eyebrow>
         <Text testID="task-dates" style={type(12.5, 500, { color: C.t2, lh: 1.55 })}>
           {`Son tamamlanma: ${t.lastCompletedAt ? fmtDateTime(t.lastCompletedAt) : 'henüz tamamlanmadı'}
 Bu kontrolün son tarihi: ${fmtDateTime(t.dueAt)}
 Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonraki yok'}`}
         </Text>
-        <Text testID="task-owner" style={type(12.5, 600, { color: t.assignee ? C.t1 : C.warn })}>{t.assignee ? `Sorumlu: ${t.assignee.name ?? 'atanan kişi'}` : `Sorumlu atanmadı${t.seriesResponsible ? ` · seri sorumlusu: ${t.seriesResponsible.name}` : ''}`}</Text>
       </Card>
       <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
         <Eyebrow>YAPILACAKLAR</Eyebrow>

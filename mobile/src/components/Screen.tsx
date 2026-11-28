@@ -138,7 +138,6 @@ function NotificationBell({ companyId }: { companyId: string }) {
 function SubHeader({ title, titleEn, siteId }: { title: string; titleEn?: string; siteId?: string | null }) {
   const { company } = useSession();
   const siteName = siteId ? company?.sites.find(s => s.id === siteId)?.name : null;
-  const where = company ? `${company.name}${siteName ? ` · ${siteName}` : ''}` : null;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 2, paddingHorizontal: 16, paddingBottom: 10 }}>
       <Tap accessibilityLabel="Geri" onPress={goBack} style={{ width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: C.bd, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' }}>
@@ -147,7 +146,13 @@ function SubHeader({ title, titleEn, siteId }: { title: string; titleEn?: string
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={type(17, 700, { ls: -0.015 })}>{title}</Text>
         {/* B-16: Türkçe ekranda İngilizce alt başlık gösterilmez (titleEn yalnızca geriye uyumluluk için kabul edilir). */}
-        {where ? <Text testID="subheader-context" numberOfLines={2} style={[type(12, 600, { color: C.t2, lh: 1.3 }), { marginTop: 1 }]}>{where}</Text> : null}
+        {/* İşletme ve şube ayrı satırlarda: uzun işletme adı şube adını kesmesin. */}
+        {company ? (
+          <View testID="subheader-context" style={{ marginTop: 1 }}>
+            <Text numberOfLines={1} style={type(12, 600, { color: C.t2, lh: 1.3 })}>{company.name}</Text>
+            {siteName ? <Text testID="subheader-site" numberOfLines={1} style={type(12, 700, { color: C.t1, lh: 1.3 })}>{siteName}</Text> : null}
+          </View>
+        ) : null}
       </View>
       <EnvBadge />
     </View>

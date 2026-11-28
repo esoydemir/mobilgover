@@ -43,7 +43,7 @@ export function QrCard({ kind, refId }: { kind: 'equipment' | 'document'; refId:
       ) : (
         <>
           <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Bu kayıt için etkin QR kodu yok. Üretince yazdırıp ekipmanın ya da panonun üzerine yapıştırabilirsin.</Text>
-          <PrimaryButton testID="qr-create" label="QR kodu oluştur" disabled={busy} onPress={() => run(() => call('POST', `/companies/${company!.id}/qr`, { kind, refId }))} />
+          <GhostButton testID="qr-create" label="QR kodu oluştur" disabled={busy} onPress={() => run(() => call('POST', `/companies/${company!.id}/qr`, { kind, refId }))} />
         </>
       )}
       {error ? <ErrorBox message={error} /> : null}
@@ -117,7 +117,7 @@ export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: {
         </View>
       ) : (
         <View style={{ gap: 8 }}>
-          <PrimaryButton testID="extract-file" label={busy ? 'Okunuyor…' : 'Yüklenen dosyadan oku'} disabled={busy} onPress={readFile} />
+          <GhostButton testID="extract-file" label={busy ? 'Okunuyor…' : 'Yüklenen dosyadan oku'} disabled={busy} onPress={readFile} />
           {fileErr ? (
             <View testID="extract-file-error" style={{ gap: 6 }}>
               <ErrorBox message={fileErr} />
@@ -126,7 +126,7 @@ export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: {
             </View>
           ) : null}
           <Field label="Belgenin metni (okunan ya da yapıştırılan)" testID="extract-text" value={text} onChangeText={setText} multiline />
-          <PrimaryButton testID="extract-propose" label="Alanları öner" disabled={busy || text.trim().length < 20} onPress={propose} />
+          <GhostButton testID="extract-propose" label="Alanları öner" disabled={busy || text.trim().length < 20} onPress={propose} />
         </View>
       )}
       {error ? <ErrorBox message={error} /> : null}
