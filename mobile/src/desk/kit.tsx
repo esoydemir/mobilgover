@@ -13,7 +13,7 @@ export function DeskProvider({ children }: { children: ReactNode }) {
   const setMode = useCallback((m: Mode) => setThemePref(m), []);
   const toast = useCallback((m: string) => { setMsg(m); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setMsg(null), 4200); }, []);
   const v = useMemo(() => ({ mode, setMode, toast }), [mode, setMode, toast]);
-  return <Ctx.Provider value={v}>{children}<div role="status" aria-live="polite">{msg ? <div className="gh-toast" data-testid="desk-toast">{msg}</div> : null}</div></Ctx.Provider>;
+  return <Ctx.Provider value={v}>{children}<div role="status" aria-live="polite">{msg ? <div className="gh" data-theme={mode} style={{ display: 'contents' }}><div className="gh-toast" data-testid="desk-toast">{msg}</div></div> : null}</div></Ctx.Provider>;
 }
 
 /* ───────── yönetim işleri (sayaçlar) ───────── */
