@@ -53,8 +53,8 @@ export default function RiskRoute() {
 
       <View testID="risk-classes" style={{ flexDirection: 'row', gap: 8 }}>
         {([['confirmed', 'KESİNLEŞMİŞ CEZA', 0, null], ['potential', 'POTANSİYEL RİSK', r.counts.potential, 'potential'], ['doc', 'EKSİK BELGE', r.counts.doc, 'doc']] as const).map(([k, label, n, f]) => (
-          <Tap key={k} testID={`risk-class-${k}`} onPress={f ? () => setFilter(f) : undefined} style={{ flex: 1, borderWidth: 1, borderColor: f && filter === f ? tint.lime(0.4) : C.bd, borderRadius: 18, backgroundColor: C.card, padding: 12, gap: 4 }}>
-            <Text style={type(9.5, 700, { ls: 0.08, color: C.t3 })}>{label}</Text>
+          <Tap key={k} testID={`risk-class-${k}`} onPress={f ? () => setFilter(f) : undefined} style={{ flex: 1, borderWidth: 1, borderColor: f && filter === f ? tint.lime(0.4) : C.bd, borderRadius: 18, backgroundColor: C.card, paddingVertical: 12, paddingHorizontal: 9, gap: 4 }}>
+            <Text style={type(9.5, 700, { ls: 0.01, color: C.t3 })}>{label}</Text>
             <Text style={type(24, 600, { ls: -0.03 })}>{r.ready || k === 'confirmed' ? n : '—'}</Text>
           </Tap>
         ))}
