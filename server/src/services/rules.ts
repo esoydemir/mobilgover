@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Tx } from '../db/pool';
 import { decide } from '../domain/applicability';
 import { validateCondition } from '../domain/conditions';
-import { conflict, forbidden, invalid, notFound } from '../domain/errors';
+import { AppError, conflict, forbidden, invalid, notFound } from '../domain/errors';
 import { evidenceRequirementSchema, limitSchema } from '../domain/evidence';
 import type { Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
@@ -141,7 +141,7 @@ export async function submitForReview(tx: Tx, p: Principal, id: string) {
  * Specialist review for one subject area. Only someone registered for that
  * area may record it, and never the author.
  */
-export async function areaReview(tx: Tx, p: Principal, id: string, area: string, decision: 'approved' | 'changes_requested', notes: string) {
+export async function areaReview(tx: Tx, p: Principal, id: string, area: string, decision: 'approved' | 'changes_requested', notes: string, sourceChecked = false) {
   const rv = await version(tx, id);
   if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
   if (!rv.required_review_areas.includes(area)) throw invalid(`Bu kural "${area}" alanında inceleme gerektirmiyor.`);
@@ -149,6 +149,15 @@ export async function areaReview(tx: Tx, p: Principal, id: string, area: string,
   const ok = (await tx.query(`SELECT 1 FROM reviewer_areas WHERE user_id = $1 AND area = $2`, [p.userId, area])).rowCount;
   if (!ok) throw forbidden(`"${area}" alanında inceleme yetkin yok.`);
   if (notes.trim().length < 5) throw invalid('İnceleme notu yaz.');
+  // A publication the machine could not read (or only read by OCR) is approved only by someone who says they read the official file.
+  const unread = (await tx.query<{ id: string; method: string }>(
+    `SELECT id, suggestion->>'readMethod' AS method FROM legislation_changes WHERE rule_version_id = $1 AND suggestion->>'readMethod' IN ('not_read', 'ocr_pdf')`, [id])).rows;
+  if (decision === 'approved' && unread.length && !sourceChecked) {
+    throw new AppError(422, 'SOURCE_NOT_CHECKED', 'Bu yayının metni makineyle okunamadı ya da güvenilir okunmadı. Mevzuat kaydından resmî kaynağı açıp tamamını incelediğini işaretleyerek onayla.');
+  }
+  if (decision === 'approved') for (const u of unread) {
+    await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'legislation.source_checked', entityType: 'legislation_change', entityId: u.id, payload: { area, readMethod: u.method, reason: notes.trim() } });
+  }
   await tx.query(`INSERT INTO rule_area_reviews (rule_version_id, area, reviewer_id, decision, notes) VALUES ($1,$2,$3,$4,$5)`, [id, area, p.userId, decision, notes]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.area_reviewed', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, area, decision, reason: notes.trim() } });
 }

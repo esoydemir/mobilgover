@@ -2,7 +2,7 @@ import { credentialLabel } from '../features/labels';
 /** Denetim olaylarının ve rollerin Türkçe adları. Bilinmeyen tür ham kodla gösterilir; uydurma ad verilmez. */
 export const EVENT_TR: Record<string, string> = {
   'legislation.detected': 'Taramada bulundu', 'legislation.date_resolved': 'Yürürlük tarihi belirlendi', 'legislation.proposal_saved': 'Öneri yazıldı ya da güncellendi', 'legislation.drafted': 'Kural taslağı hazırlandı',
-  'legislation.approved': 'Onaylandı', 'legislation.assigned': 'Dosya atandı', 'legislation.unassigned': 'Atama kaldırıldı', 'legislation.returned': 'Gerekçeyle iade edildi', 'legislation.rejected': 'Reddedildi',
+  'legislation.source_checked': 'Özgün kaynağı incelediğini beyan etti', 'legislation.approved': 'Onaylandı', 'legislation.assigned': 'Dosya atandı', 'legislation.unassigned': 'Atama kaldırıldı', 'legislation.returned': 'Gerekçeyle iade edildi', 'legislation.rejected': 'Reddedildi',
   'legislation.applied': 'Yürürlük gününde uygulandı', 'platform.area_granted': 'İnceleme alanı yetkisi verildi', 'platform.area_revoked': 'İnceleme alanı yetkisi alındı',
   'platform.role_granted': 'Platform rolü verildi', 'platform.role_revoked': 'Platform rolü kaldırıldı', 'rule.approved': 'Kural onaylandı', 'rule.published': 'Kural yayınlandı', 'rule.area_reviewed': 'Alan incelemesi yapıldı',
   'rule.submitted': 'Kural incelemeye gönderildi', 'rule.drafted': 'Kural taslağı yazıldı', 'rule.returned': 'Kural yazara iade edildi', 'rule.rejected': 'Kural reddedildi', 'rule.withdrawn': 'Yayımlanmış kural geri çekildi',

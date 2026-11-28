@@ -499,6 +499,9 @@ export async function getChange(tx: Tx, p: Principal, id: string, now = new Date
     proposal: c.proposal, proposalBy: c.proposal_by, rule, missingAreaReviews: missingAreas,
     approveReason: c.approve_reason, rejectReason: c.reject_reason, applyOn: c.apply_on, appliedAt: c.applied_at, applyResult: c.apply_result, detectedAt: c.detected_at,
     impact, impactNote, history, publishedRules: published, blockers, frequency, reviewAreas,
+    // Set only when the machine could not read the publication reliably: who declared having read the official file.
+    sourceCheck: ['not_read', 'ocr_pdf'].includes(c.suggestion?.readMethod) ? { method: c.suggestion.readMethod as string,
+      checked: history.filter(h => h.event_type === 'legislation.source_checked').map(h => ({ by: h.actor as string | null, at: h.occurred_at })).at(-1) ?? null } : null,
     assignment: c.assigned_to ? { userId: c.assigned_to, name: asg?.name ?? null, at: c.assigned_at, note: c.assign_note } : null,
     compare: { hasOld: !!c.old_text, note: c.old_text ? null : c.change_type === 'new_publication' ? 'Yeni yayın: karşılaştırılacak bir eski metin yok; metin olduğu gibi okunur.' : 'Eski metin yok: bu kaynak ilk okumada yalnız karşılaştırma TABANI olarak kaydedildi; sonraki okumadaki farklar bu tabana göre gösterilir.' },
     cannot: cannotReasons(p, c, rule, blockers, reviewAreas.required),

@@ -16,6 +16,7 @@ type Row = { id: string; source_code: string; typeLabel: string; doc_ref: string
   match_level?: 'clear' | 'uncertain' | null; sectors?: string[] | null; waiting_reason?: string | null; review_areas?: string[]; assigned_to?: string | null; assignee_name?: string | null; date_status: 'known' | 'unclear'; next_step?: 'author' | 'area' | 'approver' | null };
 type Site = { siteId: string; site: string; company: string; effect: string; reason: string; missingQuestions?: { key: string; label: string }[]; openTaskEffect?: string; plannedText?: string; plannedTasks?: { code: string; title: string; firstDue: string | null; unset: boolean }[] };
 type Detail = {
+  sourceCheck?: { method: string; checked: { by: string | null; at: string } | null } | null;
   id: string; status: string; typeLabel: string; docRef: string; docTitle: string; articleRef: string | null; sourceUrl: string; sourceCode: string; publishedOn: string | null; effectiveFrom: string | null; dateStatus: 'known' | 'unclear'; dateNote: string | null;
   oldText: string | null; newText: string | null; isExample: boolean; exampleNote: string | null; rule: { id: string; code: string; version: number; status: string } | null; missingAreaReviews: string[]; approveReason: string | null; rejectReason: string | null; applyOn: string | null; appliedAt: string | null;
   suggestion: { relevance?: string; sectors?: string[]; matchLevel?: 'clear' | 'uncertain'; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] };
@@ -67,7 +68,7 @@ export function Legislation() {
     { key: 'doc', label: 'Yayın', w: 'minmax(0,1fr)', render: r => (
       <>
         <div className="t">{r.doc_title}{r.article_ref ? ` · md. ${r.article_ref}` : ''}</div>
-        <div className="s">{SOURCE_TR[r.source_code] ?? r.source_code} · {r.doc_ref} · yayın {dayTr(r.published_on)} · {waitFrom(r.detected_at)} bekliyor</div>
+        <div className="s">{r.doc_ref.startsWith(SOURCE_TR[r.source_code] ?? r.source_code) ? '' : `${SOURCE_TR[r.source_code] ?? r.source_code} · `}{r.doc_ref} · yayın {dayTr(r.published_on)} · {waitFrom(r.detected_at)} bekliyor</div>
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 5 }}>
           {r.is_example ? <Badge tone="ex">ÖRNEK</Badge> : null}{r.match_level === 'uncertain' ? <Badge tone="warn">Eşleşme belirsiz</Badge> : null}{r.date_status === 'unclear' ? <Badge tone="warn">Tarih belirsiz</Badge> : null}
         </div>
@@ -148,6 +149,7 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
   void total; const { call, me } = useSession(); const roles = me?.platformRoles ?? []; const { toast } = useDesk();
   const q = useApi<Detail>(`/admin/legislation/changes/${id}`); const d = q.data?.id === id ? q.data : null;
   const [reason, setReasonS] = useState(DRAFT[id] ?? ''); const setReason = (v: string) => { DRAFT[id] = v; setReasonS(v); };
+  const [sourceRead, setSourceRead] = useState(false);
   const [error, setError] = useState<string | null>(null); const [asg, setAsg] = useState(''); const [asgReason, setAsgReason] = useState(''); const [grantReason, setGrantReason] = useState(''); const [dateIn, setDateIn] = useState(''); const [dateNote, setDateNote] = useState(''); const [busy, setBusy] = useState(false);
   const cands = useApi<Cands>(d?.cannot && d.cannot.assign === null ? `/admin/legislation/changes/${id}/assignees` : null);
   const act = async (fn: () => Promise<unknown>, msg: string) => { setError(null); setBusy(true); try { await fn(); toast(msg); await q.reload(); await cands.reload(); await onChanged(); } catch (e) { setError(errorText(e)); await q.reload(); await onChanged(); } finally { setBusy(false); } };
@@ -180,6 +182,14 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
         badges={<><span data-testid="leg-status"><Badge tone={stT}>{stL}</Badge></span>{d.dateStatus === 'unclear' ? <Badge tone="warn">Yürürlük tarihi belirsiz</Badge> : <Badge>Yürürlük {dayTr(d.effectiveFrom)}</Badge>}</>} />
       <div className="gh-panel-scroll" data-testid="leg-detail">
         {d.exampleNote ? <p className="gh-note" style={{ margin: '10px 0 6px' }}>{d.exampleNote}</p> : null}
+        {d.sourceCheck ? (
+          <ol data-testid="leg-stages" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', listStyle: 'none', margin: '8px 0', padding: 0, fontSize: 12.5 }}>
+            {([['Yayın bulundu', true], [d.sourceCheck.method === 'not_read' ? 'Metin makineyle okunamadı' : 'Metin görüntüden okundu, güvenilmez', true],
+              [d.sourceCheck.checked ? `Uzman özgün kaynağı inceledi (${d.sourceCheck.checked.by ?? '—'}, ${dateTimeTr(d.sourceCheck.checked.at)})` : 'Uzman özgün kaynağı inceleyecek', !!d.sourceCheck.checked],
+              [['scheduled', 'applied'].includes(d.status) ? 'Yetkili onayladı' : 'Yetkili onayı bekliyor', ['scheduled', 'applied'].includes(d.status)]] as [string, boolean][])
+              .map(([label, done], i) => <li key={i} style={{ fontWeight: done ? 600 : 400, color: done ? 'var(--ink)' : 'var(--ink3)' }}>{done ? '✓' : `${i + 1}.`} {label}</li>)}
+          </ol>
+        ) : null}
 
         <Section no={1} title="Yayın" testid="leg-sec-yayin">
           <Kv rows={[['Yayımlayan', SOURCE_TR[d.sourceCode] ?? d.sourceCode], ['Belge', `${d.docRef}${d.articleRef ? ` · madde ${d.articleRef}` : ''}`], ['Yayın tarihi', dayTr(d.publishedOn)], ['Değişiklik türü', <span data-testid="leg-type">{d.typeLabel}</span>],
@@ -263,8 +273,10 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
             <div key={a.area} className="gh-site" data-testid={`leg-area-${a.area}`}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><b>{AREA_TR[a.area] ?? a.area}</b><Badge tone={a.approved ? 'ok' : 'warn'}>{a.approved ? 'İncelendi' : a.waiting ? 'Kuyrukta bekliyor' : 'İnceleme bekliyor'}</Badge></div>
               <div className="gh-note">{a.waiting ? trText(a.waiting) : `Tanımlı inceleyici: ${a.names.join(', ') || 'yok'}`} · Bu hesap: {trText(a.myAccess)}</div>
-              {a.canIReview && !a.approved && open ? <Btn size="sm" testid={`leg-area-approve-${a.area}`} disabled={busy || reason.trim().length < 5} title={reason.trim().length < 5 ? 'Önce gerekçe yaz (en az 5 karakter)' : undefined}
-                onClick={() => act(() => call('POST', `/admin/rule-versions/${d.rule!.id}/area-review`, { area: a.area, decision: 'approved', notes: reason.trim() }), 'Alan incelemesi kaydedildi')}>Bu alanı incelendi olarak onayla</Btn> : null}
+              {a.canIReview && !a.approved && open && d.sourceCheck ? <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '6px 0', fontSize: 13 }}><input type="checkbox" data-testid="leg-source-checked" checked={sourceRead} onChange={e => setSourceRead(e.target.checked)} /><span><Ext href={d.sourceUrl}>Resmî kaynağı</Ext> açtım ve metnin tamamını inceledim.</span></label> : null}
+              {a.canIReview && !a.approved && open && d.sourceCheck && !sourceRead ? <div className="gh-why">Pasif: bu yayın makineyle okunamadı; önce kaynağı incelediğini işaretle.</div> : null}
+              {a.canIReview && !a.approved && open ? <Btn size="sm" testid={`leg-area-approve-${a.area}`} disabled={busy || reason.trim().length < 5 || (!!d.sourceCheck && !sourceRead)} title={reason.trim().length < 5 ? 'Önce gerekçe yaz (en az 5 karakter)' : undefined}
+                onClick={() => act(() => call('POST', `/admin/rule-versions/${d.rule!.id}/area-review`, { area: a.area, decision: 'approved', notes: reason.trim(), sourceChecked: sourceRead }), 'Alan incelemesi kaydedildi')}>Bu alanı incelendi olarak onayla</Btn> : null}
               {a.canIReview && !a.approved && open && reason.trim().length < 5 ? <div className="gh-why">Pasif: aşağıdaki gerekçe kutusuna en az 5 karakter yaz.</div> : null}
             </div>)) : <div className="gh-note">Bu kayıt için inceleme alanı henüz seçilmedi.</div>}
 

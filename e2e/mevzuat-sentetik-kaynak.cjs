@@ -4,6 +4,7 @@
  * Adresi resmî olmadığı için sunucu bu kaynaktan gelen her kaydı ÖRNEK sayar.
  *
  *   node e2e/mevzuat-sentetik-kaynak.cjs 8199
+ * item.file (yerel PDF yolu) verilirse yayın HTML yerine o PDF olarak sunulur (taranmış/uzun yayın denemesi).
  * Denetim uçları (yalnız bu yerel süreç): POST /ctl/publish {day,item}, POST /ctl/down {down:true|false}, POST /ctl/consolidated {key,title,articles}
  */
 const http = require('http');
@@ -38,8 +39,14 @@ http.createServer((req, res) => {
     const by = new Map();
     for (const it of items) by.set(it.category, [...(by.get(it.category) ?? []), it]);
     const body = [...by].map(([cat, xs]) => `<div class="card-title html-title" tabindex='0'> YÜRÜTME VE İDARE BÖLÜMÜ </div><div class="html-subtitle" tabindex='0'> ${cat} </div>` +
-      xs.map(x => `<div class="fihrist-item mb-1"><a href="${url.origin}/rg/eskiler/${x.id}.htm" data-modal="True">${x.title}</a></div>`).join('')).join('');
+      xs.map(x => `<div class="fihrist-item mb-1"><a href="${url.origin}/rg/eskiler/${x.id}.${x.file ? 'pdf' : 'htm'}" data-modal="True">${x.title}</a></div>`).join('')).join('');
     return page(res, `<div id="gunluk-akis"><div id="html-content" class="html-content">${body}</div></div>`);
+  }
+  const pdf = /^\/rg\/eskiler\/([\w-]+)\.pdf$/.exec(url.pathname);
+  if (pdf) {
+    const it = [...days.values()].flat().find(x => x.id === pdf[1] && x.file);
+    if (!it) return page(res, 'yok', 404);
+    res.writeHead(200, { 'content-type': 'application/pdf' }); return res.end(require('fs').readFileSync(it.file));
   }
   const det = /^\/rg\/eskiler\/([\w-]+)\.htm$/.exec(url.pathname);
   if (det) {
