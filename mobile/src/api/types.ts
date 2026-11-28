@@ -62,7 +62,7 @@ export type TaskDetail = {
   progress: { complete: boolean; missing: string[]; pending: string[]; nonconforming: string[] };
   measurements: { id: string; quantity: string; value: number; unit: string; within_limit: boolean; measured_at: string; recorded_at: string; calibration_status: string }[];
   evidence: { id: string; kind: string; status: string; body: any; created_at: string; rejection_reason: string | null }[];
-  nonconformity: { id: string; status: string; risk_level: string; depth: string } | null;
+  nonconformity: { id: string; status: string; risk_level: string; depth: string; canOpen?: boolean; ownerName?: string | null } | null;
   statusReason: string | null;
   assignee: { id: string; name: string | null } | null;
   seriesResponsible: { id: string; name: string } | null;

@@ -348,6 +348,14 @@ export function CaseSummary({ n }: { n: NcrDetail }) {
         <Text style={type(13.5, 600, { lh: 1.4 })}>{n.next.what}</Text>
         {n.next.who && n.next.who !== '—' ? <Text style={type(13, 600, { color: C.t2 })}>Kim: {n.next.who}</Text> : null}
       </View>
+      {n.status === 'closed' ? (() => {
+        const by = [...n.verifications].reverse().find(v => v.result === 'effective');
+        return by ? (
+          <Text testID="ncr-closed-by" style={type(13.5, 700, { color: C.lime, lh: 1.45 })}>
+            {`Kapatan: ${by.verified_by_name}${by.verification_mode === 'self' ? ' · ÖZ DOĞRULAMA' : by.verified_via === 'grant' ? ' · dış doğrulayıcı' : ''}${n.closed_at ? ` · ${fmtDateTime(n.closed_at)}` : ''}`}
+          </Text>
+        ) : null;
+      })() : null}
       {n.status !== 'closed' && n.closureMissing.length ? (
         <View testID="ncr-missing" style={{ gap: 3, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
           <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>KAPANIŞ İÇİN EKSİK</Text>

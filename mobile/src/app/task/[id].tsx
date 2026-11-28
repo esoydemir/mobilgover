@@ -86,7 +86,10 @@ export default function TaskDetailRoute() {
           {t.reviewFlag ? <Text style={[type(12, 400, { color: C.warn, lh: 1.45 }), { marginTop: 6 }]}>{t.reviewFlag === 'RULE_WITHDRAWN'
             ? `İnceleme gerekiyor: bu işin kural sürümü geri çekildi${t.rule.statusReason ? ` — ${t.rule.statusReason}` : ''}. Yeni iş açılmayacak; bu işi tamamlamak veya bırakmak için yöneticinle karar ver.`
             : 'İnceleme gerekiyor: kural sürümü değişti.'}</Text> : null}
-          {t.nonconformity ? <PrimaryButton testID="open-ncr" label="Uygunsuzluğu aç" height={44} size={13.5} style={{ marginTop: 12 }} onPress={() => router.push(`/ncr/${t.nonconformity!.id}`)} /> : null}
+          {t.nonconformity && t.nonconformity.canOpen !== false ? <PrimaryButton testID="open-ncr" label="Uygunsuzluğu aç" height={44} size={13.5} style={{ marginTop: 12 }} onPress={() => router.push(`/ncr/${t.nonconformity!.id}`)} /> : null}
+          {t.nonconformity && t.nonconformity.canOpen === false ? (
+            <Text testID="task-ncr-followup" style={[type(13, 600, { color: C.t1, lh: 1.5 }), { marginTop: 10 }]}>{`Bu sonuç için uygunsuzluk açıldı. ${t.nonconformity.ownerName ? `Takip eden: ${t.nonconformity.ownerName}.` : 'Henüz sorumlusu atanmadı; şube yöneticisine haber ver.'} Sana bir adım verilirse görevlerinde görünür.`}</Text>
+          ) : null}
         </Card>
       )}
       {t.status === 'cancelled' || t.status === 'missed' ? <ErrorBox message={t.status === 'cancelled' ? `Bu görev iptal edildi${t.statusReason ? `: ${t.statusReason}` : '.'}` : 'Bu görevin süresi geçti.'} /> : null}

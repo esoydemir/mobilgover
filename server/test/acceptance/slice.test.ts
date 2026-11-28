@@ -148,6 +148,11 @@ describe('tasks', () => {
     expect(r.body.outcome).toBe('nonconforming');
     ncrId = r.body.nonconformityId;
     expect(ncrId).toBeTruthy();
+    // The task never offers a case its reader cannot open: it says whether it opens and who follows it up.
+    const seen = (await staff().get(`${C()}/tasks/${fridgeTaskId}`)).body.nonconformity;
+    expect(seen.canOpen).toBe((await staff().get(`${C()}/nonconformities/${ncrId}`)).status === 200);
+    expect((await owner().get(`${C()}/tasks/${fridgeTaskId}`)).body.nonconformity.canOpen).toBe(true);
+    expect(seen).toHaveProperty('ownerName');
 
     // The offline queue resends the same operation: same answer, no second write.
     const again = await staff().post(`${C()}/tasks/${fridgeTaskId}/complete`, body, key);

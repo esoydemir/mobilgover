@@ -8,7 +8,7 @@ export const LIGHT = {
   t1: '#171B12', t2: '#454B3D', t3: '#5C6353',
   bd: '#E0E3D8', bds: '#C6CBBB', track: '#E4E7DC', ringIdle: '#A9B09C',
   crit: '#B0231A', warn: '#7F4F00', info: '#175A99',
-  glass: 'rgba(252,253,249,0.74)', shadow: 'rgba(32,40,20,0.14)',
+  glass: 'rgba(252,253,249,0.91)', shadow: 'rgba(32,40,20,0.14)',
 } as const;
 export type ColorName = keyof typeof LIGHT;
 export const DARK: Record<ColorName, string> = {
@@ -17,5 +17,5 @@ export const DARK: Record<ColorName, string> = {
   t1: '#F2F4EC', t2: '#C2C8B8', t3: '#9AA18E',
   bd: '#2A2F24', bds: '#3D4434', track: '#2B3025', ringIdle: '#5B6350',
   crit: '#FF958C', warn: '#F7C455', info: '#93C6F6',
-  glass: 'rgba(22,25,19,0.72)', shadow: 'rgba(0,0,0,0.45)',
+  glass: 'rgba(22,25,19,0.90)', shadow: 'rgba(0,0,0,0.45)',
 };
