@@ -57,6 +57,9 @@ describe('one look at a case', () => {
     expect(d.next).toMatchObject({ stage: 'cause', who: expect.stringContaining('Selin'), mine: true });
     // Staff who have no part in the case do not see it at all.
     expect((await staff().get(N())).status).toBe(404);
+    const tid = (await env.ownerDb.query(`SELECT task_id FROM nonconformities WHERE id = $1`, [ncr])).rows[0].task_id;
+    const t = await staff().get(`${C()}/tasks/${tid}`);
+    if (t.status === 200) expect(t.body.nonconformity).toMatchObject({ canOpen: false, ownerName: expect.stringContaining('Selin') });
   });
 
   it('several causes give several suggestions; one is set aside with a reason, kept in the history', async () => {

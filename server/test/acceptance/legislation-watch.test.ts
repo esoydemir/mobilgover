@@ -416,3 +416,22 @@ describe('scan serialisation', () => {
     expect([a, b].filter((x: any) => x.skipped).length).toBeLessThanOrEqual(1);
   });
 });
+
+describe('a publication the machine could not read', () => {
+  it('is area-approved only with a declaration that the official file was read; the declaration is recorded and no task exists before approval', async () => {
+    const id = (await env.ownerDb.query(
+      `INSERT INTO legislation_changes (source_code, external_key, change_type, doc_ref, doc_title, source_url, date_status, published_on, effective_from, is_example, suggestion, detected_at)
+       VALUES ('resmi_gazete', 'unread-1', 'new_publication', 'SENT-OKUNAMADI', 'Sentetik uzun yayın', 'https://sentetik.test/uzun.pdf', 'known', $1, $1, true, '{"readMethod":"not_read"}', now()) RETURNING id`, [today])).rows[0].id;
+    expect((await author().putJson(`/admin/legislation/changes/${id}/proposal`, proposal('EX-LEG-UNREAD'))).status).toBe(200);
+    const prep = await author().post(`/admin/legislation/changes/${id}/prepare`);
+    expect(prep.status).toBe(200);
+    const review = (extra: Record<string, unknown>) => specialist().post(`/admin/rule-versions/${prep.body.ruleVersionId}/area-review`, { area: 'food_safety', decision: 'approved', notes: 'Sentetik: resmî dosya okundu.', ...extra });
+    expect((await review({})).body.error.code).toBe('SOURCE_NOT_CHECKED');
+    expect((await reviewer().get(`/admin/legislation/changes/${id}`)).body.sourceCheck).toEqual({ method: 'not_read', checked: null });
+    expect((await reviewer().post(`/admin/legislation/changes/${id}/approve`, { reason: 'Alan incelemesi yok' })).body.error.code).toBe('AREA_REVIEW_MISSING');
+    expect(await tasksOf('EX-LEG-UNREAD')).toBe(0);
+    expect((await review({ sourceChecked: true })).status).toBe(200);
+    expect((await reviewer().get(`/admin/legislation/changes/${id}`)).body.sourceCheck.checked.by).toBeTruthy();
+    expect(await tasksOf('EX-LEG-UNREAD')).toBe(0);
+  });
+});

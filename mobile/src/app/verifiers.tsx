@@ -84,7 +84,7 @@ export default function VerifiersRoute() {
           {[7, 30, 90].map(d => <FilterChip key={d} testID={`verifier-days-${d}`} label={`${d} gün`} px={12} active={days === d} onPress={() => setDays(d)} />)}
         </View>
         {records ? null : <Tap testID="verifier-documents" onPress={() => setDocuments(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-          <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: documents ? C.lime : C.t3, backgroundColor: documents ? C.lime : 'transparent' }} />
+          <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: documents ? C.lime : C.t3, backgroundColor: documents ? C.accent : 'transparent' }} />
           <Text style={[type(12.5, 500), { flex: 1 }]}>Belge kasasında kurum içi inceleme de yapabilsin</Text>
         </Tap>}
         <Field label="Neden davet ediyorsun?" testID="verifier-note" value={note} onChangeText={setNote} multiline placeholder="ör. Tek yöneticiliyiz; yüksek riskli kayıtların bağımsız doğrulaması için." />

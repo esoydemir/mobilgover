@@ -183,16 +183,19 @@ async function compareSites(tx: Tx, p: Principal, companyId: string, sites: { id
     const overdue = open.length ? (await tx.query<{ n: number }>(`SELECT count(*)::int AS n FROM ncr_actions WHERE ncr_id = ANY($1) AND status = 'open' AND due_at < now()`, [open.map(n => n.id)])).rows[0]!.n : 0;
     const rep = await repeatCandidates(tx, cases, f);
     const closedDur = cases.filter(n => n.closed_at && inRange(n.detected_at, f)).map(n => days(n.detected_at, n.closed_at));
-    // "Checked and fine" is not the same as "not checked yet": a branch with no cases may simply have skipped its checks. Only tasks already due count.
+    // "Checked and fine" is not the same as "not checked yet": a branch with no cases may simply have skipped its checks.
+    // Counted: tasks already due, checks done early, and (separately) today's checks that are still waiting for their hour.
     const since = f.from ?? new Date(Date.now() - 30 * 86400_000).toISOString();
-    const c = (await tx.query<{ ok: number; bad: number; open_late: number; missed: number }>(
+    const c = (await tx.query<{ ok: number; bad: number; open_late: number; missed: number; pending: number }>(
       `SELECT count(*) FILTER (WHERE status = 'done' AND outcome = 'conforming')::int AS ok, count(*) FILTER (WHERE status = 'done' AND outcome = 'nonconforming')::int AS bad,
-              count(*) FILTER (WHERE status = 'open' AND due_at < now())::int AS open_late, count(*) FILTER (WHERE status = 'missed')::int AS missed
-         FROM tasks WHERE company_id = $1 AND site_id = $2 AND due_at < now() AND due_at >= $3 AND status <> 'cancelled'`, [companyId, s.id, since])).rows[0]!;
+              count(*) FILTER (WHERE status = 'open' AND due_at < now())::int AS open_late, count(*) FILTER (WHERE status = 'missed')::int AS missed,
+              count(*) FILTER (WHERE status = 'open' AND due_at >= now())::int AS pending
+         FROM tasks WHERE company_id = $1 AND site_id = $2 AND due_at >= $3 AND status <> 'cancelled'
+          AND (status = 'done' OR due_at < (date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + interval '1 day') AT TIME ZONE 'Europe/Istanbul')`, [companyId, s.id, since])).rows[0]!;
     const notChecked = c.open_late + c.missed, due = c.ok + c.bad + notChecked;
     // A site that never answered its profile has no checks generated at all: that is "unknown", not "nothing to check".
     const waitingInfo = (await currentObligations(tx, companyId, s.id)).filter((o: any) => o.decision === 'needs_info').length;
-    out.push({ controls: { checkedOk: c.ok, checkedNonconforming: c.bad, notChecked, due, since, waitingInfo }, siteId: s.id, site: s.name, critical: open.filter(n => n.risk_level === 'critical' || n.risk_level === 'high').length, overdueActions: overdue,
+    out.push({ controls: { checkedOk: c.ok, checkedNonconforming: c.bad, notChecked, due, pendingToday: c.pending, since, waitingInfo }, siteId: s.id, site: s.name, critical: open.filter(n => n.risk_level === 'critical' || n.risk_level === 'high').length, overdueActions: overdue,
       awaitingVerification: open.filter(n => n.status === 'awaiting_verification').length, repeats: rep.list.length,
       openDaysMedian: median(closedDur), closedCount: closedDur.length });
   }

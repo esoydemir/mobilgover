@@ -16,6 +16,7 @@ const artTr = (id: string) => (/^G\d/.test(id) ? `geçici md. ${id.slice(1)}` : 
 type Impact = { outOfScopeSample?: { company: string; site: string; reason: string }[]; onDate: string; affectedSites: number; notifiedSites: number; outOfScopeSites: number; openTasksAffected: number;
   sites: { siteId: string; site: string; company: string; plannedText?: string; missingQuestions?: { key: string; label: string }[]; plannedTasks?: { code: string; title: string; dueAt: string[]; firstDue: string | null; unset: boolean; notes?: unknown; upcoming?: string[] }[]; from: string | null; to: string; effect: string; reason: string; openTasks: number; openTaskEffect: string; notify: boolean; missingFacts: string[] }[] };
 type Detail = {
+  sourceCheck?: { method: string; checked: { by: string | null; at: string } | null } | null;
   id: string; status: string; changeType: string; typeLabel: string; docRef: string; docTitle: string; articleRef: string | null; sourceUrl: string; sourceCode: string; publishedOn: string | null; effectiveFrom: string | null;
   dateStatus: 'known' | 'unclear'; dateNote: string | null; oldText: string | null; newText: string | null; suggestion: { relevance?: string; sectors?: string[]; matchLevel?: 'clear' | 'uncertain'; addedWords?: string[]; removedWords?: string[]; changedNumbers?: { from: string[]; to: string[] };
     effectiveDetail?: { general: { articleIds: string[]; clause: string | null }; transitional: { articleId: string; dates: string[]; sentence: string }[]; scope: { articleId: string; text: string } | null } } | null;
@@ -40,7 +41,7 @@ const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 const EFFECT: Record<string, [string, string]> = { new_obligation: ['YENİ YÜKÜMLÜLÜK', C.lime], version_change: ['KURAL SÜRÜMÜ DEĞİŞİR', C.info], ended: ['YÜKÜMLÜLÜK SONA ERER', C.warn], needs_info: ['BİLGİ EKSİK', C.warn] };
 const EVENT_TR: Record<string, string> = {
   'legislation.detected': 'Taramada bulundu', 'legislation.date_resolved': 'Yürürlük tarihi belirlendi', 'legislation.proposal_saved': 'Öneri yazıldı/güncellendi', 'legislation.drafted': 'Kural taslağı hazırlandı',
-  'legislation.approved': 'Onaylandı', 'legislation.assigned': 'Dosya atandı', 'legislation.unassigned': 'Atama kaldırıldı', 'legislation.returned': 'Gerekçeyle iade edildi', 'platform.area_granted': 'İnceleme alanı yetkisi verildi', 'platform.area_revoked': 'İnceleme alanı yetkisi alındı', 'legislation.rejected': 'Reddedildi', 'legislation.applied': 'Yürürlük gününde uygulandı',
+  'legislation.source_checked': 'Özgün kaynağı incelediğini beyan etti', 'legislation.approved': 'Onaylandı', 'legislation.assigned': 'Dosya atandı', 'legislation.unassigned': 'Atama kaldırıldı', 'legislation.returned': 'Gerekçeyle iade edildi', 'platform.area_granted': 'İnceleme alanı yetkisi verildi', 'platform.area_revoked': 'İnceleme alanı yetkisi alındı', 'legislation.rejected': 'Reddedildi', 'legislation.applied': 'Yürürlük gününde uygulandı',
 };
 
 /** One detected change: old/new text, source, proposed rule change, impact preview, and the approve/reject decision with a reason. */
@@ -51,6 +52,7 @@ export function LegislationDetail({ id, embedded = false, onChanged }: { id: str
   const d = q.data;
   const [error, setError] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const [sourceRead, setSourceRead] = useState(false);
   const [dateIn, setDateIn] = useState('');
   const [dateNote, setDateNote] = useState('');
   const [target, setTarget] = useState('');
@@ -89,7 +91,7 @@ export function LegislationDetail({ id, embedded = false, onChanged }: { id: str
   const open = ['pending', 'drafted'].includes(d.status);
   const decision = open && d.cannot ? (
     <Card testID="leg-decision" style={{ gap: 8, borderRadius: embedded ? 14 : undefined }}>
-      <Text style={type(10.5, 700, { ls: 0.06, color: C.t3 })}>KARAR · {(d.nextInLine ?? '').toUpperCase()}</Text>
+      <Text style={type(10.5, 700, { ls: 0.06, color: C.t3 })}>KARAR · {(d.nextInLine ?? '').toLocaleUpperCase('tr')}</Text>
       <Field testID="leg-reason" label="Gerekçe (iade, onay ve ret için zorunlu)" value={reason} onChangeText={setReason} placeholder="ör. Resmî kaynak okundu; kapsam LPG kullanan kafeler" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <View style={{ flexBasis: 150, flexGrow: 1, gap: 3, opacity: 1 }}>
@@ -281,10 +283,11 @@ export function LegislationDetail({ id, embedded = false, onChanged }: { id: str
                 <Text style={type(12.5, 600)}>{a.area} · {a.approved ? 'incelendi' : a.waiting ? 'kuyrukta bekliyor' : 'inceleme bekliyor'}</Text>
                 <Text style={type(11.5, 400, { color: a.waiting ? C.warn : C.t2, lh: 1.4 })}>{a.waiting ?? `Tanımlı inceleyici: ${a.names.join(', ')}`}</Text>
                 <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>Bu hesap: {a.myAccess}</Text>
+                {!a.approved && a.canIReview && d.sourceCheck ? <GhostButton testID="leg-source-checked" label={sourceRead ? '● Resmî kaynağı açtım, tamamını inceledim' : '○ Resmî kaynağı açtım, tamamını inceledim'} height={38} size={12} onPress={() => setSourceRead(v => !v)} /> : null}
                 {!a.approved && a.canIReview && d.rule ? (
-                  <GhostButton testID={`leg-area-approve-${a.area}`} label={`${a.area} alanını incelendi olarak onayla`} height={38} size={12} disabled={reason.trim().length < 5}
-                    why={reason.trim().length < 5 ? 'Karar bölümündeki gerekçe kutusuna en az 5 karakter yaz.' : undefined}
-                    onPress={() => act(() => call('POST', `/admin/rule-versions/${d.rule!.id}/area-review`, { area: a.area, decision: 'approved', notes: reason.trim() }), 'Alan incelemesi kaydedildi', a.area)} />
+                  <GhostButton testID={`leg-area-approve-${a.area}`} label={`${a.area} alanını incelendi olarak onayla`} height={38} size={12} disabled={reason.trim().length < 5 || (!!d.sourceCheck && !sourceRead)}
+                    why={d.sourceCheck && !sourceRead ? 'Bu yayın makineyle okunamadı: önce resmî kaynağı incelediğini işaretle.' : reason.trim().length < 5 ? 'Karar bölümündeki gerekçe kutusuna en az 5 karakter yaz.' : undefined}
+                    onPress={() => act(() => call('POST', `/admin/rule-versions/${d.rule!.id}/area-review`, { area: a.area, decision: 'approved', notes: reason.trim(), sourceChecked: sourceRead }), 'Alan incelemesi kaydedildi', a.area)} />
                 ) : null}
               </View>
             ))}

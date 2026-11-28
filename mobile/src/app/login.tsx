@@ -3,7 +3,6 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, errorText } from '../api/client';
 import { useSession } from '../api/session';
-import { GradientFill } from '../components/Gradient';
 import { EnvBadge } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
 import { GhostButton, PrimaryButton } from '../components/ui';
@@ -29,16 +28,15 @@ export default function LoginRoute() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 48, paddingHorizontal: 22, paddingBottom: 40, gap: 16 }} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ width: 52, height: 52, borderRadius: 17, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
-            <GradientFill angle={150} stops={[[0, C.lime], [1, '#9BD718']]} />
-            <Text style={type(24, 800, { family: 'outfit', color: C.ink })}>G</Text>
+          <View style={{ width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: C.accent }}>
+            <Text style={type(24, 800, { color: C.ink })}>G</Text>
           </View>
           <View style={{ gap: 4 }}>
-            <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>GoverHub</Text>
+            <Text style={type(22, 600, { ls: -0.03 })}>GoverHub</Text>
             <EnvBadge />
           </View>
         </View>
-        <Text style={[type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.12 }), { marginTop: 14 }]}>
+        <Text style={[type(22, 700, { ls: -0.02, lh: 1.2 }), { marginTop: 14 }]}>
           {step === 'email' ? 'E-posta ile giriş' : step === 'code' ? 'Kodu gir' : 'Kimlik doğrulayıcı kodu'}
         </Text>
         <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>

@@ -101,6 +101,24 @@ describe('board', () => {
     expect(b.controls).toMatchObject({ checkedOk: 0, notChecked: 0, due: 0, waitingInfo: expect.any(Number) }); // nothing due there: neither "fine" nor "missed"
   });
 
+  it('HQ comparison: a check done before its hour counts, an unfinished one of today shows as pending (not late)', async () => {
+    const S = demo.siteId;
+    const controls = async () => (await owner().get(`${C()}/board`)).body.comparison.sites.find((x: any) => x.siteId === S).controls;
+    await env.db.system(tx => topUpSite(tx, demo.companyId, S, 30));
+    await env.ownerDb.query(`UPDATE tasks SET due_at = now() + interval '5 days' WHERE company_id = $1 AND site_id = $2 AND status = 'open'`, [demo.companyId, S]);
+    const open = (await env.ownerDb.query(`SELECT id FROM tasks WHERE company_id = $1 AND site_id = $2 AND status = 'open' ORDER BY created_at LIMIT 2`, [demo.companyId, S])).rows.map(r => r.id as string);
+    expect(open.length).toBe(2);
+    const before = await controls();
+    // Both are due at the end of today (Istanbul); one is already done, the other still waits.
+    await env.ownerDb.query(`UPDATE tasks SET due_at = ((date_trunc('day', now() AT TIME ZONE 'Europe/Istanbul') + interval '1 day') AT TIME ZONE 'Europe/Istanbul') - interval '1 millisecond' WHERE id = ANY($1)`, [open]);
+    await env.ownerDb.query(`UPDATE tasks SET status = 'done', outcome = 'conforming', completed_by = $2, completed_at = now() WHERE id = $1`, [open[0], demo.users.owner.id]);
+    const after = await controls();
+    expect(after.checkedOk).toBe(before.checkedOk + 1);
+    expect(after.due).toBe(before.due + 1);
+    expect(after.notChecked).toBe(before.notChecked);
+    expect(after.pendingToday).toBe(before.pendingToday + 1);
+  });
+
   it('filters: site, topic, equipment, responsible, dates', async () => {
     expect((await owner().get(`${C()}/board?siteId=${site2}`)).body.sections.critical.map((x: any) => x.id)).toEqual([Cc]);
     expect((await owner().get(`${C()}/board?siteId=${site2}`)).body.comparison).toBeNull();

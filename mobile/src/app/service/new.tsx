@@ -130,7 +130,7 @@ export default function NewServiceRoute() {
         <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>{params.providerId ? 'Davet ettiğin uzman' : 'Onaylı uzmanlar'} yalnızca başlığı, açıklamanı, şehri ve kategoriyi görür. İşletme ve şube adı ancak bir teklifi kabul edince o uzmana açılır. Görevlerin, kanıtların, ekibin ve diğer kayıtların hiçbir uzmana açılmaz.</Text>
         {params.ncrId ? (
           <Tap testID="svc-share-ncr" onPress={() => setShareNcr(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-            <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: shareNcr ? C.lime : C.t3, backgroundColor: shareNcr ? C.lime : 'transparent' }} />
+            <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: shareNcr ? C.lime : C.t3, backgroundColor: shareNcr ? C.accent : 'transparent' }} />
             <Text style={[type(12.5, 500), { flex: 1 }]}>Uygunsuzluğun başlığını, risk seviyesini ve türünü de paylaş (açıklama, notlar ve fotoğraflar paylaşılmaz)</Text>
           </Tap>
         ) : null}

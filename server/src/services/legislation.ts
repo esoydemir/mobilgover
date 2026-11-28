@@ -1,3 +1,4 @@
+import { statusText } from '../domain/status-text';
 import { createHash } from 'node:crypto';
 import type { Db, Tx } from '../db/pool';
 import { decide } from '../domain/applicability';
@@ -311,7 +312,7 @@ export async function assigneeCandidates(tx: Tx, p: Principal, id: string) {
 export async function assignChange(tx: Tx, p: Principal, id: string, b: { userId: string | null; reason: string }) {
   if (!has(p, 'platform_admin')) throw forbidden('Atamayı yalnız platform yöneticisi yapar.');
   const c = await loadChange(tx, id, true);
-  if (!['pending', 'drafted'].includes(c.status)) throw conflict('INVALID_STATE', `Kayıt ${c.status} durumunda; atama yapılamaz.`);
+  if (!['pending', 'drafted'].includes(c.status)) throw conflict('INVALID_STATE', `Kayıt "${statusText(c.status)}" durumunda; atama yapılamaz.`);
   const why = (b.reason ?? '').trim(); if (why.length < 5) throw invalid('Atama gerekçesini yaz (en az 5 karakter).');
   let name: string | null = null; let areas: string[] = [];
   if (b.userId) {
@@ -499,6 +500,9 @@ export async function getChange(tx: Tx, p: Principal, id: string, now = new Date
     proposal: c.proposal, proposalBy: c.proposal_by, rule, missingAreaReviews: missingAreas,
     approveReason: c.approve_reason, rejectReason: c.reject_reason, applyOn: c.apply_on, appliedAt: c.applied_at, applyResult: c.apply_result, detectedAt: c.detected_at,
     impact, impactNote, history, publishedRules: published, blockers, frequency, reviewAreas,
+    // Set only when the machine could not read the publication reliably: who declared having read the official file.
+    sourceCheck: ['not_read', 'ocr_pdf'].includes(c.suggestion?.readMethod) ? { method: c.suggestion.readMethod as string,
+      checked: history.filter(h => h.event_type === 'legislation.source_checked').map(h => ({ by: h.actor as string | null, at: h.occurred_at })).at(-1) ?? null } : null,
     assignment: c.assigned_to ? { userId: c.assigned_to, name: asg?.name ?? null, at: c.assigned_at, note: c.assign_note } : null,
     compare: { hasOld: !!c.old_text, note: c.old_text ? null : c.change_type === 'new_publication' ? 'Yeni yayın: karşılaştırılacak bir eski metin yok; metin olduğu gibi okunur.' : 'Eski metin yok: bu kaynak ilk okumada yalnız karşılaştırma TABANI olarak kaydedildi; sonraki okumadaki farklar bu tabana göre gösterilir.' },
     cannot: cannotReasons(p, c, rule, blockers, reviewAreas.required),
@@ -518,22 +522,22 @@ export async function getChange(tx: Tx, p: Principal, id: string, now = new Date
 function cannotReasons(p: Principal, c: any, rule: any, blockers: string[], areas: { area: string; approved: boolean; waiting: string | null }[]) {
   const r: Record<string, string | null> = { prepare: null, approve: null, reject: null, return: null, assign: null };
   if (!has(p, 'rule_author')) r.prepare = 'Taslağı yalnız kural yazarı hazırlar; bu hesabın kural yazarı rolü yok.';
-  else if (c.status !== 'pending') r.prepare = c.status === 'drafted' ? 'Taslak zaten hazırlanmış.' : `Kayıt "${c.status}" durumunda.`;
+  else if (c.status !== 'pending') r.prepare = c.status === 'drafted' ? 'Taslak zaten hazırlanmış.' : `Kayıt "${statusText(c.status)}" durumunda.`;
   else if (c.date_status === 'unclear') r.prepare = 'Yürürlük tarihi belirsiz: önce bir yönetici tarihi çözmeli.';
   else if (!c.proposal) r.prepare = 'Önce önerilen kural değişikliğini yazıp kaydet.';
   else if (!(c.proposal.requiredReviewAreas ?? []).length) r.prepare = 'İnceleme alanı seçilmedi.';
   if (!has(p, 'rule_reviewer')) r.approve = 'Onayı yalnız kural onaylayıcısı verir; bu hesabın onaylayıcı rolü yok.';
-  else if (c.status !== 'drafted') r.approve = c.status === 'pending' ? 'Önce kural taslağı hazırlanıp inceleme alanı onayını almalı.' : `Kayıt "${c.status}" durumunda.`;
+  else if (c.status !== 'drafted') r.approve = c.status === 'pending' ? 'Önce kural taslağı hazırlanıp inceleme alanı onayını almalı.' : `Kayıt "${statusText(c.status)}" durumunda.`;
   else if (rule && rule.author_id === p.userId) r.approve = 'Taslağı sen yazdın; onayı başka bir onaylayıcı verir.';
   else if (areas.some(a => !a.approved)) r.approve = `Alan incelemesi bekleniyor: ${areas.filter(a => !a.approved).map(a => a.area).join(', ')}${areas.some(a => !a.approved && a.waiting) ? ' (tanımlı inceleyici yok)' : ''}.`;
   else if (c.date_status === 'unclear') r.approve = 'Yürürlük tarihi belirsiz.';
   else if (blockers.some(b => /sıklığı belirlenmedi/.test(b))) r.approve = 'Tekrar sıklığı belirlenmedi: sıklık seçilmeden onaylanamaz.';
   if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) r.reject = 'Reddetme yetkin yok.';
-  else if (!['pending', 'drafted'].includes(c.status)) r.reject = `Kayıt "${c.status}" durumunda.`;
+  else if (!['pending', 'drafted'].includes(c.status)) r.reject = `Kayıt "${statusText(c.status)}" durumunda.`;
   if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) r.return = 'İade yetkin yok.';
   else if (c.status !== 'drafted') r.return = 'İade yalnız hazırlanmış taslak için.';
   if (!has(p, 'platform_admin')) r.assign = 'Atamayı yalnız platform yöneticisi yapar.';
-  else if (!['pending', 'drafted'].includes(c.status)) r.assign = `Kayıt "${c.status}" durumunda; atama yapılamaz.`;
+  else if (!['pending', 'drafted'].includes(c.status)) r.assign = `Kayıt "${statusText(c.status)}" durumunda; atama yapılamaz.`;
   return r;
 }
 function nextInLine(c: any, rule: any, areas: { area: string; approved: boolean; waiting: string | null; names: string[] }[], assignee: string | null): string {
@@ -641,7 +645,7 @@ export async function reject(tx: Tx, p: Principal, id: string, reason: string | 
   if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) throw forbidden('Reddetme yetkin yok.');
   const why = needReason(reason, 'Öneriyi reddetmek');
   const c = await loadChange(tx, id, true);
-  if (!['pending', 'drafted'].includes(c.status)) throw conflict('INVALID_STATE', `Kayıt ${c.status} durumunda; reddedilemez.`);
+  if (!['pending', 'drafted'].includes(c.status)) throw conflict('INVALID_STATE', `Kayıt "${statusText(c.status)}" durumunda; reddedilemez.`);
   if (c.rule_version_id) await tx.query(`UPDATE rule_versions SET status = 'draft' WHERE id = $1 AND status = 'in_review'`, [c.rule_version_id]);
   await tx.query(`UPDATE legislation_changes SET status = 'rejected', rejected_by = $2, rejected_at = now(), reject_reason = $3 WHERE id = $1`, [id, p.userId, why]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'legislation.rejected', entityType: 'legislation_change', entityId: id, payload: { docRef: c.doc_ref, article: c.article_ref, reason: why, ruleVersionId: c.rule_version_id } });

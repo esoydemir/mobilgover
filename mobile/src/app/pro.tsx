@@ -62,7 +62,7 @@ function PublicProfile({ id }: { id: string }) {
 function ProfileCard({ v }: { v: ProfileView }) {
   return (
     <>
-      <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{v.profile.display_name}</Text>
+      <Text style={type(22, 700, { ls: -0.02 })}>{v.profile.display_name}</Text>
       <Text style={type(13, 400, { color: C.t2 })}>{[v.profile.headline, v.profile.city, v.profile.district].filter(Boolean).join(' · ')}</Text>
       <Card>
         <Eyebrow>HAKKINDA · HİZMET BÖLGESİ</Eyebrow>
@@ -163,11 +163,9 @@ function MyProfessionalArea() {
   const credentialTypes = [...new Set((cats.data ?? []).flatMap(c => c.required_credentials))];
   const requested = new Map([...me.data.authorizedCategories.map(a => [a.category_code, 'approved'] as const), ...me.data.otherCategoryRequests.map(a => [a.category_code, a.status] as const)]);
 
-  return (
-    <Screen title="Uzman alanı" titleEn="Professional" onRefresh={() => { void me.reload(); void inbox.reload(); }} refreshing={me.loading}>
-      {companies.length === 0 ? <Invitations onAccepted={() => goRoot('/')} /> : null}
+  const profile = (
+    <>
       <ProfileCard v={me.data} />
-      {error ? <ErrorBox message={error} /> : null}
 
       <SectionLabel>DOĞRULAMA İÇİN BELGE GÖNDER</SectionLabel>
       <Card style={{ gap: 10 }}>
@@ -208,13 +206,18 @@ function MyProfessionalArea() {
               {c.is_example ? <ExampleBadge label="ÖRNEK" /> : null}
             </View>
             <Text style={type(11.5, 400, { color: C.t3 })}>Gerekli: {c.required_credentials.map(credentialLabel).join(', ') || '—'} + doğrulanmış kimlik</Text>
-            {st ? <Pill label={st === 'approved' ? 'ONAYLI' : st === 'pending' ? 'İNCELEMEDE' : st === 'expired' ? 'SÜRESİ DOLDU' : st === 'rejected' ? 'REDDEDİLDİ' : st === 'suspended' ? 'ASKIDA' : st.toUpperCase()} fg={st === 'approved' ? C.lime : st === 'pending' ? C.warn : C.crit} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
+            {st ? <Pill label={st === 'approved' ? 'ONAYLI' : st === 'pending' ? 'İNCELEMEDE' : st === 'expired' ? 'SÜRESİ DOLDU' : st === 'rejected' ? 'REDDEDİLDİ' : st === 'suspended' ? 'ASKIDA' : st.toLocaleUpperCase('tr')} fg={st === 'approved' ? C.lime : st === 'pending' ? C.warn : C.crit} bg={tint.white(0.06)} style={{ alignSelf: 'flex-start' }} />
               : <GhostButton testID={`auth-${c.code}`} label="Bu kategori için başvur" height={38} size={12.5} onPress={() => act(() => call('POST', '/pro/authorizations', { categoryCode: c.code }), 'Başvuru gönderildi')} />}
           </Card>
         );
       })}
 
-      {me.data ? <ProNotifications onChange={() => inbox.reload()} /> : null}
+    </>
+  );
+  const work = (
+    <>
+      {/* Sırası uzmanda olan iş varsa önce o; bildirim geçmişi işlerin altında. */}
+      {(inbox.data?.jobs ?? []).some(myTurn) ? <><SectionLabel>SIRA SENDE</SectionLabel>{inbox.data!.jobs.filter(myTurn).map(j => <JobCard key={j.id} j={j} onDone={() => inbox.reload()} />)}</> : null}
       <SectionLabel>AÇIK TALEPLER (ONAYLI KATEGORİLERİNDE)</SectionLabel>
       {inbox.data?.requests.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Şu an açık talep yok. Talepler yalnızca onaylı olduğun kategorilerde görünür; işletme adı teklifin kabul edilince görünür.</Text> : null}
       {(inbox.data?.requests ?? []).map(r => <RequestCard key={r.id} r={r} onDone={() => inbox.reload()} />)}
@@ -222,7 +225,17 @@ function MyProfessionalArea() {
       <SectionLabel>İŞLERİM</SectionLabel>
       {inbox.data && inbox.data.jobs.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz işin yok. Teklifin kabul edilince iş burada görünür.</Text> : null}
       <ProCalendar />
-      {(inbox.data?.jobs ?? []).map(j => <JobCard key={j.id} j={j} onDone={() => inbox.reload()} />)}
+      {(inbox.data?.jobs ?? []).filter(j => !myTurn(j)).map(j => <JobCard key={j.id} j={j} onDone={() => inbox.reload()} />)}
+      {me.data ? <ProNotifications onChange={() => inbox.reload()} /> : null}
+    </>
+  );
+
+  return (
+    <Screen title="Uzman alanı" titleEn="Professional" onRefresh={() => { void me.reload(); void inbox.reload(); }} refreshing={me.loading}>
+      {companies.length === 0 ? <Invitations onAccepted={() => goRoot('/')} /> : null}
+      {error ? <ErrorBox message={error} /> : null}
+      {/* Onaylı uzman önce sıradaki işini görür; onayı olmayan önce profilini ve belgelerini. */}
+      {me.data.authorizedCategories.length > 0 ? <>{work}{profile}</> : <>{profile}{work}</>}
       {companies.length === 0 ? <GhostButton testID="pro-to-setup" label="Kendi işletmemi de kurmak istiyorum" onPress={() => router.push('/setup')} /> : null}
     </Screen>
   );
@@ -237,7 +250,7 @@ function RequestCard({ r, onDone }: { r: Inbox['requests'][number]; onDone: () =
   const set = (k: keyof typeof f) => (v: string) => setF(x => ({ ...x, [k]: v }));
   return (
     <View testID={`pro-req-${r.id}`}><Card style={{ gap: 8 }}>
-      <Text style={type(11, 600, { ls: 0.08, color: C.t3 })}>{r.category_name.toUpperCase()} · {r.city} · {fmtDateTime(r.created_at)}</Text>
+      <Text style={type(11, 600, { ls: 0.08, color: C.t3 })}>{r.category_name.toLocaleUpperCase('tr')} · {r.city} · {fmtDateTime(r.created_at)}</Text>
       <Text style={type(14.5, 600)}>{r.title}</Text>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{r.description}</Text>
       {r.shared_ncr ? <Text style={type(12, 500, { color: C.warn, lh: 1.45 })}>İşletmenin paylaştığı uygunsuzluk: {r.shared_ncr.title} · risk {RISK_LABEL[r.shared_ncr.riskLevel] ?? r.shared_ncr.riskLevel}</Text> : null}
@@ -291,6 +304,8 @@ function ProCalendar() {
   );
 }
 
+const myTurn = (j: Inbox['jobs'][number]) => ['scheduled', 'checked_in', 'revision_requested'].includes(j.status);
+
 function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }) {
   const { call, token } = useSession();
   const [code, setCode] = useState('');
@@ -323,7 +338,6 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
   return (
     <View testID={`pro-job-${j.id}`}><Card border={j.status === 'accepted' ? tint.lime(0.3) : C.bd} style={{ gap: 8 }}>
       {j.status === 'scheduled' ? <AppointmentCard provider jobId={j.id} editable /> : null}
-      <ComplaintCard provider jobId={j.id} />
       <Text style={type(14.5, 600)}>{j.title}</Text>
       <Text style={type(12, 400, { color: C.t2 })}>{j.company_name} · {j.site_name}</Text>
       <Text testID="pro-job-status" style={type(12, 600, { color: j.status === 'accepted' ? C.lime : C.warn })}>{({ scheduled: 'Planlandı', checked_in: 'Giriş yapıldı', report_submitted: 'Rapor gönderildi, teslim kabulü bekleniyor', accepted: 'İşletme teslim kabul etti', disputed: 'İşletme itiraz etti', revision_requested: 'İşletme revizyon istedi: yeni rapor gönder', cancelled: 'İşletme işi iptal etti' } as Record<string, string>)[j.status] ?? j.status}</Text>
@@ -345,6 +359,7 @@ function JobCard({ j, onDone }: { j: Inbox['jobs'][number]; onDone: () => void }
       {j.business_note ? <Text style={type(12, 400, { color: C.t2 })}>İşletmenin notu: {j.business_note}</Text> : null}
       {j.cancel_reason ? <Text style={type(12, 500, { color: C.crit })}>İptal gerekçesi: {j.cancel_reason}</Text> : null}
       {error ? <ErrorBox message={error} /> : null}
+      <ComplaintCard provider jobId={j.id} />
     </Card></View>
   );
 }

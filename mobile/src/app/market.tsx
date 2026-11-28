@@ -65,7 +65,7 @@ function Experts() {
       {current ? (
         <Card style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Eyebrow>{current.name.toUpperCase()}</Eyebrow>
+            <Eyebrow>{current.name.toLocaleUpperCase('tr')}</Eyebrow>
             {current.is_example ? <ExampleBadge /> : null}
           </View>
           <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>{current.description}</Text>
@@ -76,9 +76,9 @@ function Experts() {
       {cat && !providers.data && providers.loading ? <Loading /> : null}
       {cat && providers.data?.length === 0 ? <Empty title="Bu kategoride henüz onaylı uzman yok" body="Talep yine de açılabilir; onaylı bir uzman çıkınca bildirim alır." /> : null}
       {(providers.data ?? []).map(p => (
-        <View key={p.id} testID={`market-provider-${p.id}`} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 9 }}>
+        <View key={p.id} testID={`market-provider-${p.id}`} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 9 }}>
           <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-            <Tile size={44} fontSize={15} initials>{p.display_name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()}</Tile>
+            <Tile size={44} fontSize={15} initials>{p.display_name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toLocaleUpperCase('tr')}</Tile>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={type(14.5, 600, { ls: -0.01 })}>{p.display_name}</Text>
               <Text style={[type(12, 400, { color: C.t2, lh: 1.4 }), { marginTop: 2 }]}>{p.headline}</Text>
@@ -86,7 +86,7 @@ function Experts() {
           </View>
           <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
             <Pill label={p.verified_credentials > 0 ? `${p.verified_credentials} DOĞRULANMIŞ YETERLİLİK` : 'YETERLİLİK DOĞRULAMASI YOK'} fg={p.verified_credentials > 0 ? C.lime : C.warn} bg={p.verified_credentials > 0 ? tint.lime(0.14) : tint.warn(0.14)} />
-            <Pill label={`${p.city}${p.district ? ` · ${p.district}` : ''}`.toUpperCase()} fg={C.t2} bg={C.chip} />
+            <Pill label={`${p.city}${p.district ? ` · ${p.district}` : ''}`.toLocaleUpperCase('tr')} fg={C.t2} bg={C.chip} />
           </View>
           <GhostButton testID={`market-profile-${p.id}`} label="Profili aç" height={40} size={12.5} onPress={() => router.push(`/pro?view=${p.id}` as Href)} />
           <GhostButton testID={`market-ask-${p.id}`} label="Bu uzmandan teklif iste" height={40} size={12.5} color={C.lime} border={tint.lime(0.35)}
@@ -106,8 +106,8 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
         <View testID="market-summary" style={{ flexDirection: 'row', gap: 8 }}>
           {([['Açık talep', reqs.data.filter(r => r.status === 'open').length], ['Karşılaştır', reqs.data.filter(r => r.status === 'open' && r.acceptable_quotes > 0).length], ['İş verildi', reqs.data.filter(r => r.status === 'awarded').length], ['Tamamlanan', reqs.data.filter(r => r.status === 'completed').length]] as const).map(([l, n]) => (
             <View key={l} style={{ flex: 1, borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 10, gap: 3 }}>
-              <Text style={type(9, 700, { ls: 0.06, color: C.t3 })}>{String(l).toUpperCase()}</Text>
-              <Text style={type(20, 600, { family: 'outfit', ls: -0.03 })}>{n}</Text>
+              <Text style={type(9, 700, { ls: 0.06, color: C.t3 })}>{String(l).toLocaleUpperCase('tr')}</Text>
+              <Text style={type(20, 600, { ls: -0.03 })}>{n}</Text>
             </View>
           ))}
         </View>
@@ -116,7 +116,7 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
       {!reqs.data && reqs.loading ? <Loading /> : null}
       {reqs.data?.length === 0 ? <Empty title="Henüz talep yok" body="Bir uzmandan teklif istediğinde talepler ve gelen teklifler burada toplanır." /> : null}
       {(reqs.data ?? []).map(r => (
-        <Tap key={r.id} testID={`market-req-${r.id}`} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: r.status === 'open' && r.acceptable_quotes > 0 ? tint.lime(0.3) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
+        <Tap key={r.id} testID={`market-req-${r.id}`} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: r.status === 'open' && r.acceptable_quotes > 0 ? tint.lime(0.3) : C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Pill label={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[0]} fg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[1]} bg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[2]} />
             <Text style={type(11, 500, { color: C.t3 })}>{r.category_name}</Text>

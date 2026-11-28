@@ -6,7 +6,7 @@ import { forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { listDocuments } from './documents';
-import { DECISION_TR, type ProductDecision } from './product-decisions';
+import { DECISION_TR, FINAL_AFTER_HOLD, type ProductDecision } from './product-decisions';
 
 /**
  * Audit file (6D) for a site (or all sites the person may see) and a date range: open critical cases,
@@ -117,6 +117,8 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
   const taskMeas = closedTasks.length ? (await tx.query(`SELECT task_id, value, unit, within_limit, measured_at, limit_source->>'basis' AS basis FROM measurements WHERE task_id = ANY($1) ORDER BY measured_at`, [closedTasks.map(t => t.id)])).rows : [];
   // Case sequence (6D): what happened in which order, from the audit trail of the case and of the service work linked to it.
   const caseIds = closedCases.map(n => n.id);
+  const firstMeas = caseIds.length ? (await tx.query(`SELECT n.id AS ncr_id, m.value, m.unit, m.within_limit, m.measured_at, m.limit_min, m.limit_max, m.limit_source->>'basis' AS basis
+       FROM nonconformities n JOIN measurements m ON m.id = n.measurement_id WHERE n.id = ANY($1)`, [caseIds])).rows : [];
   const caseEvents = caseIds.length ? (await tx.query(
     `SELECT e.occurred_at, e.event_type, e.payload, u.display_name AS actor, e.entity_id::text AS ref FROM audit_events e LEFT JOIN users u ON u.id = e.actor_id
       WHERE e.company_id = $1 AND ((e.entity_id = ANY($2::uuid[]::text[]) AND e.event_type LIKE 'nonconformity.%')
@@ -143,8 +145,22 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
   const productOf = (id: string) => prodRows.filter(x => x.ncr_id === id).map(x => ({
     product: x.product_ref as string, quantity: x.quantity_unknown ? 'MİKTAR BİLİNMİYOR' : `${Number(x.quantity).toLocaleString('tr-TR')}${x.quantity_unit ? ' ' + x.quantity_unit : ''}`,
     firstAction: x.first_action as string, assessor: x.assessor as string,
-    decision: x.decision ? `${DECISION_TR[x.decision as ProductDecision]} · ${x.decider ?? '—'} · ${tr(x.decided_at)} · gerekçe: ${clip(x.rationale, 200)}` : 'KARAR AÇIK',
-    previous: revRows.filter(v => v.assessment_id === x.id).map(v => `Önceki karar (düzeltildi ${tr(v.corrected_at)}, düzelten ${v.corrector}): ${DECISION_TR[v.prev_decision as ProductDecision]} · ${v.prev_by} · ${tr(v.prev_decided_at)} · gerekçe: ${clip(v.prev_rationale, 200)} · düzeltme nedeni: ${clip(v.reason, 200)}`) }));
+    decision: x.decision ? `${x.decision === 'hold' ? 'SON KARAR AÇIK · ' : ''}${DECISION_TR[x.decision as ProductDecision]} · ${x.decider ?? '—'} · ${tr(x.decided_at)} · gerekçe: ${clip(x.rationale, 200)}` : 'KARAR AÇIK',
+    previous: revRows.filter(v => v.assessment_id === x.id).map(v => v.reason === FINAL_AFTER_HOLD && v.prev_decision === 'hold'
+      ? `Geçici karar (son karar ${tr(v.corrected_at)}, veren ${v.corrector}): ${DECISION_TR.hold} · ${v.prev_by} · ${tr(v.prev_decided_at)} · gerekçe: ${clip(v.prev_rationale, 200)}`
+      : `Önceki karar (düzeltildi ${tr(v.corrected_at)}, düzelten ${v.corrector}): ${DECISION_TR[v.prev_decision as ProductDecision]} · ${v.prev_by} · ${tr(v.prev_decided_at)} · gerekçe: ${clip(v.prev_rationale, 200)} · düzeltme nedeni: ${clip(v.reason, 200)}`) }));
+  // First and last measurement side by side, with unit, limit and where the limit comes from.
+  const caseMeasurements = (id: string): string[] => {
+    const f = firstMeas.find(m => m.ncr_id === id);
+    if (!f) return [];
+    const v = (x: unknown) => String(Number(x)).replace('.', ',');
+    const source = f.basis === 'example' ? 'ÖRNEK limit, doğrulanmamış' : f.basis === 'rule' ? 'yayımlanmış kural' : f.basis === 'manufacturer' ? 'üretici değeri, işletme belirledi' : f.basis === 'haccp_plan' ? 'işletmenin kendi planı' : 'kaynak kaydedilmemiş';
+    const limit = `limit ${f.limit_min == null ? '—' : v(f.limit_min)}…${f.limit_max == null ? '—' : v(f.limit_max)} ${f.unit} (limit kaynağı: ${source})`;
+    const out = [`İlk ölçüm: ${v(f.value)} ${f.unit} · ${f.within_limit ? 'limit içinde' : 'LİMİT DIŞI'} · ${tr(f.measured_at)} · ${limit}`];
+    const last = steps.filter(y => y.ncr_id === id && y.data?.measurement).at(-1)?.data.measurement;
+    out.push(last ? `Son ölçüm (etkinlik kontrolü): ${v(last.value)} ${last.unit ?? 'birim kaydedilmemiş'} · ${last.within === true ? 'limit içinde' : last.within === false ? 'LİMİT DIŞI' : 'limit kaydedilmemiş'} · aynı limit` : 'Son ölçüm: kayıtlı yeni ölçüm yok');
+    return out;
+  };
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'audit.report_generated', entityType: 'company', entityId: companyId,
@@ -171,7 +187,7 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
           measurements: taskMeas.filter(m => m.task_id === t.id).map(m => ({ value: Number(m.value), unit: m.unit, within: m.within_limit, example: m.basis === 'example', basis: m.basis ?? null, at: tr(m.measured_at) })),
           basis: basis.filter(b => b.task_id === t.id).map(b => ({ documentId: b.document_id, title: b.title, version: b.version_number, sha256: b.file_sha256 ?? null, review: b.review_status === 'verified' ? 'İncelendi' : 'İncelenmedi',
             relation: b.relation as string, sourceCase: b.case_title ?? null, linkedCase: b.linked_case_title ?? null, linkedBy: b.linked_by ?? null, linkedAt: b.linked_at ?? null, linkBasis: b.link_basis ?? null, basisNote: b.basis_note ?? null })) })),
-        cases: closedCases.map(n => ({ id: n.id, ref: n.id.slice(0, 8), equipment: (n.equipment ?? null) as string | null, product: productOf(n.id), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
+        cases: closedCases.map(n => ({ id: n.id, measurements: caseMeasurements(n.id), ref: n.id.slice(0, 8), equipment: (n.equipment ?? null) as string | null, product: productOf(n.id), serviceReports: svcDocs.filter(d => d.ncr_id === n.id).map(d => `${d.title} · sürüm ${d.version} · ${d.review_status === 'verified' ? `incelendi (${tr(d.reviewed_at)}${d.reviewer ? ', ' + d.reviewer : ''})` : d.review_status === 'rejected' ? 'REDDEDİLDİ' : 'ŞU AN İNCELENMEMİŞ'}`), title: n.title, site: siteName(n.site_id), closed: tr(n.closed_at), by: n.by ?? '—', verification: n.mode === 'independent' ? 'Bağımsız doğrulama' : n.mode === 'self' ? 'Öz doğrulama (etiketli)' : 'Kayıtlı doğrulama',
           sequence: caseEvents.filter(e => e.ref === n.id || caseLink.some(l => l.ncr_id === n.id && (l.request_id === e.ref || l.job_id === e.ref)))
             .map(e => ({ at: tr(e.occurred_at), who: e.actor ?? '—', text: caseLine(e.event_type, e.payload, e.ref, ctx) })).filter(x => x.text) })),
       },
@@ -256,7 +272,8 @@ export function renderPdf(r: Awaited<ReturnType<typeof auditReport>>, appBase: s
     }
     for (const n of r.sections.closures.cases) {
       p(`Kayıt kapandı: ${n.title} · kayıt no ${n.ref} · ${n.site}${unit(n.equipment)} · ${n.closed} · ${n.by} · ${n.verification}`, { bold: true });
-      for (const sr of n.serviceReports) p(`   Servis raporu: ${sr}`, { color: '#555', size: 8.5 });
+      for (const m of n.measurements) p(`   ${m}`, { color: '#555', size: 8.5 });
+      for (const sr of n.serviceReports) p(`   Dosya: ${sr}`, { color: '#555', size: 8.5 });
       if (n.sequence.length) p('   Cihaz / düzeltme kararı ve adımları', { bold: true, size: 8.5 });
       for (const e of n.sequence) p(`   ${e.at} · ${e.who} · ${e.text}`, { color: '#555', size: 8.5 });
       if (n.product.length) p('   Ürün kararı', { bold: true, size: 8.5 });

@@ -39,7 +39,7 @@ export function AssignCard({ t, siteId, onChanged }: { t: TaskDetail; siteId: st
   };
 
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <View style={{ flex: 1 }}>
           <Eyebrow>SORUMLU</Eyebrow>
@@ -72,7 +72,7 @@ export function AssignCard({ t, siteId, onChanged }: { t: TaskDetail; siteId: st
                 <FilterChip label="Kimse" px={12} active={pick === null} onPress={() => setPick(null)} />
               </View>
               <Tap testID="assign-series" onPress={() => setSeries(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }} accessibilityRole="checkbox" accessibilityState={{ checked: series }}>
-                <View style={{ width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, borderColor: series ? C.lime : C.ringIdle, backgroundColor: series ? C.lime : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, borderColor: series ? C.lime : C.ringIdle, backgroundColor: series ? C.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={type(12, 800, { color: C.ink })}>{series ? '✓' : ''}</Text>
                 </View>
                 <Text style={[type(12.5, 500, { lh: 1.4 }), { flex: 1 }]}>Bu kontrolün sonraki görevleri de bu kişiye gitsin</Text>

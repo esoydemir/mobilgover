@@ -152,3 +152,42 @@ describe('"no product effect" is an authorized, written assessment', () => {
     expect((await owner().post(`${N}/verify`, { result: 'effective', notes: 'Cihaz ve ürün değerlendirmesi incelendi.' })).body.status).toBe('closed');
   });
 });
+
+describe('two affected products: a hold is not a final decision', () => {
+  let ncr: string, milk: string, yog: string;
+  const N = () => `${C()}/nonconformities/${ncr}`;
+  const dec = (id: string) => `${N()}/product-assessments/${id}/decision`;
+  const open = async (product: string) => (await manager().post(`${N()}/product-assessments`, { product, quantity: 6, unit: 'adet', quantityUnknown: false,
+    firstAction: 'Satıştan çekildi, yedek dolaba alındı.', assessorId: demo.users.manager.id })).body.id as string;
+
+  it('the device can be finished while one product is held; the case stays open and names the product and the decision it waits for', async () => {
+    ncr = await cold('İki ürün etkilendi');
+    milk = await open('Süt partisi A'); yog = await open('Yoğurt partisi B');
+    expect((await manager().post(dec(milk), { decision: 'destroy', rationale: 'Sınır üstünde kaldı, imha edildi.' })).status).toBe(200);
+    expect((await manager().post(dec(yog), { decision: 'hold', rationale: 'Üretici görüşü gelene kadar satışa kapalı.' })).status).toBe(200);
+    await fixDevice(ncr);
+    const d = (await manager().get(N())).body;
+    expect(d.status).toBe('awaiting_verification');
+    expect(d.product.openCount).toBe(1);
+    expect(d.product.closureBlocker).toMatch(/Yoğurt partisi B: bekletmede, son karar bekliyor/);
+    expect(d.product.closureBlocker).not.toMatch(/Süt partisi A/);
+    const v = await owner().post(`${N()}/verify`, { result: 'effective', notes: 'Cihaz düzeldi.' });
+    expect(v.body.error?.code).toBe('PRODUCT_DECISION_OPEN');
+  });
+
+  it('the final decision after a hold is an ordinary decision, keeps the hold on record and can be given only once', async () => {
+    expect((await manager().post(dec(yog), { decision: 'hold', rationale: 'Bekletme sürsün istiyorum.' })).status).toBe(409);
+    expect((await staff().post(dec(yog), { decision: 'release', rationale: 'Bence satılabilir.' })).status).toBeGreaterThanOrEqual(403);
+    expect((await owner().post(dec(yog), { decision: 'destroy', rationale: 'Üretici görüşü olumsuz, imha edilecek.' })).status).toBe(200);
+    expect((await manager().post(dec(yog), { decision: 'release', rationale: 'Eski ekrandan ikinci karar.' })).status).toBe(409);
+    const a = (await manager().get(N())).body.product.assessments.find((x: any) => x.id === yog);
+    expect(a.decision.code).toBe('destroy');
+    expect(a.corrections).toHaveLength(1);
+    expect(a.corrections[0]).toMatchObject({ kind: 'final_after_hold', previous: { code: 'hold', rationale: 'Üretici görüşü gelene kadar satışa kapalı.' }, caseWasClosed: false });
+    expect((await owner().post(`${N()}/verify`, { result: 'effective', notes: 'Cihaz ve iki ürün kararı incelendi.' })).body.status).toBe('closed');
+    const from = new Date(Date.now() - 86400_000).toISOString(), to = new Date(Date.now() + 86400_000).toISOString();
+    const rep = (await owner().get(`${C()}/audit-report?format=json&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).body;
+    const c = rep.sections.closures.cases.find((x: any) => x.id === ncr);
+    expect(c.product.find((p: any) => p.product === 'Yoğurt partisi B').previous[0]).toMatch(/Geçici karar \(son karar .*Bekletme/);
+  });
+});

@@ -58,7 +58,7 @@ export default function DocumentRoute() {
             {d.expiring ? <Pill label="SÜRESİ YAKLAŞIYOR" fg={C.warn} bg={tint.warn(0.14)} /> : null}
             {d.notYetValid ? <Pill label="HENÜZ YÜRÜRLÜKTE DEĞİL" fg={C.info} bg={tint.info(0.14)} /> : null}
           </View>
-          <Text style={type(23, 600, { family: 'outfit', ls: -0.03, lh: 1.15 })}>{d.title}</Text>
+          <Text style={type(23, 600, { ls: -0.03, lh: 1.15 })}>{d.title}</Text>
           <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>
             {DOC_TYPE[d.docType] ?? d.docType} · {d.equipmentName ? `Ekipman: ${d.equipmentName}` : d.siteName ? `Şube: ${d.siteName}` : 'İşletme geneli'}
             {d.issuer ? ` · ${d.issuer}` : ''}{d.documentNo ? ` · no ${d.documentNo}` : ''}
@@ -75,7 +75,7 @@ export default function DocumentRoute() {
             {d.latestRejection ? <Text testID="doc-latest-rejection" style={type(12.5, 600, { color: C.crit, lh: 1.45 })}>{`Son sürüm (${d.latestRejection.version}) reddedildi: ${d.latestRejection.reason}`}</Text> : null}
             {d.stillValid ? <Text testID="doc-still-valid" style={type(12.5, 500, { color: C.t1, lh: 1.45 })}>{`Geçerli olan: sürüm ${d.stillValid.version}${d.stillValid.remainingDays !== null ? ` · ${d.stillValid.remainingDays} gün kaldı` : ' · süresiz'}.`}</Text> : null}
             {d.issuerCheck ? <Text testID="doc-issuer-line" style={type(12, 600, { color: C.t1, lh: 1.45 })}>{issuerLine(d.issuerCheck)}</Text> : null}
-            {d.currentVersionId ? (
+            {d.currentVersionId && d.validUntil ? (
               <Text style={type(13, 500, { lh: 1.5 })}>İncelenen sürüme göre {fmtRange(d.validFrom, d.validUntil)}. Bitişe {d.expiryWarningDays} gün kala ve bitince yöneticilere hatırlatma gider.</Text>
             ) : null}
           </Card>

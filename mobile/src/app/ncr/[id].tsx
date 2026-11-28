@@ -4,13 +4,12 @@ import { Text, View } from 'react-native';
 import { useQueue } from '../../api/queue';
 import { useSession } from '../../api/session';
 import { useApi } from '../../api/useApi';
-import { GradientFill } from '../../components/Gradient';
 import { Screen } from '../../components/Screen';
 import { ErrorBox, Field, Loading, StaleNote } from '../../components/states';
 import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton, shortWhy } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { SEVERITY_LABEL } from '../../features/labels';
-import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, ServiceLinkCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
+import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, ProofCard, ServiceLinkCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
 import { ProductCard } from '../../features/ncr/ProductCard';
 import { HAZARDS, type NcrDetail } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
@@ -47,8 +46,7 @@ export default function NcrRoute() {
   return (
     <Screen title="Uygunsuzluk" titleEn="Nonconformity" onRefresh={q.reload} refreshing={q.loading} siteId={n.site_id}>
       {q.stale ? <StaleNote /> : null}
-      <View style={{ borderWidth: 1, borderColor: tint.crit(0.3), borderRadius: 28, padding: 20, overflow: 'hidden' }}>
-        <GradientFill angle={155} stops={[[0, '#1a0a0a'], [0.6, '#0a0505'], [1, C.bg]]} />
+      <Card border={n.status === 'closed' ? C.bd : tint.crit(0.35)}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <Pill label={RISK[n.risk_level]![0]} fg={RISK[n.risk_level]![1]} bg={RISK[n.risk_level]![2]} />
           <Text testID="ncr-status" style={type(10, 700, { ls: 0.1, color: n.status === 'closed' ? C.lime : C.crit })}>
@@ -56,7 +54,7 @@ export default function NcrRoute() {
             {n.recurrence_count ? ` · ${n.recurrence_count + 1}. TEKRAR` : ''}{n.reopened_count ? ` · ${n.reopened_count} KEZ YENİDEN AÇILDI` : ''}
           </Text>
         </View>
-        <Text style={[type(21, 600, { family: 'outfit', ls: -0.03, lh: 1.15 }), { marginTop: 12 }]}>{n.title}</Text>
+        <Text style={[type(20, 700, { ls: -0.02, lh: 1.25 }), { marginTop: 10 }]}>{n.title}</Text>
         <Text style={[type(13, 400, { lh: 1.5, color: C.t2 }), { marginTop: 8 }]}>{n.description}</Text>
         <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 8 }]}>
           {n.source === 'manual' ? 'Elle bildirildi' : 'Görevden açıldı'} · tespit {fmtDateTime(n.detected_at)}
@@ -65,7 +63,7 @@ export default function NcrRoute() {
         <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 4 }]}>
           Risk: önem {SEVERITY_LABEL[n.risk_rationale.severity] ?? n.risk_rationale.severity}{n.risk_rationale.escalatedBy ? `, tekrar nedeniyle +${n.risk_rationale.escalatedBy} seviye` : ''}{n.risk_rationale.independentVerification ? ' · bağımsız doğrulama gerekir' : ''}
         </Text>
-      </View>
+      </Card>
 
       {n.emergency_instruction && n.status !== 'closed' ? (
         <View style={{ borderWidth: 1, borderColor: tint.crit(0.3), backgroundColor: tint.crit(0.06), borderRadius: 18, padding: 14, gap: 6 }}>
@@ -77,9 +75,8 @@ export default function NcrRoute() {
 
       <CriticalFirst n={n} onAssign={() => setAssignNudge(x => x + 1)} />
       <CaseSummary n={n} />
-      <FlowStepper n={n} />
 
-      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
         <Eyebrow>İLK MÜDAHALE</Eyebrow>
         {containment ? (
           <>
@@ -92,6 +89,8 @@ export default function NcrRoute() {
           : <Text style={type(12.5, 400, { color: C.t2 })}>Henüz kaydedilmedi.</Text>}
       </Card>
 
+      {n.product ? <ProductCard product={n.product} base={base} reload={q.reload} closed={n.status === 'closed'} can={n.permissions} /> : null}
+
       <AssignmentCard key={`a${assignNudge}-${n.owner?.id}-${n.due_at}`} n={n} base={base} reload={q.reload} initialOpen={assignNudge > 0} />
       <CauseCard n={n} base={base} reload={q.reload} />
       {/* Suggestions lead to the business's own screens; an outside verifier (no role here) cannot open them. */}
@@ -101,7 +100,7 @@ export default function NcrRoute() {
       <ActionsCard n={n} base={base} reload={q.reload} me={me?.userId ?? null} formKind={formKind} setFormKind={setFormKind} />
 
       {n.status === 'open' ? (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>ETKİNLİK KONTROLÜ{n.iteration > 1 ? ` · ${n.iteration}. TUR` : ''}</Eyebrow>
           {pending.includes('effectiveness_check') ? <Text style={type(12.5, 500, { color: C.warn })}>Cihazda · gönderilecek</Text>
             : !n.flow.readyForEffectiveness ? (
@@ -117,7 +116,7 @@ export default function NcrRoute() {
         <View testID="ncr-effectiveness-record"><Callout tone="info" title="Etkinlik kontrolü" body={effectivenessText(effectiveness, n.measurement)} /></View>
       ) : null}
 
-      {n.product ? <ProductCard product={n.product} base={base} reload={q.reload} closed={n.status === 'closed'} /> : null}
+      <ProofCard n={n} />
       <VerificationCard n={n} base={base} reload={q.reload} />
       <ServiceLinkCard n={n} base={base} reload={q.reload} />
       {n.status !== 'closed' && n.permissions.serviceRequest ? (
@@ -129,6 +128,7 @@ export default function NcrRoute() {
           onPress={() => router.push(`/network/share-case?ncrId=${n.id}`)} />
       ) : null}
       {n.permissions.inviteVerifier ? <Text testID="ncr-case-posts" onPress={() => router.push('/network/case-posts')} style={type(12, 600, { color: C.info })}>İşletmenin vaka paylaşımları: onay ve geri çekme ›</Text> : null}
+      <FlowStepper n={n} />
       <HistoryCard n={n} />
     </Screen>
   );

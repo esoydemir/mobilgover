@@ -241,6 +241,7 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
         dismissed: dec?.decision === 'dismissed' ? { reason: dec.reason, replacement: dec.replacement, by: dec.decided_by_name, at: dec.decided_at } : null };
     }) : [],
     measurement, documents, next, firstAction,
+    proof: can(p, 'ncr.verify_close', target).ok || can(p, 'ncr.manage', target).ok ? await caseProof(tx, companyId, n) : null,
     // Device side only; the product decision is a separate block (`product.closureBlocker`).
     closureMissing: f.stages.filter(st => st.state !== 'done').map(st => ({ stage: st.key, missing: st.missing })),
     product,
@@ -259,6 +260,29 @@ export async function getNonconformity(tx: Tx, p: Principal, companyId: string, 
 }
 
 const iso = (d: string | Date | null) => (d ? new Date(d).toISOString() : null);
+
+/**
+ * What the case rests on, for the person who judges or closes it: the first finding (measurement, note, files of the originating task)
+ * and every version of the service reports asked for from this case. Only these; nothing else of the tasks or the vault.
+ */
+async function caseProof(tx: Tx, companyId: string, n: any) {
+  let task = null;
+  if (n.task_id) {
+    const t = (await tx.query(`SELECT t.completed_at, u.display_name AS completed_by FROM tasks t LEFT JOIN users u ON u.id = t.completed_by WHERE t.id = $1 AND t.company_id = $2`, [n.task_id, companyId])).rows[0];
+    const measurements = (await tx.query(`SELECT value, unit, within_limit AS "withinLimit", measured_at AS "measuredAt" FROM measurements WHERE task_id = $1 ORDER BY recorded_at`, [n.task_id])).rows;
+    const ev = (await tx.query(`SELECT id, kind, mime, body FROM evidence WHERE task_id = $1 AND company_id = $2 AND status = 'stored' ORDER BY created_at`, [n.task_id, companyId])).rows;
+    task = { completedBy: t?.completed_by ?? null, completedAt: t?.completed_at ?? null, measurements,
+      notes: ev.filter(e => e.kind === 'note' && e.body?.text).map(e => e.body.text as string),
+      files: ev.filter(e => e.kind === 'photo' || e.kind === 'document').map(e => ({ evidenceId: e.id as string, kind: e.kind as string, mime: e.mime as string })) };
+  }
+  const reports = (await tx.query(
+    `SELECT q.title, sr.version, sr.report, sr.submitted_at AS "submittedAt", sr.decision, sr.decision_note AS "decisionNote", v.review_status AS "reviewStatus",
+            (SELECT e.id FROM evidence e WHERE e.document_version_id = sr.document_version_id AND e.status = 'stored' ORDER BY e.created_at DESC LIMIT 1) AS "evidenceId"
+       FROM service_requests q JOIN service_jobs j ON j.request_id = q.id JOIN service_job_reports sr ON sr.job_id = j.id
+       LEFT JOIN document_versions v ON v.id = sr.document_version_id
+      WHERE q.ncr_id = $1 AND q.company_id = $2 ORDER BY q.created_at, sr.version`, [n.id, companyId])).rows;
+  return { task, reports };
+}
 
 /** Closure: independent, labelled self-verification (low/medium risk), or refused. */
 function closureOptions(n: any, input: FlowInput, userId: string, able: boolean) {

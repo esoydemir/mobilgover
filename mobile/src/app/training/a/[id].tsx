@@ -52,7 +52,7 @@ export default function AssignmentRoute() {
   return (
     <Screen title="Eğitim" titleEn="Training" onRefresh={q.reload} refreshing={q.loading}>
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>{a.isExample ? <ExampleBadge label="ÖRNEK İÇERİK" /> : null}</View>
-      <Text style={type(23, 600, { family: 'outfit', ls: -0.03, lh: 1.15 })}>{a.title}</Text>
+      <Text style={type(23, 600, { ls: -0.03, lh: 1.15 })}>{a.title}</Text>
       <Text style={type(12, 400, { color: C.t3, lh: 1.45 })}>{a.userName} · atayan {a.assignedByName} · {fmtDateTime(a.assignedAt)}{a.dueAt ? ` · termin ${fmtDateTime(a.dueAt)}` : ''} · sürüm {a.version}</Text>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Neden: {a.reason}</Text>
       {a.ncrId ? <GhostButton testID="tr-open-ncr" label={`Bağlı uygunsuzluk: ${a.ncrTitle}`} height={38} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push(`/ncr/${a.ncrId}`)} /> : null}

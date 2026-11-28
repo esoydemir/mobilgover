@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useDesktop } from '../features/desktop';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { errorText } from '../api/client';
@@ -24,7 +25,7 @@ type Manager = {
   sections: { critical: Ref[]; overdueActions: { id: string; ncrId: string; description: string; ncrTitle: string; site: string; owner: string | null; dueAt: string; lateDays: number }[];
     awaitingVerification: Ref[]; documents: { id: string; title: string; site: string; status: string; expiring: boolean; validUntil: string | null }[]; repeats: Repeat[] };
   indicators: Indicator[];
-  comparison: { note: string; sites: { controls: { checkedOk: number; checkedNonconforming: number; notChecked: number; due: number; since: string; waitingInfo: number }; siteId: string; site: string; critical: number; overdueActions: number; awaitingVerification: number; repeats: number; openDaysMedian: number | null; closedCount: number }[] } | null;
+  comparison: { note: string; sites: { controls: { checkedOk: number; checkedNonconforming: number; notChecked: number; due: number; pendingToday: number; since: string; waitingInfo: number }; siteId: string; site: string; critical: number; overdueActions: number; awaitingVerification: number; repeats: number; openDaysMedian: number | null; closedCount: number }[] } | null;
 };
 type Mine = { scope: 'mine'; note: string; sections: { actions: { id: string; ncr_id: string; description: string; due_at: string | null; overdue: boolean; ncr_title: string }[];
   tasks: { id: string; title: string; due_at: string; overdue: boolean }[]; cases: { id: string; title: string; risk_level: string; status: string }[] } };
@@ -49,6 +50,7 @@ export default function BoardRoute() {
   if (ownerId) qs.set('ownerId', ownerId);
   const q = useApi<Manager | Mine>(company ? `/companies/${company.id}/board?${qs.toString()}` : null);
   const b = q.data;
+  const wide = useDesktop();
   if (!b) return <Screen title="Bugün" titleEn="Today">{q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : <Loading />}</Screen>;
   if (b.scope === 'mine') return <MineView b={b} reload={q.reload} loading={q.loading} />;
   const count = (k: string) => (b.sections as Record<string, unknown[]>)[k]!.length;
@@ -57,7 +59,32 @@ export default function BoardRoute() {
     <Screen title="Bugün" titleEn="Manager board" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       {q.stale ? <StaleNote /> : null}
       {q.error ? <ErrorBox message={`${q.error} Aşağıdaki sayılar seçtiğin filtreye ait değil olabilir.`} onRetry={q.reload} /> : null}
-      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{b.note}</Text>
+      {b.comparison ? (
+        <Card style={{ gap: 8 }}>
+          <Eyebrow>ŞUBELER YAN YANA</Eyebrow>
+          <View style={{ flexDirection: wide ? 'row' : 'column', flexWrap: 'wrap', columnGap: 20, rowGap: 8 }}>
+          {b.comparison.sites.map(s => (
+            <Tap key={s.siteId} testID={`board-cmp-${s.siteId}`} onPress={() => setSiteId(s.siteId)} style={[{ borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 7, gap: 2 }, wide ? { flexBasis: 300, flexGrow: 1 } : null]}>
+              <Text style={type(15, 700)}>{s.site} ›</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 3 }}>
+                {s.controls.pendingToday ? <Pill label={`${s.controls.pendingToday} BUGÜN HENÜZ YAPILMADI`} fg={C.warn} bg={tint.warn(0.16)} /> : null}
+                {s.controls.due === 0 ? (s.controls.pendingToday ? null : <Pill label={s.controls.waitingInfo ? 'PROFİL CEVABI BEKLİYOR' : 'ZAMANI GELEN KONTROL YOK'} fg={C.warn} bg={tint.warn(0.16)} />) : (<>
+                  <Pill label={`${s.controls.checkedOk} UYGUN`} fg={s.controls.checkedOk ? C.lime : C.t2} bg={s.controls.checkedOk ? tint.lime(0.14) : C.chip} />
+                  {s.controls.checkedNonconforming ? <Pill label={`${s.controls.checkedNonconforming} UYGUNSUZ`} fg={C.crit} bg={tint.crit(0.14)} /> : null}
+                  {s.controls.notChecked ? <Pill label={`${s.controls.notChecked} GECİKMİŞ · YAPILMADI`} fg={C.warn} bg={tint.warn(0.16)} /> : null}
+                </>)}
+              </View>
+              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Kritik/yüksek {s.critical} · geciken aksiyon {s.overdueActions} · doğrulama bekleyen {s.awaitingVerification} · tekrar adayı {s.repeats}
+                {' · '}açık kalma medyanı {s.openDaysMedian == null ? 'veri yok' : `${s.openDaysMedian} gün (${s.closedCount} kayıt)`}</Text>
+              <Text testID={`board-controls-${s.siteId}`} style={type(11.5, 600, { color: s.controls.notChecked ? C.warn : C.t2, lh: 1.45 })}>
+                {s.controls.pendingToday ? `Bugünün ${s.controls.pendingToday} kontrolü henüz yapılmadı; saati geçmediği için gecikmiş sayılmaz. ` : ''}{s.controls.due === 0 ? (s.controls.pendingToday ? '' : s.controls.waitingInfo ? `Kontrol yok ama bu "uygun" demek değil: ${s.controls.waitingInfo} yükümlülük şube profilindeki cevapları bekliyor.` : 'Bu dönemde zamanı gelen kontrol yok.') : `Kontrol (yapılan veya zamanı gelen ${s.controls.due}): ${s.controls.checkedOk} yapıldı ve uygun · ${s.controls.checkedNonconforming} yapıldı, uygunsuz · ${s.controls.notChecked} gecikmiş${s.controls.waitingInfo ? ` · ${s.controls.waitingInfo} yükümlülük profil cevabı bekliyor` : ''}`}
+              </Text>
+            </Tap>
+          ))}
+          </View>
+          <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>{b.comparison.note}</Text>
+        </Card>
+      ) : null}
       <View style={{ gap: 7 }}>
         {b.choices.sites.length > 1 ? <ChipRow label="Şube" items={[[null, 'Tümü'], ...b.choices.sites.map(s => [s.id, s.name] as [string, string])]} value={siteId} onChange={setSiteId} id="board-site" /> : null}
         <ChipRow label="Tarih" items={PERIODS.map(([l, d]) => [d == null ? null : String(d), l] as [string | null, string])} value={period == null ? null : String(period)} onChange={v => setPeriod(v ? Number(v) : null)} id="board-period" />
@@ -72,9 +99,9 @@ export default function BoardRoute() {
         const n = count(pr.key);
         const isOpen = open === pr.key;
         return (
-          <Card key={pr.key} radius={22} style={{ paddingVertical: 13, paddingHorizontal: 15, gap: 8 }} border={n && i < 2 ? tint.crit(0.3) : C.bd}>
+          <Card key={pr.key} style={{ paddingVertical: 13, paddingHorizontal: 15, gap: 8 }} border={n && i < 2 ? tint.crit(0.3) : C.bd}>
             <Tap testID={`board-count-${pr.key}`} onPress={() => setOpen(isOpen ? null : pr.key)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Text style={type(26, 700, { family: 'outfit', color: n ? (i < 2 ? C.crit : C.warn) : C.t3 })}>{n}</Text>
+              <Text style={type(26, 700, { color: n ? (i < 2 ? C.crit : C.warn) : C.t3 })}>{n}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>{i + 1}. ÖNCELİK</Text>
                 <Text style={type(13.5, 600)}>{pr.label}</Text>
@@ -87,7 +114,8 @@ export default function BoardRoute() {
         );
       })}
 
-      <Card radius={22} style={{ gap: 9 }}>
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{b.note}</Text>
+      <Card style={{ gap: 9 }}>
         <Eyebrow>GÖSTERGELER · İLK SÜRÜM</Eyebrow>
         {b.indicators.map(ind => (
           <View key={ind.key} testID={`board-ind-${ind.key}`} style={{ gap: 2, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 7 }}>
@@ -103,22 +131,6 @@ export default function BoardRoute() {
         <Text style={type(11, 400, { color: C.t3 })}>{period ? `Tarih aralığı: son ${period} gün.` : 'Tarih aralığı: bütün kayıtlar.'} Göstergeler puan ya da ceza değildir.</Text>
       </Card>
 
-      {b.comparison ? (
-        <Card radius={22} style={{ gap: 8 }}>
-          <Eyebrow>ŞUBELER YAN YANA</Eyebrow>
-          {b.comparison.sites.map(s => (
-            <Tap key={s.siteId} testID={`board-cmp-${s.siteId}`} onPress={() => setSiteId(s.siteId)} style={{ borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 7, gap: 2 }}>
-              <Text style={type(13, 600)}>{s.site} ›</Text>
-              <Text style={type(11.5, 400, { color: C.t2, lh: 1.45 })}>Kritik/yüksek {s.critical} · geciken aksiyon {s.overdueActions} · doğrulama bekleyen {s.awaitingVerification} · tekrar adayı {s.repeats}
-                {' · '}açık kalma medyanı {s.openDaysMedian == null ? 'veri yok' : `${s.openDaysMedian} gün (${s.closedCount} kayıt)`}</Text>
-              <Text testID={`board-controls-${s.siteId}`} style={type(11.5, 600, { color: s.controls.notChecked ? C.warn : C.t2, lh: 1.45 })}>
-                {s.controls.due === 0 ? (s.controls.waitingInfo ? `Kontrol yok ama bu "uygun" demek değil: ${s.controls.waitingInfo} yükümlülük şube profilindeki cevapları bekliyor.` : 'Bu dönemde zamanı gelen kontrol yok.') : `Kontrol (zamanı gelen ${s.controls.due}): ${s.controls.checkedOk} yapıldı ve uygun · ${s.controls.checkedNonconforming} yapıldı, uygunsuz · ${s.controls.notChecked} henüz yapılmadı${s.controls.waitingInfo ? ` · ${s.controls.waitingInfo} yükümlülük profil cevabı bekliyor` : ''}`}
-              </Text>
-            </Tap>
-          ))}
-          <Text style={type(11, 400, { color: C.t3, lh: 1.4 })}>{b.comparison.note}</Text>
-        </Card>
-      ) : null}
     </Screen>
   );
 }

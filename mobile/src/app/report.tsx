@@ -5,10 +5,9 @@ import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import type { Indicators } from '../api/types';
 import { useApi } from '../api/useApi';
-import { ScoreRings, type RingDomain } from '../components/ScoreRings';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Loading, StaleNote } from '../components/states';
-import { Card, Eyebrow, FilterChip, PrimaryButton } from '../components/ui';
+import { Bar, Card, Eyebrow, FilterChip, PrimaryButton } from '../components/ui';
 import { addDays, fmtDateTime, startOfDay } from '../features/dates';
 import { downloadFromApi } from '../features/files';
 import { API_URL } from '../api/client';
@@ -30,7 +29,6 @@ const GAP_TEXT: Record<string, string> = {
   needs_review: 'Kural değişti, inceleme gerekli', evidence_integrity: 'Kanıt dosyası bütünlük sorunu',
 };
 const pct = (v: number | null) => (v === null ? '—' : `%${Math.round(v * 100)}`);
-const tone = (v: number | null): RingDomain['tone'] => (v === null ? 'idle' : v >= 0.9 ? 'ok' : v >= 0.7 ? 'warn' : 'crit');
 
 /** Indicators with their components, and the audit file with its gaps. */
 export default function ReportRoute() {
@@ -52,11 +50,9 @@ export default function ReportRoute() {
   const ind = useApi<Indicators>(company && siteId ? `/companies/${company.id}/indicators?${query}` : null);
   const d = ind.data;
 
-  const rings: RingDomain[] = d ? [
-    { key: 'onTime', label: 'ZAMAN', value: `${d.components.onTime.numerator}/${d.components.onTime.denominator}`, unit: pct(d.components.onTime.value), pct: d.components.onTime.value ?? 0, tone: tone(d.components.onTime.value) },
-    { key: 'conforming', label: 'SONUÇ', value: `${d.components.conforming.numerator}/${d.components.conforming.denominator}`, unit: pct(d.components.conforming.value), pct: d.components.conforming.value ?? 0, tone: tone(d.components.conforming.value) },
-    { key: 'evidence', label: 'KANIT', value: `${d.components.evidenceCoverage.numerator}/${d.components.evidenceCoverage.denominator}`, unit: pct(d.components.evidenceCoverage.value), pct: d.components.evidenceCoverage.value ?? 0, tone: tone(d.components.evidenceCoverage.value) },
-  ] : [];
+  const parts = d ? ([['onTime', 'Zamanında', 'Son tarihinden önce yapılan kontroller', d.components.onTime], ['conforming', 'Uygun sonuç', 'Uygun çıkan sonuçlar', d.components.conforming],
+    ['evidence', 'Kanıtı tam', 'Kanıtı eksiksiz saklanan kontroller', d.components.evidenceCoverage]] as const).map(([key, label, what, v]) =>
+    ({ key, label, what, of: `${v.numerator}/${v.denominator}`, unit: pct(v.value), pct: v.value ?? 0, color: v.value === null ? C.t3 : v.value >= 0.9 ? C.lime : v.value >= 0.7 ? C.warn : C.crit })) : [];
 
   const exportFile = async () => {
     setBusy(true); setError(null);
@@ -95,16 +91,27 @@ export default function ReportRoute() {
               <Text style={type(10.5, 700, { ls: 0.13, color: d.status === 'on_track' ? C.lime : d.status === 'critical_risk' ? C.crit : C.warn })}>
                 {d.status === 'critical_risk' ? 'KRİTİK RİSK AÇIK' : d.status === 'insufficient_data' ? 'VERİ YETERSİZ' : d.status === 'attention' ? 'İZLEME GEREKTİRİYOR' : 'YOLUNDA'}
               </Text>
-              <Text style={[type(24, 600, { family: 'outfit', ls: -0.035, lh: 1.12 }), { marginTop: 7 }]}>Son {days} gün</Text>
+              <Text style={[type(22, 700, { ls: -0.02, lh: 1.2 }), { marginTop: 7 }]}>Son {days} gün</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 3 }}>
-              <Text testID="report-score" style={type(46, 600, { family: 'outfit', ls: -0.045 })}>{d.score ?? '—'}</Text>
+              <Text testID="report-score" style={type(40, 700, { ls: -0.03 })}>{d.score ?? '—'}</Text>
               <Text style={type(17, 600, { color: C.t3 })}>/100</Text>
             </View>
           </View>
           {d.scoreCappedBy ? <Text style={type(12, 600, { color: C.crit })}>Puan sınırlandı: {d.scoreCappedBy}. Kritik risk ortalamanın içinde gizlenmez.</Text> : null}
-          <ScoreRings width={width} domains={rings} />
-          <Text style={type(11.5, 400, { color: C.t3, lh: 1.5 })}>Dıştan içe: ZAMAN = son tarihinden önce yapılan kontroller · SONUÇ = uygun çıkan sonuçlar · KANIT = kanıtı eksiksiz saklanan kontroller.</Text>
+          <Card style={{ gap: 12 }}>
+            {parts.map(x => (
+              <View key={x.key} testID={`report-part-${x.key}`} style={{ gap: 5 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+                  <Text style={[type(14, 700), { flex: 1 }]}>{x.label}</Text>
+                  <Text style={type(13, 600, { color: C.t2 })}>{x.of}</Text>
+                  <Text style={type(15, 700, { color: x.color })}>{x.unit}</Text>
+                </View>
+                <Bar height={8} pct={x.pct} color={x.color} />
+                <Text style={type(12, 400, { color: C.t3, lh: 1.4 })}>{x.what}</Text>
+              </View>
+            ))}
+          </Card>
           <Card>
             <Eyebrow>DİĞER GÖSTERGELER</Eyebrow>
             {[['Gecikmiş kontrol', d.components.overdueTasks], ['Açık kritik / yüksek risk', d.components.openCriticalRisks], ['Tekrarlayan uygunsuzluk', d.components.recurringNonconformities],

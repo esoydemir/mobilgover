@@ -100,7 +100,7 @@ export function flow(n: FlowInput): Flow {
   } else {
     const any = has(cur, a => a.kind !== 'follow_up' && ok(a));
     actionsOk = any && openCurrent === 0 && awaiting === 0;
-    actionsMissing = pendingText ?? (!any ? (it > 1 ? 'Bu tur için yeni bir aksiyon tamamlanıp doğrulanmalı (önceki doğrulama başarısız oldu).' : 'En az bir aksiyon tamamlanıp doğrulanmalı.')
+    actionsMissing = pendingText ?? (!any ? (it > 1 ? 'Yeni tur: bu tur için yeni bir aksiyon tamamlanıp doğrulanmalı (önceki tur geçmişte duruyor).' : 'En az bir aksiyon tamamlanıp doğrulanmalı.')
       : openCurrent ? `${openCurrent} açık aksiyon tamamlanmalı ya da iptal edilmeli.` : null);
   }
   // Full CAPA needs a root cause confirmed in this round (a failed check means the cause may have been wrong).

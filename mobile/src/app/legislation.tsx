@@ -152,8 +152,8 @@ function MobileLegislation() {
                 {r.is_example ? <ExampleBadge label="ÖRNEK" /> : null}
                 {r.date_status === 'unclear' ? <Text style={type(10.5, 700, { color: C.warn })}>TARİH BELİRSİZ</Text> : null}
                 {r.match_level === 'uncertain' ? <Text testID={`leg-uncertain-${r.id}`} style={type(10.5, 700, { color: C.warn })}>BELİRSİZ EŞLEŞME · İNSAN İNCELEMESİ</Text> : null}
-                {r.body_sectors?.length ? <Text testID={`leg-body-sectors-${r.id}`} style={type(10.5, 700, { color: C.info })}>METİNDE: {r.body_sectors.map(k => SECTOR_TR[k] ?? k).join(' · ').toUpperCase()}</Text> : null}
-                {r.sectors?.length ? <Text testID={`leg-sectors-${r.id}`} style={type(10.5, 700, { color: C.info })}>{r.sectors.map(k => SECTOR_TR[k] ?? k).join(' · ').toUpperCase()}</Text> : null}
+                {r.body_sectors?.length ? <Text testID={`leg-body-sectors-${r.id}`} style={type(10.5, 700, { color: C.info })}>METİNDE: {r.body_sectors.map(k => SECTOR_TR[k] ?? k).join(' · ').toLocaleUpperCase('tr')}</Text> : null}
+                {r.sectors?.length ? <Text testID={`leg-sectors-${r.id}`} style={type(10.5, 700, { color: C.info })}>{r.sectors.map(k => SECTOR_TR[k] ?? k).join(' · ').toLocaleUpperCase('tr')}</Text> : null}
               </View>
               <Text style={type(14, 600, { lh: 1.35 })}>{r.doc_title}{r.article_ref ? ` · md. ${r.article_ref}` : ''}</Text>
               <Text style={type(12, 400, { color: C.t2 })}>{r.typeLabel} · {SOURCE_TR[r.source_code] ?? r.source_code} · {r.doc_ref} · yayın {dayTr(r.published_on)} · yürürlük {r.effective_from ? dayTr(r.effective_from) : 'belirsiz'}</Text>

@@ -40,7 +40,7 @@ export default function TrainingsRoute() {
           {((q.data as TrainingRow[] | null) ?? []).map(t => {
             const [label, color] = trainingStateLabel(t.state);
             return (
-              <Tap key={t.id} testID={`tr-assignment-${t.id}`} onPress={() => router.push(`/training/a/${t.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 7 }}>
+              <Tap key={t.id} testID={`tr-assignment-${t.id}`} onPress={() => router.push(`/training/a/${t.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 7 }}>
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Text style={type(10, 700, { ls: 0.08, color: color as string })}>{label}</Text>
                   {t.isExample ? <ExampleBadge label="ÖRNEK İÇERİK" /> : null}
@@ -61,7 +61,7 @@ export default function TrainingsRoute() {
           {((q.data as Course[] | null) ?? []).map(c => {
             const st = VERSION_STATUS[c.published ? 'published' : c.latest?.status ?? 'draft']!;
             return (
-              <Tap key={c.id} testID={`tr-course-${c.id}`} onPress={() => router.push(`/training/${c.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 7 }}>
+              <Tap key={c.id} testID={`tr-course-${c.id}`} onPress={() => router.push(`/training/${c.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 7 }}>
                 <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Pill label={st[0]} fg={st[1]} bg={st[2]} />
                   {c.latest && c.published && c.latest.status !== 'published' ? <Pill label={`SÜRÜM ${c.latest.version} ${VERSION_STATUS[c.latest.status]![0]}`} fg={C.warn} bg={C.chip} /> : null}

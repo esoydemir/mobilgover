@@ -72,37 +72,11 @@ export default function TaskDetailRoute() {
         {t.rule.isExample ? <ExampleBadge /> : null}
         {t.rule.kind === 'good_practice' ? <ExampleBadge label="İYİ UYGULAMA" /> : null}
       </View>
-      <Text style={type(27, 600, { family: 'outfit', ls: -0.035, lh: 1.1 })}>{t.title}</Text>
+      <Text style={type(22, 700, { ls: -0.02, lh: 1.2 })}>{t.title}</Text>
       {t.equipment ? <Text style={type(13, 600, { color: C.t2 })}>{t.equipment.name}</Text> : null}
       <Text style={type(14.5, 400, { lh: 1.5, color: C.t2 })}>{t.instructions}</Text>
+      {open ? <Text style={type(13, 600, { color: t.assignee ? C.t2 : C.warn })}>{t.assignee ? `Bu iş: ${t.assignee.name ?? 'atanan kişi'}` : 'Bu işe henüz sorumlu atanmadı'}</Text> : null}
 
-      <Tap onPress={() => router.push(`/obligation/${t.obligationId}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, paddingVertical: 14, paddingHorizontal: 16 }}>
-        <View style={{ width: 26, height: 26, borderRadius: 999, backgroundColor: tint.lime(0.14), alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={type(13, 700, { color: C.lime })}>?</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={type(13.5, 600)}>Bunu neden yapmam gerekiyor?</Text>
-          <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 2 }]}>Kural sürümü {t.rule.version} · eşleşen işletme bilgileri</Text>
-        </View>
-        <Chevron size={14} />
-      </Tap>
-
-      <TaskWhy t={t} role={role} />
-      <ReportEvidence t={t} base={base} onChanged={q.reload} />
-
-      {windowed.data ? (() => {
-        const same = bucketTasks(windowed.data).all.filter(x => x.id !== t.id && x.title === t.title && (x.equipment_name ?? null) === (t.equipment?.name ?? null) && new Date(x.due_at) <= new Date());
-        const bad = same.filter(x => x.outcome === 'nonconforming').length;
-        const late = same.filter(x => x.status === 'missed' || (x.status === 'open' && new Date(x.due_at) < new Date())).length;
-        return (
-          <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
-            <Eyebrow>GEÇMİŞ · SON 14 GÜN</Eyebrow>
-            <Text testID="task-history" style={type(12.5, 500, { color: bad || late ? C.warn : C.t2, lh: 1.45 })}>
-              {same.length === 0 ? 'Bu kontrol için önceki kayıt yok.' : `${same.length} önceki kayıt · ${bad} uygunsuz · ${late} gecikmiş/kaçırılmış${bad >= 2 ? ' · tekrar eden uygunsuzluk' : ''}`}
-            </Text>
-          </Card>
-        );
-      })() : null}
 
       {t.status === 'done' && (
         <Card border={t.outcome === 'nonconforming' ? tint.crit(0.35) : tint.lime(0.3)}>
@@ -112,23 +86,13 @@ export default function TaskDetailRoute() {
           {t.reviewFlag ? <Text style={[type(12, 400, { color: C.warn, lh: 1.45 }), { marginTop: 6 }]}>{t.reviewFlag === 'RULE_WITHDRAWN'
             ? `İnceleme gerekiyor: bu işin kural sürümü geri çekildi${t.rule.statusReason ? ` — ${t.rule.statusReason}` : ''}. Yeni iş açılmayacak; bu işi tamamlamak veya bırakmak için yöneticinle karar ver.`
             : 'İnceleme gerekiyor: kural sürümü değişti.'}</Text> : null}
-          {t.nonconformity ? <PrimaryButton testID="open-ncr" label="Uygunsuzluğu aç" height={44} size={13.5} style={{ marginTop: 12 }} onPress={() => router.push(`/ncr/${t.nonconformity!.id}`)} /> : null}
+          {t.nonconformity && t.nonconformity.canOpen !== false ? <PrimaryButton testID="open-ncr" label="Uygunsuzluğu aç" height={44} size={13.5} style={{ marginTop: 12 }} onPress={() => router.push(`/ncr/${t.nonconformity!.id}`)} /> : null}
+          {t.nonconformity && t.nonconformity.canOpen === false ? (
+            <Text testID="task-ncr-followup" style={[type(13, 600, { color: C.t1, lh: 1.5 }), { marginTop: 10 }]}>{`Bu sonuç için uygunsuzluk açıldı. ${t.nonconformity.ownerName ? `Takip eden: ${t.nonconformity.ownerName}.` : 'Henüz sorumlusu atanmadı; şube yöneticisine haber ver.'} Sana bir adım verilirse görevlerinde görünür.`}</Text>
+          ) : null}
         </Card>
       )}
       {t.status === 'cancelled' || t.status === 'missed' ? <ErrorBox message={t.status === 'cancelled' ? `Bu görev iptal edildi${t.statusReason ? `: ${t.statusReason}` : '.'}` : 'Bu görevin süresi geçti.'} /> : null}
-
-      {t.assignmentHistory.length ? (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
-          <Eyebrow>SORUMLU GEÇMİŞİ</Eyebrow>
-          {[...t.assignmentHistory].reverse().map((h, i) => (
-            <Text key={i} testID={`task-assign-history-${i}`} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>
-              {`${fmtDateTime(h.at)} · ${h.previous?.name ?? 'atanmamıştı'} → ${h.current?.name ?? 'atama kaldırıldı'} · ${h.changedBy.name ?? 'yönetici'}${h.source === 'bulk' ? ' (toplu)' : h.source === 'series' ? ' (seri)' : ''}${h.reason ? ` · ${h.reason}` : ''}`}
-            </Text>
-          ))}
-        </Card>
-      ) : null}
-
-      {role !== 'staff' && siteId ? <AssignCard key={`${t.assignee?.id}-${t.seriesResponsible?.id}`} t={t} siteId={siteId} onChanged={q.reload} /> : null}
 
       {t.emergencyInstruction && (open || t.outcome === 'nonconforming') ? (
         <View style={{ borderWidth: 1, borderColor: tint.crit(0.3), backgroundColor: tint.crit(0.06), borderRadius: 18, padding: 14, gap: 6 }}>
@@ -141,8 +105,72 @@ export default function TaskDetailRoute() {
         <RequirementCard key={i} r={r} t={t} instruments={(instruments.data ?? []).filter(x => x.type === 'thermometer')} role={role} onAdd={add} base={base} />
       ))}
 
+      {local.length > 0 && (
+        <Card border={tint.warn(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+          <Eyebrow color={C.warn}>CİHAZDA BEKLEYEN KAYITLAR</Eyebrow>
+          {local.map(o => (
+            <View key={o.id} testID="local-op" style={{ gap: 2 }}>
+              <Text style={type(12.5, 600)}>{o.label.replace(`${t.title}: `, '')}</Text>
+              <Text style={type(11.5, 500, { color: OP_TEXT[o.status][1] })}>{OP_TEXT[o.status][0]}{o.error ? ` · ${o.error}` : ''}</Text>
+            </View>
+          ))}
+          <GhostButton label="Eşitleme ekranı" height={36} size={12} onPress={() => router.push('/sync')} style={{ alignSelf: 'flex-start' }} />
+        </Card>
+      )}
+
+      <ReportEvidence t={t} base={base} onChanged={q.reload} />
+
+      {open && t.progress.missing.length > 0 && local.length === 0 && (
+        <Text testID="task-missing" style={type(12, 400, { lh: 1.5, color: C.t3 })}>Eksik kanıt: {t.progress.missing.join(' · ')}</Text>
+      )}
+      {open ? (
+        <PrimaryButton testID="task-complete" label={canComplete ? 'Görevi tamamla' : 'Kanıt bekleniyor'} disabled={!canComplete}
+          onPress={() => add('tamamlama', `${base}/tasks/${id}/complete`, { clientCompletedAt: new Date().toISOString() })} />
+      ) : completing ? (
+        <Text style={[type(12.5, 600, { color: C.warn }), { textAlign: 'center' }]}>Tamamlama cihazda; sunucuya ulaşınca sonuç burada görünür.</Text>
+      ) : null}
+      {open ? <Text style={[type(11.5, 400, { color: C.t3 }), { textAlign: 'center' }]}>Zorunlu kanıt eksikse sunucu görevi kapatmaz.</Text> : null}
+      {role !== 'staff' && siteId ? <AssignCard key={`${t.assignee?.id}-${t.seriesResponsible?.id}`} t={t} siteId={siteId} onChanged={q.reload} /> : null}
+
+      <Tap onPress={() => router.push(`/obligation/${t.obligationId}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, paddingVertical: 14, paddingHorizontal: 16 }}>
+        <View style={{ width: 26, height: 26, borderRadius: 999, backgroundColor: tint.lime(0.14), alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={type(13, 700, { color: C.lime })}>?</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={type(13.5, 600)}>Bunu neden yapmam gerekiyor?</Text>
+          <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 2 }]}>Kural sürümü {t.rule.version} · eşleşen işletme bilgileri</Text>
+        </View>
+        <Chevron size={14} />
+      </Tap>
+
+      <TaskWhy t={t} role={role} />
+      {windowed.data ? (() => {
+        const same = bucketTasks(windowed.data).all.filter(x => x.id !== t.id && x.title === t.title && (x.equipment_name ?? null) === (t.equipment?.name ?? null) && new Date(x.due_at) <= new Date());
+        const bad = same.filter(x => x.outcome === 'nonconforming').length;
+        const late = same.filter(x => x.status === 'missed' || (x.status === 'open' && new Date(x.due_at) < new Date())).length;
+        return (
+          <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
+            <Eyebrow>GEÇMİŞ · SON 14 GÜN</Eyebrow>
+            <Text testID="task-history" style={type(12.5, 500, { color: bad || late ? C.warn : C.t2, lh: 1.45 })}>
+              {same.length === 0 ? 'Bu kontrol için önceki kayıt yok.' : `${same.length} önceki kayıt · ${bad} uygunsuz · ${late} gecikmiş/kaçırılmış${bad >= 2 ? ' · tekrar eden uygunsuzluk' : ''}`}
+            </Text>
+          </Card>
+        );
+      })() : null}
+
+      {t.assignmentHistory.length ? (
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+          <Eyebrow>SORUMLU GEÇMİŞİ</Eyebrow>
+          {[...t.assignmentHistory].reverse().map((h, i) => (
+            <Text key={i} testID={`task-assign-history-${i}`} style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>
+              {`${fmtDateTime(h.at)} · ${h.previous?.name ?? 'atanmamıştı'} → ${h.current?.name ?? 'atama kaldırıldı'} · ${h.changedBy.name ?? 'yönetici'}${h.source === 'bulk' ? ' (toplu)' : h.source === 'series' ? ' (seri)' : ''}${h.reason ? ` · ${h.reason}` : ''}`}
+            </Text>
+          ))}
+        </Card>
+      ) : null}
+
       {t.relatedTraining?.length ? (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>İLGİLİ EĞİTİMLER</Eyebrow>
           {t.relatedTraining.map(c => (
             <Text key={c.id} testID={`task-training-${c.id}`} onPress={() => router.push(`/training/${c.id}`)} style={type(12.5, 500, { color: C.info, lh: 1.45 })}>
@@ -154,7 +182,7 @@ export default function TaskDetailRoute() {
       ) : null}
 
       {t.relatedDocuments?.length || t.relatedDocumentsHidden ? (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>İLGİLİ BELGELER</Eyebrow>
           {(t.relatedDocuments ?? []).map(d => {
             const v = d.latest;
@@ -186,7 +214,7 @@ export default function TaskDetailRoute() {
           ) : null}
         </Card>
       ) : role !== 'staff' ? (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>İLGİLİ BELGELER</Eyebrow>
           <Text testID="task-doc-none" style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Bu kontrole bağlı belge yok. Belgeyi kasaya ekle; belgenin sayfasında “Nerede kullanılıyor” bölümünden bu kontrolü seç.</Text>
           <GhostButton testID="task-doc-add" label="Belge kasasına ekle" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => router.push('/documents/new' as never)} />
@@ -194,7 +222,7 @@ export default function TaskDetailRoute() {
       ) : null}
 
       {(t.measurements.length > 0 || t.evidence.length > 0) && (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>SUNUCUDAKİ KAYITLAR</Eyebrow>
           {t.measurements.map(m => (
             <Text key={m.id} style={type(12.5, 500, { color: m.within_limit ? C.t1 : C.crit })}>
@@ -209,29 +237,6 @@ export default function TaskDetailRoute() {
         </Card>
       )}
 
-      {local.length > 0 && (
-        <Card radius={22} border={tint.warn(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
-          <Eyebrow color={C.warn}>CİHAZDA BEKLEYEN KAYITLAR</Eyebrow>
-          {local.map(o => (
-            <View key={o.id} testID="local-op" style={{ gap: 2 }}>
-              <Text style={type(12.5, 600)}>{o.label.replace(`${t.title}: `, '')}</Text>
-              <Text style={type(11.5, 500, { color: OP_TEXT[o.status][1] })}>{OP_TEXT[o.status][0]}{o.error ? ` · ${o.error}` : ''}</Text>
-            </View>
-          ))}
-          <GhostButton label="Eşitleme ekranı" height={36} size={12} onPress={() => router.push('/sync')} style={{ alignSelf: 'flex-start' }} />
-        </Card>
-      )}
-
-      {open && t.progress.missing.length > 0 && local.length === 0 && (
-        <Text testID="task-missing" style={type(12, 400, { lh: 1.5, color: C.t3 })}>Eksik kanıt: {t.progress.missing.join(' · ')}</Text>
-      )}
-      {open ? (
-        <PrimaryButton testID="task-complete" label={canComplete ? 'Görevi tamamla' : 'Kanıt bekleniyor'} disabled={!canComplete}
-          onPress={() => add('tamamlama', `${base}/tasks/${id}/complete`, { clientCompletedAt: new Date().toISOString() })} />
-      ) : completing ? (
-        <Text style={[type(12.5, 600, { color: C.warn }), { textAlign: 'center' }]}>Tamamlama cihazda; sunucuya ulaşınca sonuç burada görünür.</Text>
-      ) : null}
-      {open ? <Text style={[type(11.5, 400, { color: C.t3 }), { textAlign: 'center' }]}>Zorunlu kanıt eksikse sunucu görevi kapatmaz.</Text> : null}
     </Screen>
   );
 }
@@ -265,7 +270,7 @@ function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; o
   const re = t.reportEvidence;
   // No report section for someone without document access: say who can pick the report instead of leaving the instruction hanging.
   if (!re && t.status === 'open' && t.requirements.some(r => r.kind === 'document' && r.acceptsServiceReport)) return (
-    <View testID="task-report-restricted"><Card radius={22} border={tint.info(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16 }}>
+    <View testID="task-report-restricted"><Card border={tint.info(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16 }}>
       <Text style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>Belge kasasındaki servis raporunu bu hesap göremez. İncelenmiş raporu belge okuma yetkisi olan yönetici kanıt olarak seçer; yöneticine ilet.</Text>
     </Card></View>
   );
@@ -282,7 +287,7 @@ function ReportEvidence({ t, base, onChanged }: { t: TaskDetail; base: string; o
   };
   const basis = re.links.filter(l => l.completionBasis);
   return (
-    <View testID="task-report-evidence"><Card radius={22} border={tint.info(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <View testID="task-report-evidence"><Card border={tint.info(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow color={C.info}>SERVİS RAPORUNU KANIT OLARAK KULLAN</Eyebrow>
       {!open ? (
         basis.length ? basis.map(l => (
@@ -338,7 +343,7 @@ function ServiceReports({ t }: { t: TaskDetail }) {
   const sr = t.serviceReports;
   if (!sr || sr.reports.length === 0) return null;
   return (
-    <View testID="task-reports"><Card radius={22} border={sr.blocked ? tint.warn(0.3) : tint.lime(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <View testID="task-reports"><Card border={sr.blocked ? tint.warn(0.3) : tint.lime(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow color={sr.blocked ? C.warn : C.lime}>SERVİS RAPORU</Eyebrow>
       {sr.reports.map(r => (
         <View key={r.documentId} testID={`task-report-${r.documentId}`} style={{ gap: 4 }}>
@@ -367,7 +372,7 @@ function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
   const hasLimit = t.requirements.some(r => r.kind === 'measurement');
   return (
     <>
-      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
+      <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 6 }}>
         <Eyebrow>NEDEN GEREKLİ</Eyebrow>
         <Text testID="task-why" style={type(13, 600, { lh: 1.4 })}>{t.rule.title ?? t.title}</Text>
         {t.rule.summary ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>{t.rule.summary}</Text> : null}
@@ -379,28 +384,27 @@ function TaskWhy({ t, role }: { t: TaskDetail; role: string | null }) {
             : 'Doğrulanmış yasal dayanak kaydı yok (örnek kural); bu görev yasal zorunluluk olarak sunulmaz.'}
         </Text>
       </Card>
-      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
-        <Eyebrow>TARİHLER VE SORUMLU</Eyebrow>
+      <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+        <Eyebrow>TARİHLER</Eyebrow>
         <Text testID="task-dates" style={type(12.5, 500, { color: C.t2, lh: 1.55 })}>
           {`Son tamamlanma: ${t.lastCompletedAt ? fmtDateTime(t.lastCompletedAt) : 'henüz tamamlanmadı'}
 Bu kontrolün son tarihi: ${fmtDateTime(t.dueAt)}
 Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonraki yok'}`}
         </Text>
-        <Text testID="task-owner" style={type(12.5, 600, { color: t.assignee ? C.t1 : C.warn })}>{t.assignee ? `Sorumlu: ${t.assignee.name ?? 'atanan kişi'}` : `Sorumlu atanmadı${t.seriesResponsible ? ` · seri sorumlusu: ${t.seriesResponsible.name}` : ''}`}</Text>
       </Card>
-      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+      <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
         <Eyebrow>YAPILACAKLAR</Eyebrow>
         {t.requirements.map((r, i) => <Text key={i} style={type(12.5, 500, { color: C.t2, lh: 1.45 })}>{i + 1}. {REQ_TEXT(r)}</Text>)}
         <Text style={type(12.5, 500, { color: C.t2, lh: 1.45 })}>{t.requirements.length + 1}. Görevi tamamla; kanıt eksikse sunucu kapatmaz.</Text>
       </Card>
-      <Card radius={22} border={tint.warn(0.25)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
+      <Card border={tint.warn(0.25)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 5 }}>
         <Eyebrow color={C.warn}>TAMAMLANMAZSA</Eyebrow>
         <Text testID="task-risk" style={type(12.5, 500, { color: C.t2, lh: 1.5 })}>{SEVERITY_RISK[t.severity]}{hasLimit ? ' Ölçüm limit dışı çıkarsa uygunsuzluk açılır ve takip gerekir.' : ''}</Text>
         <Text style={type(11.5, 500, { color: C.t3 })}>Olası ceza tutarı: modellenmedi (doğrulanmış ceza tablosu yok).</Text>
       </Card>
       <ServiceReports t={t} />
       {manager || (t.services?.length ?? 0) > 0 ? (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
           <Eyebrow>SERVİS</Eyebrow>
           {(t.services ?? []).length === 0 ? <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Bu görev için servis talebi yok.</Text> : null}
           {(t.services ?? []).map(sv => (
@@ -416,6 +420,11 @@ Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonrak
   );
 }
 
+/** What the server already holds for this requirement, shown where it was entered. */
+function Recorded({ text, bad }: { text: string; bad?: boolean }) {
+  return <Text testID="req-recorded" style={[type(12.5, 700, { color: bad ? C.crit : C.lime, lh: 1.4 }), { marginTop: 8 }]}>{bad ? '⚠' : '✓'} {text}</Text>;
+}
+
 const labelOf = (k: string) => ({ photo: 'Fotoğraf', document: 'Belge', note: 'Not', checklist: 'Kontrol listesi', approval: 'Onay', device_record: 'Cihaz kaydı' } as Record<string, string>)[k] ?? k;
 
 function RequirementCard({ r, t, instruments, role, onAdd, base }: {
@@ -428,6 +437,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
   const [answers, setAnswers] = useState<Record<string, 'pass' | 'fail' | 'na'>>({});
   const [error, setError] = useState<string | null>(null);
   const path = `${base}/tasks/${t.id}`;
+  const stored = (kind: string) => t.evidence.filter(e => e.kind === kind && e.status === 'stored').length;
 
   if (r.kind === 'measurement') {
     const limit = t.limits.find(l => l.quantity === r.quantity && l.equipmentType === t.equipment?.type);
@@ -437,6 +447,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>ÖLÇÜM · ZORUNLU</Eyebrow>
+        {t.measurements.filter(m => m.quantity === r.quantity).map(m => <Recorded key={m.id} bad={!m.within_limit} text={`Kaydedildi: ${String(m.value).replace('.', ',')} ${m.unit} · ${m.within_limit ? 'limit içinde' : 'LİMİT DIŞI'}`} />)}
         <Text style={[type(13, 600), { marginTop: 10 }]}>Ölçülen {quantityLabel(r.quantity)} ({r.unit})</Text>
         <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 3 }]}>
           {limit ? `Kabul aralığı: ${limit.min ?? '—'} … ${limit.max ?? '—'} ${limit.unit}${LIMIT_BASIS[limit.basis] ?? ''}` : 'Bu ekipman için limit tanımlı değil; sunucu kaydı reddeder.'}
@@ -493,6 +504,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>{r.kind === 'photo' ? 'FOTOĞRAF' : 'BELGE'} · EN AZ {r.min}</Eyebrow>
+        {stored(r.kind) > 0 ? <Recorded text={`Kaydedildi: ${stored(r.kind)} ${r.kind === 'photo' ? 'fotoğraf' : 'belge'}`} /> : null}
         <Tap testID="photo-add" onPress={pick} style={{ height: 96, marginTop: 10, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: C.bds, backgroundColor: C.chip, alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <CameraIcon />
           <Text style={type(12.5, 600, { color: C.t2 })}>{Platform.OS === 'web' ? 'Fotoğraf seç' : 'Fotoğraf çek'}</Text>
@@ -509,6 +521,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>KONTROL LİSTESİ</Eyebrow>
+        {stored('checklist') > 0 ? <Recorded text="Kontrol listesi kaydedildi" /> : null}
         <View style={{ gap: 10, marginTop: 12 }}>
           {r.items.map(i => (
             <View key={i.id} style={{ gap: 6 }}>
@@ -537,6 +550,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>AÇIKLAMA {r.requiredWhen === 'nonconforming' ? '· SONUÇ UYGUNSUZSA ZORUNLU' : '· ZORUNLU'}</Eyebrow>
+        {stored('note') > 0 ? <Recorded text="Not kaydedildi" /> : null}
         <View style={{ marginTop: 10 }}><Field testID="note-text" value={note} onChangeText={setNote} multiline placeholder="Ne gördün, ne yaptın?" /></View>
         <GhostButton testID="note-save" label="Notu kaydet" disabled={note.trim().length < 3} why={shortWhy(note, 3, 'Not')} style={{ marginTop: 10 }} onPress={() => { onAdd('not', `${path}/evidence`, { kind: 'note', text: note.trim() }); setNote(''); }} />
       </Card>

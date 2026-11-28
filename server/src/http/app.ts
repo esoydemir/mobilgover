@@ -805,8 +805,8 @@ export function buildApp(deps: { db: Db; store: EvidenceStore; mailer: Mailer; c
   });
   app.post('/admin/rule-versions/:id/area-review', async req => {
     platformGate(req);
-    const b = z.object({ area: z.string(), decision: z.enum(['approved', 'changes_requested']), notes: z.string().max(4000) }).parse(req.body);
-    await db.system(tx => areaReview(tx, req.principal, rvId(req), b.area, b.decision, b.notes));
+    const b = z.object({ area: z.string(), decision: z.enum(['approved', 'changes_requested']), notes: z.string().max(4000), sourceChecked: z.boolean().optional() }).parse(req.body);
+    await db.system(tx => areaReview(tx, req.principal, rvId(req), b.area, b.decision, b.notes, b.sourceChecked));
     return { ok: true };
   });
   app.post('/admin/rule-versions', async (req, reply) => {

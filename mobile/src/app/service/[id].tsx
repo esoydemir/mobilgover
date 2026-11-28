@@ -61,7 +61,7 @@ export default function ServiceDetailRoute() {
         <Pill label={reqStatus(d.request.status, d.quotes.filter(x => x.acceptable).length, live.length)[0]} fg={reqStatus(d.request.status, d.quotes.filter(x => x.acceptable).length, live.length)[1]} bg={reqStatus(d.request.status, d.quotes.filter(x => x.acceptable).length, live.length)[2]} />
         <Pill label={d.mode === 'direct' ? 'DOĞRUDAN TEK UZMAN' : d.mode === 'selected' ? 'SEÇİLİ UZMANLAR' : 'ÇOK TEKLİFLİ'} fg={C.info} bg={tint.info(0.12)} />
       </View>
-      <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{d.request.title}</Text>
+      <Text style={type(22, 600, { ls: -0.03 })}>{d.request.title}</Text>
       <Text style={type(13.5, 400, { color: C.t2, lh: 1.5 })}>{d.request.description}</Text>
       <Text style={type(11.5, 400, { color: C.t3 })}>{d.request.category_name} · {fmtDateTime(d.request.created_at)}</Text>
       {d.request.site_name ? <Text testID="service-where" style={type(12, 500, { color: C.t2 })}>Şube: {d.request.site_name}{d.request.equipment_name ? ` · Ekipman: ${d.request.equipment_name}` : ""}</Text> : null}
@@ -248,7 +248,7 @@ function ReviewForm({ jobId, onDone }: { jobId: string; onDone: () => void }) {
       ))}
       <Field label="Yorum (isteğe bağlı)" testID="review-comment" value={comment} onChangeText={setComment} multiline />
       <Tap testID="review-show" onPress={() => setShow(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-        <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: show ? C.lime : C.t3, backgroundColor: show ? C.lime : 'transparent' }} />
+        <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: show ? C.lime : C.t3, backgroundColor: show ? C.accent : 'transparent' }} />
         <Text style={[type(12.5, 500), { flex: 1 }]}>Uzman profilinde gösterilmesine izin ver (işletme adı gösterilmez; kategori, şehir ve ay görünür)</Text>
       </Tap>
       {error ? <ErrorBox message={error} /> : null}

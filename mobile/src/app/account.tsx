@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { Platform, Text } from 'react-native';
 import { API_URL, errorText } from '../api/client';
 import { useSession } from '../api/session';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
-import { Card, Eyebrow, GhostButton, PrimaryButton } from '../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton } from '../components/ui';
 import { fmtDateTime } from '../features/dates';
 import { Invitations } from '../features/Invitations';
 import { ROLE_LABEL } from '../features/labels';
@@ -12,6 +12,7 @@ import { useApi } from '../api/useApi';
 import { View } from 'react-native';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
+import { setThemePref, useThemePref } from '../theme/appearance';
 
 /** Account, environment and second factor. */
 export default function AccountRoute() {
@@ -19,6 +20,7 @@ export default function AccountRoute() {
   const { showToast } = useUi();
   const [setup, setSetup] = useState<{ secret: string; otpauthUri: string } | null>(null);
   const [code, setCode] = useState('');
+  const theme = useThemePref();
   const [error, setError] = useState<string | null>(null);
   const sessions = useApi<{ id: string; created_at: string; last_used_at: string | null; current: boolean }[]>('/auth/sessions');
   const admin = role === 'owner' || role === 'hq_manager' || (me?.platformRoles.length ?? 0) > 0;
@@ -53,6 +55,14 @@ export default function AccountRoute() {
         ) : null}
         {error ? <ErrorBox message={error} /> : null}
       </Card>
+      {Platform.OS === 'web' ? (
+        <Card style={{ gap: 10 }}>
+          <Eyebrow>GÖRÜNÜM</Eyebrow>
+          <View style={{ flexDirection: 'row', gap: 7, flexWrap: 'wrap' }}>
+            {([['system', 'Cihaza göre'], ['light', 'Açık'], ['dark', 'Koyu']] as const).map(([k, l]) => <FilterChip key={k} testID={`theme-${k}`} label={l} active={theme === k} onPress={() => setThemePref(k)} />)}
+          </View>
+        </Card>
+      ) : null}
       <Invitations />
       <Card style={{ gap: 8 }}>
         <Eyebrow>AÇIK OTURUMLAR</Eyebrow>

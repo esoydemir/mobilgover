@@ -305,7 +305,7 @@ export async function selectServiceReportEvidence(tx: Tx, p: Principal, companyI
 export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId: string) {
   const t = await loadTask(tx, p, companyId, taskId, 'task.read');
   const c = await collected(tx, taskId);
-  const ncr = (await tx.query(`SELECT id, status, risk_level, depth FROM nonconformities WHERE task_id = $1`, [taskId])).rows[0] ?? null;
+  const ncr = await taskCase(tx, p, companyId, taskId);
   const reqs = (t.evidence as unknown[]).map(x => evidenceRequirementSchema.parse(x));
   const serviceReports = await taskReports(tx, p, companyId, t);
   const canReadReports = can(p, 'document.read', { companyId, siteId: t.site_id }).ok;
@@ -338,6 +338,16 @@ export async function taskDetail(tx: Tx, p: Principal, companyId: string, taskId
     ...await (async () => { const r = await documentsForTask(tx, p, companyId, { template_code: t.template_code, equipment_id: t.equipment_id, rule_code: t.rule_code });
       return { relatedDocuments: r.documents, relatedDocumentsHidden: r.hidden, documentHistory: r.history }; })(),
   };
+}
+
+/** The case a task opened, with who follows it up. Someone who may not read the case is told who does instead of being sent to a dead end. */
+async function taskCase(tx: Tx, p: Principal, companyId: string, taskId: string) {
+  const n = (await tx.query(`SELECT n.id, n.status, n.risk_level, n.depth, n.site_id, n.owner_id, u.display_name AS owner_name,
+       EXISTS (SELECT 1 FROM ncr_actions a WHERE a.ncr_id = n.id AND a.owner_id = $2) AS my_action
+     FROM nonconformities n LEFT JOIN users u ON u.id = n.owner_id WHERE n.task_id = $1`, [taskId, p.userId])).rows[0];
+  if (!n) return null;
+  const canOpen = can(p, 'ncr.read', { companyId, siteId: n.site_id, recordId: n.id, assigneeId: n.owner_id === p.userId || n.my_action ? p.userId : n.owner_id }).ok;
+  return { id: n.id as string, status: n.status as string, risk_level: n.risk_level as string, depth: n.depth as string, canOpen, ownerName: (n.owner_name as string | null) ?? null };
 }
 
 async function userName(tx: Tx, userId: string) {

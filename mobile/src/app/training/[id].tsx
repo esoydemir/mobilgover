@@ -44,7 +44,7 @@ export default function CourseRoute() {
         {open ? <Pill label={`SÜRÜM ${open.version} · ${VERSION_STATUS[open.status]![0]}`} fg={VERSION_STATUS[open.status]![1]} bg={VERSION_STATUS[open.status]![2]} /> : null}
         {c.isExample ? <ExampleBadge label="ÖRNEK İÇERİK" /> : null}
       </View>
-      <Text style={type(23, 600, { family: 'outfit', ls: -0.03, lh: 1.15 })}>{shown.title}</Text>
+      <Text style={type(23, 600, { ls: -0.03, lh: 1.15 })}>{shown.title}</Text>
       {c.exampleNote ? <Text style={type(12, 500, { color: C.warn, lh: 1.45 })}>{c.exampleNote}</Text> : null}
       {c.inhouseNote ? <Text testID="tr-inhouse" style={type(12, 500, { color: c.inhouseNote.includes('bağımsız') ? C.warn : C.t2, lh: 1.45 })}>{c.inhouseNote} · mesleki ağda ya da platform kütüphanesinde yayımlanmaz.</Text> : null}
       {shown.summary ? <Text style={type(13, 400, { color: C.t2, lh: 1.5 })}>{shown.summary}</Text> : null}

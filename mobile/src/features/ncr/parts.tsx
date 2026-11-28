@@ -7,7 +7,7 @@ import { useSession } from '../../api/session';
 import type { Assignee } from '../../api/types';
 import { useApi } from '../../api/useApi';
 import { ErrorBox, Field, Loading } from '../../components/states';
-import { Callout, Card, Eyebrow, FilterChip, GhostButton, Pill, PrimaryButton, StepMark, Tap } from '../../components/ui';
+import { Callout, Card, Eyebrow, FilterChip, GhostButton, missingWhy, Pill, PrimaryButton, StepMark, Tap } from '../../components/ui';
 import { useUi } from '../../state/app';
 import { C, tint, type } from '../../theme';
 import { fmtDateTime } from '../dates';
@@ -31,10 +31,14 @@ export function useRun(onDone: () => void) {
 }
 
 export function FlowStepper({ n }: { n: NcrDetail }) {
+  const [open, setOpen] = useState(false);
   return (
     <Card>
-      <Eyebrow>{n.depth === 'capa' ? 'DÜZELTİCİ FAALİYET AKIŞI (TAM CAPA)' : 'DÜZELTME AKIŞI'}{n.iteration > 1 ? ` · ${n.iteration}. TUR` : ''}</Eyebrow>
-      <View style={{ marginTop: 14 }}>
+      <Tap testID="ncr-flow-toggle" accessibilityState={{ expanded: open }} onPress={() => setOpen(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 }}>
+        <Eyebrow style={{ flex: 1 }}>{n.depth === 'capa' ? 'DÜZELTİCİ FAALİYET AKIŞI (TAM CAPA)' : 'DÜZELTME AKIŞI'}{n.iteration > 1 ? ` · ${n.iteration}. TUR` : ''}</Eyebrow>
+        <Text style={type(13, 600, { color: C.lime })}>{open ? 'Gizle ▴' : 'Aşamaları göster ▾'}</Text>
+      </Tap>
+      {open ? <View style={{ marginTop: 14 }}>
         {n.flow.stages.map((s, i) => (
           <View key={s.key} style={{ flexDirection: 'row', gap: 12, alignItems: 'stretch' }}>
             <View style={{ width: 22, alignItems: 'center' }}>
@@ -47,7 +51,7 @@ export function FlowStepper({ n }: { n: NcrDetail }) {
             </View>
           </View>
         ))}
-      </View>
+      </View> : null}
     </Card>
   );
 }
@@ -96,7 +100,7 @@ export function AssignmentCard({ n, base, reload, initialOpen = false }: { n: Nc
   const assigned = n.history.some(h => h.event_type === 'nonconformity.assigned');
   const dueChanged = !!n.due_at && !!due && new Date(due).getTime() !== new Date(n.due_at).getTime();
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <View style={{ flex: 1 }}>
           <Eyebrow>SORUMLU VE TERMİN</Eyebrow>
@@ -136,7 +140,7 @@ function CauseChips({ value, onChange }: { value: Cause[]; onChange: (v: Cause[]
           <Tap key={c} testID={`cause-${c}`} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
             onPress={() => onChange(on ? value.filter(x => x !== c) : [...value, c])}
             style={{ flexDirection: 'row', gap: 10, alignItems: 'center', borderWidth: 1, borderColor: on ? tint.lime(0.4) : C.bd, backgroundColor: on ? tint.lime(0.07) : C.chip, borderRadius: 16, padding: 11 }}>
-            <View style={{ width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: on ? C.lime : C.ringIdle, backgroundColor: on ? C.lime : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: on ? C.lime : C.ringIdle, backgroundColor: on ? C.accent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
               <Text style={type(11, 800, { color: C.ink })}>{on ? '✓' : ''}</Text>
             </View>
             <View style={{ flex: 1 }}>
@@ -159,7 +163,7 @@ export function CauseCard({ n, base, reload }: { n: NcrDetail; base: string; rel
   const verifiedThisRound = !!verified && (verified.iteration === n.iteration || verified.migrated);
   const show = (c: NonNullable<typeof initial>) => c.categories.length ? c.categories.map(x => CAUSE_LABEL[x][0]).join(' · ') : 'Önceki sürümden (serbest metin)';
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <Eyebrow>NEDEN DEĞERLENDİRMESİ</Eyebrow>
       {initial ? (
         <View style={{ gap: 3 }}>
@@ -213,7 +217,7 @@ export function ServiceLinkCard({ n, base, reload }: { n: NcrDetail; base: strin
   const sl = n.serviceLinks;
   if (!sl || (sl.linked.length === 0 && sl.linkable.length === 0)) return null;
   return (
-    <View testID="ncr-service-links"><Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+    <View testID="ncr-service-links"><Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <Eyebrow color={C.info}>BAŞKA VAKANIN SERVİSİ</Eyebrow>
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Aynı ekipmanın başka bir vakası için yapılmış servis bu vakanın arızasını da kapsadıysa, bunu burada dayanağıyla kaydet. Kaydedilmeyen servis raporu yalnız destekleyici ek olarak görünür; görevin zorunlu servis kanıtını karşılamaz.</Text>
       {sl.linked.map(l => (
@@ -253,7 +257,7 @@ export function SupportCard({ n, base, reload, onFollowUp, onAssign }: { n: NcrD
   if (!n.suggestions.length || n.status === 'closed') return null;
   // A critical case's first step comes first; suggestions wait until it is done.
   if (n.firstAction) return (
-    <Card radius={22} style={{ paddingVertical: 13, paddingHorizontal: 16, gap: 6 }}>
+    <Card style={{ paddingVertical: 13, paddingHorizontal: 16, gap: 6 }}>
       <Eyebrow color={C.t3}>ÖNERİLEN DESTEK · BEKLİYOR</Eyebrow>
       <Text testID="support-waiting" style={type(12, 400, { color: C.t3, lh: 1.45 })}>Önce yukarıdaki kritik ilk işlemler yapılmalı; {n.suggestions.length} öneri ondan sonra gösterilir.</Text>
     </Card>
@@ -270,7 +274,7 @@ export function SupportCard({ n, base, reload, onFollowUp, onAssign }: { n: NcrD
   };
   const label: Record<string, string> = { explanation: 'Açıklamayı aç', service_request: 'Talep formunu aç', equipment: 'Ekipmanlar', equipment_history: 'Ekipman geçmişi', team: 'Ekip', follow_up: 'Takip aksiyonu ekle', assign: 'Sorumluyu değiştir', training: 'Eğitim ata' };
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <Eyebrow color={C.lime}>ÖNERİLEN DESTEK</Eyebrow>
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>İlk değerlendirmedeki nedenlere göre. Öneriler yalnızca yol gösterir; sen onaylamadan hiçbir talep, sipariş ya da kapanış olmaz.</Text>
       {n.suggestions.length > 1 ? <Text style={type(11.5, 500, { color: C.t2 })}>{new Set(n.suggestions.map(s => s.category)).size} neden için {n.suggestions.length} öneri.</Text> : null}
@@ -331,16 +335,27 @@ function DecideBox({ reason, setReason, instead, setInstead, busy, error, label,
 export function CaseSummary({ n }: { n: NcrDetail }) {
   const STAGE_TR: Record<string, string> = { ...STAGE_LABEL, closed: 'Kapandı' };
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 9 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 9 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Eyebrow style={{ flex: 1 }}>DURUM · {n.progress.done}/{n.progress.total} AŞAMA{n.iteration > 1 ? ` · ${n.iteration}. TUR` : ''}</Eyebrow>
         {n.next.mine ? <Pill label="SIRA SENDE" fg={C.lime} bg={tint.lime(0.12)} /> : null}
       </View>
+      <View style={{ flexDirection: 'row', gap: 3 }} accessibilityLabel={`${n.progress.done} / ${n.progress.total} aşama tamam`}>
+        {Array.from({ length: n.progress.total }, (_, i) => <View key={i} style={{ flex: 1, height: 5, borderRadius: 3, backgroundColor: i < n.progress.done ? C.lime : C.track }} />)}
+      </View>
       <View testID="ncr-next" style={{ gap: 3 }}>
         <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>SIRADA · {(STAGE_TR[n.next.stage] ?? n.next.stage).toLocaleUpperCase('tr')}</Text>
         <Text style={type(13.5, 600, { lh: 1.4 })}>{n.next.what}</Text>
-        <Text style={type(12, 400, { color: C.t2 })}>Kim: {n.next.who}</Text>
+        {n.next.who && n.next.who !== '—' ? <Text style={type(13, 600, { color: C.t2 })}>Kim: {n.next.who}</Text> : null}
       </View>
+      {n.status === 'closed' ? (() => {
+        const by = [...n.verifications].reverse().find(v => v.result === 'effective');
+        return by ? (
+          <Text testID="ncr-closed-by" style={type(13.5, 700, { color: C.lime, lh: 1.45 })}>
+            {`Kapatan: ${by.verified_by_name}${by.verification_mode === 'self' ? ' · ÖZ DOĞRULAMA' : by.verified_via === 'grant' ? ' · dış doğrulayıcı' : ''}${n.closed_at ? ` · ${fmtDateTime(n.closed_at)}` : ''}`}
+          </Text>
+        ) : null;
+      })() : null}
       {n.status !== 'closed' && n.closureMissing.length ? (
         <View testID="ncr-missing" style={{ gap: 3, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
           <Text style={type(10, 700, { ls: 0.08, color: C.t3 })}>KAPANIŞ İÇİN EKSİK</Text>
@@ -360,7 +375,8 @@ export function CriticalFirst({ n, onAssign }: { n: NcrDetail; onAssign: () => v
       {n.firstAction.items.map((it, i) => (
         <View key={it.key} style={{ flexDirection: 'row', gap: 8 }}>
           <Text style={type(13, 700, { color: C.crit })}>{i + 1}.</Text>
-          <Text style={[type(13, 500, { lh: 1.45 }), { flex: 1 }]}>{it.text}</Text>
+          {/* The approved instruction has its own card just above; it is not repeated here. */}
+          <Text style={[type(13, 500, { lh: 1.45 }), { flex: 1 }]}>{it.key === 'containment' && n.emergency_instruction ? 'Etkiyi şimdi sınırla: yukarıdaki onaylı acil talimatı uygula ve ilk müdahaleyi kaydet.' : it.text}</Text>
         </View>
       ))}
       {n.firstAction.items.some(i => i.key === 'assignment') && n.permissions.manage ? (
@@ -387,7 +403,7 @@ export function LinkedRecords({ n }: { n: NcrDetail }) {
   const rows = role ? all : [];
   if (!rows.length && !evidence.length) return null;
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow>İLGİLİ KAYITLAR</Eyebrow>
       {rows.map(r => (
         <Tap key={r.key} testID={`ncr-link-${r.key}`} onPress={r.go} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
@@ -399,6 +415,44 @@ export function LinkedRecords({ n }: { n: NcrDetail }) {
         </Tap>
       ))}
       {evidence.length ? <Text style={type(11.5, 400, { color: C.t3 })}>{evidence.length} kanıt dosyası aksiyonların altında açılır.</Text> : null}
+    </Card>
+  );
+}
+
+const REVIEW_TEXT: Record<string, string> = { unreviewed: 'dosya incelemesi bekliyor', verified: 'dosya incelendi', rejected: 'dosya kabul edilmedi' };
+
+/** The evidence behind the case, readable where the closure is judged: first finding and every service report version. */
+export function ProofCard({ n }: { n: NcrDetail }) {
+  const { token, company } = useSession();
+  const [error, setError] = useState<string | null>(null);
+  const t = n.proof?.task, reports = n.proof?.reports ?? [];
+  if (!n.proof || (!t && !reports.length)) return null;
+  const open = (id: string) => openEvidence(token, company!.id, id).catch(e => setError(errorText(e)));
+  return (
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <View testID="ncr-proof"><Eyebrow>KANITLAR</Eyebrow></View>
+      {t ? (
+        <View style={{ gap: 4 }}>
+          <Text style={type(13, 700)}>İlk bulgu{t.completedBy ? ` · ${t.completedBy}` : ''}{t.completedAt ? ` · ${fmtDateTime(t.completedAt)}` : ''}</Text>
+          {t.measurements.map((m, i) => <Text key={i} testID="ncr-proof-measurement" style={type(12.5, 600, { color: m.withinLimit ? C.t1 : C.crit })}>Ölçüm {String(Number(m.value)).replace('.', ',')} {m.unit} · {m.withinLimit ? 'limit içinde' : 'LİMİT DIŞI'}</Text>)}
+          {t.notes.map((x, i) => <Text key={i} style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Not: {x}</Text>)}
+          {t.files.length ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {t.files.map((f, i) => f.kind === 'photo' ? <EvidencePreview key={f.evidenceId} id={f.evidenceId} label={`FOTOĞRAF ${i + 1}`} />
+              : <GhostButton key={f.evidenceId} label={`Belge ${i + 1} · aç`} height={36} size={12} onPress={() => open(f.evidenceId)} />)}
+          </View> : null}
+        </View>
+      ) : null}
+      {reports.map((r, i) => (
+        <View key={i} testID="ncr-proof-report" style={{ gap: 3, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
+          <Text style={type(13, 700)}>Servis raporu · sürüm {r.version} · {r.title}</Text>
+          <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>{r.report}</Text>
+          <Text style={type(11.5, 600, { color: r.decision === 'accepted' ? C.lime : r.decision ? C.warn : C.t3, lh: 1.4 })}>
+            {r.decision === 'accepted' ? 'Teslim kabul edildi' : r.decision ? 'Revizyon istendi' : 'Teslim kararı bekliyor'}{r.decisionNote ? ` — ${r.decisionNote}` : ''}{r.reviewStatus ? ` · ${REVIEW_TEXT[r.reviewStatus] ?? r.reviewStatus}` : ''}
+          </Text>
+          {r.evidenceId ? <GhostButton testID={`ncr-proof-report-open-${r.version}`} label={`Rapor dosyasını aç · sürüm ${r.version}`} height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => open(r.evidenceId!)} /> : null}
+        </View>
+      ))}
+      {error ? <ErrorBox message={error} /> : null}
     </Card>
   );
 }
@@ -417,7 +471,7 @@ export function ActionsCard({ n, base, reload, me, formKind, setFormKind }: {
   const kinds = n.depth === 'capa' ? ['correction', 'corrective_action', 'follow_up'] : ['correction', 'follow_up'];
   const rounds = [...new Set(n.actions.map(a => a.iteration))].sort((a, b) => b - a);
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       <Eyebrow>AKSİYONLAR</Eyebrow>
       <Text testID="actions-verification-policy" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{n.verificationPolicy}</Text>
       {n.actions.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz aksiyon yok. {n.depth === 'capa' ? 'Tam CAPA: en az bir düzeltme ve bir düzeltici faaliyet gerekir.' : 'En az bir düzeltme gerekir.'}</Text> : null}
@@ -601,7 +655,7 @@ export function VerificationCard({ n, base, reload }: { n: NcrDetail; base: stri
   const last = [...n.verifications].reverse().find(v => v.result === 'effective');
   if (n.status === 'closed') {
     return (
-      <Card border={tint.lime(0.3)} radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Card border={tint.lime(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
         <Eyebrow color={C.lime}>KAPALI</Eyebrow>
         <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>{n.closed_at ? `Doğrulanıp kapatıldı · ${fmtDateTime(n.closed_at)}` : 'Kapatıldı'}
           {last ? ` · ${last.verified_by_name}${last.verification_mode === 'self' ? ' · ÖZ DOĞRULAMA' : last.verified_via === 'grant' ? ' · dış doğrulayıcı' : ''}` : ''}</Text>
@@ -617,8 +671,10 @@ export function VerificationCard({ n, base, reload }: { n: NcrDetail; base: stri
     );
   }
   if (n.status !== 'awaiting_verification') return null;
+  // An open product decision keeps the case from closing; the reason stands next to the button, not only higher up.
+  const productBlock = n.product?.closureBlocker ?? null;
   return (
-    <Card border={tint.lime(0.3)} radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <Card border={tint.lime(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow color={C.lime}>DOĞRULAMA</Eyebrow>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Etkinlik kontrolü kaydedildi. Yetkili, önlemin işe yarayıp yaramadığını doğrular. Etkili değilse kayıt açık kalır ve yeni bir tur başlar.</Text>
       <Text testID="ncr-verification-policy" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{n.verificationPolicy}</Text>
@@ -636,8 +692,10 @@ export function VerificationCard({ n, base, reload }: { n: NcrDetail; base: stri
             </Tap>
           ) : null}
           {error ? <ErrorBox message={error} /> : null}
+          {productBlock ? <Text testID="ncr-verify-blocked" style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Kapatılamıyor: {productBlock}</Text> : null}
           <PrimaryButton testID="ncr-verify-ok" label={busy ? 'Kaydediliyor…' : n.permissions.selfVerify ? 'Etkili · öz doğrulama ile kapat' : 'Etkili · doğrula ve kapat'} height={46} size={13.5}
-            disabled={busy || notes.trim().length < (n.permissions.selfVerify ? 20 : 5) || (n.permissions.selfVerify && !selfConfirm)}
+            disabled={busy || !!productBlock || notes.trim().length < (n.permissions.selfVerify ? 20 : 5) || (n.permissions.selfVerify && !selfConfirm)}
+            why={missingWhy([[!!productBlock, 'ürün son kararı'], [notes.trim().length < (n.permissions.selfVerify ? 20 : 5), `neyi kontrol ettiğin (en az ${n.permissions.selfVerify ? 20 : 5} karakter)`], [n.permissions.selfVerify && !selfConfirm, 'öz doğrulama onayı']])}
             onPress={() => run(() => post(base + '/verify', { result: 'effective', notes: notes.trim(), selfVerify: n.permissions.selfVerify }), 'Doğrulandı ve kapatıldı', n.permissions.selfVerify ? 'Etiketli: öz doğrulama.' : undefined)} />
           <GhostButton testID="ncr-verify-fail" label="Etkili değil · açık kalsın" height={42} size={12.5} color={C.crit} border={tint.crit(0.35)} disabled={busy || notes.trim().length < 10}
             onPress={() => run(() => post(base + '/verify', { result: 'not_effective', notes: notes.trim() }), 'Kayıt açık kaldı', 'Sorumluya bildirildi; yeni aksiyon gerekiyor.')} />
@@ -651,7 +709,7 @@ export function HistoryCard({ n }: { n: NcrDetail }) {
   const [all, setAll] = useState(false);
   const rows = all ? n.history : n.history.slice(-6);
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow>GEÇMİŞ</Eyebrow>
       {rows.map((h, i) => (
         <View key={i} style={{ gap: 1 }}>
@@ -675,7 +733,7 @@ export const trainingStateLabel = TSTATE;
 export function TrainingCard({ n }: { n: NcrDetail }) {
   if (!n.trainings.length && !(n.permissions.manage && n.relatedTraining.length && n.status !== 'closed')) return null;
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 9 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 9 }}>
       <Eyebrow>EĞİTİM</Eyebrow>
       <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Okundu, tamamlandı, sınavı geçti ve sahada etkinliği doğrulandı ayrı kaydedilir. Eğitimin tamamlanması bu kaydı kapatmaz.</Text>
       {n.trainings.map(t => {

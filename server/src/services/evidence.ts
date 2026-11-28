@@ -95,6 +95,15 @@ export async function readContent(db: Db, store: EvidenceStore, p: Principal, co
       const d = (await tx.query(`SELECT d.id, d.site_id FROM documents d JOIN document_versions v ON v.document_id = d.id WHERE v.id = $1`, [r.document_version_id])).rows[0];
       ok = !!d && await canReadDoc(tx, p, companyId, d);
     }
+    // Whoever may judge a case's closure may open the files that case rests on (its first finding and its service reports), and only those.
+    if (!ok && (r.task_id || r.document_version_id)) {
+      const cases = (await tx.query(r.task_id
+        ? `SELECT id, site_id FROM nonconformities WHERE task_id = $1 AND company_id = $2`
+        : `SELECT n.id, n.site_id FROM service_job_reports sr JOIN service_jobs j ON j.id = sr.job_id JOIN service_requests q ON q.id = j.request_id
+             JOIN nonconformities n ON n.id = q.ncr_id WHERE sr.document_version_id = $1 AND n.company_id = $2`,
+        [r.task_id ?? r.document_version_id, companyId])).rows;
+      ok = cases.some(c => can(p, 'ncr.verify_close', { companyId, siteId: c.site_id, recordId: c.id }).ok);
+    }
     if (!ok) throw notFound('Kanıt');
     return r;
   });

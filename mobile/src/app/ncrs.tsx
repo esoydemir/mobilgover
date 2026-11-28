@@ -43,7 +43,7 @@ export default function NcrsRoute() {
       {q.data && rows.length === 0 ? <Empty title={status === 'closed' ? 'Kapalı kayıt yok' : status === 'mine' ? 'Sana atanan açık kayıt yok' : 'Açık uygunsuzluk yok'}
         body={role === 'staff' && status !== 'closed' ? 'Yalnızca sana atanan ya da aksiyonu sende olan kayıtlar görünür.' : undefined} /> : null}
       {rows.map(n => (
-        <Tap key={n.id} testID={`ncr-row-${n.id}`} onPress={() => router.push(`/ncr/${n.id}`)} style={{ borderWidth: 1, borderColor: n.overdue ? tint.crit(0.35) : n.risk_level === 'high' || n.risk_level === 'critical' ? tint.crit(0.25) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
+        <Tap key={n.id} testID={`ncr-row-${n.id}`} onPress={() => router.push(`/ncr/${n.id}`)} style={{ borderWidth: 1, borderColor: n.overdue ? tint.crit(0.35) : n.risk_level === 'high' || n.risk_level === 'critical' ? tint.crit(0.25) : C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Pill label={RISK[n.risk_level]![0]} fg={RISK[n.risk_level]![1]} bg={RISK[n.risk_level]![2]} />
             {n.status === 'awaiting_verification' ? <Pill label="DOĞRULAMA BEKLİYOR" fg={C.lime} bg={tint.lime(0.12)} /> : null}
@@ -68,7 +68,7 @@ function ReassignCard({ queue }: { queue: Queue }) {
   const [open, setOpen] = useState(false);
   const n = queue.nonconformities.length + queue.actions.length + queue.tasks.length;
   return (
-    <Card radius={22} border={tint.warn(0.35)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <Card border={tint.warn(0.35)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow color={C.warn}>YENİDEN ATAMA BEKLİYOR · {n}</Eyebrow>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>Sorumlusu pasifleştirilen ya da bu şubeden ayrılan açık işler. Açıp yeni sorumlu seç.</Text>
       {!open ? <GhostButton testID="reassign-open" label="Listeyi göster" height={36} size={12} style={{ alignSelf: 'flex-start' }} onPress={() => setOpen(true)} /> : (
