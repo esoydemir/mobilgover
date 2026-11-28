@@ -24,12 +24,15 @@ type Props = {
   refreshing?: boolean;
   /** Site of the record shown (task, case). Sub-screens always say which business, and this site, the person is looking at. */
   siteId?: string | null;
+  /** The desk shell already names the page; no second header inside it. */
+  noHeader?: boolean;
 };
 
-export function Screen({ children, title, titleEn, gap = 12, contentStyle, onRefresh, refreshing = false, siteId }: Props) {
+export function Screen({ children, title, titleEn, gap = 12, contentStyle, onRefresh, refreshing = false, siteId, noHeader = false }: Props) {
   const insets = useSafeAreaInsets();
   // The glass header floats over the content, so the content starts below its measured height and scrolls under it.
-  const [head, setHead] = useState(insets.top + 68);
+  const [measured, setHead] = useState(insets.top + 68);
+  const head = noHeader ? 4 : measured;
   // A focused field or a scrolled-to control must never end up behind the header or the tab bar.
   const scrollPad = Platform.OS === 'web' ? ({ scrollPaddingTop: head + 8, scrollPaddingBottom: TAB_CLEARANCE } as unknown as ViewStyle) : null;
   return (
@@ -43,10 +46,12 @@ export function Screen({ children, title, titleEn, gap = 12, contentStyle, onRef
       >
         {children}
       </ScrollView>
+      {noHeader ? null : (
       <View onLayout={e => setHead(Math.round(e.nativeEvent.layout.height))}
         style={[{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top + 8, borderBottomWidth: 1, borderBottomColor: C.bd, zIndex: 5 }, glass]}>
         {title === undefined ? <BrandHeader /> : <SubHeader title={title} titleEn={titleEn} siteId={siteId} />}
       </View>
+      )}
     </View>
   );
 }

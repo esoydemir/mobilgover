@@ -49,7 +49,7 @@ export function AdminLegacy({ rulesOnly = false }: { rulesOnly?: boolean }) {
   const mfaMissing = !me?.mfaSatisfied && env?.platformMfaRequired !== false;
 
   return (
-    <Screen title={only ? 'Yönetim · pazar yeri' : 'Yönetim'} titleEn="Platform" contentStyle={desktop ? { maxWidth: 1240, width: '100%', alignSelf: 'center' } : undefined}>
+    <Screen noHeader={rulesOnly} title={only ? 'Yönetim · pazar yeri' : 'Yönetim'} titleEn="Platform" contentStyle={desktop ? { maxWidth: 1240, width: '100%', alignSelf: 'center' } : undefined}>
       {mfaMissing ? (
         <View style={{ borderWidth: 1, borderColor: tint.warn(0.35), backgroundColor: tint.warn(0.06), borderRadius: 16, padding: 13, gap: 8 }}>
           <Text testID="admin-mfa-warning" style={type(12.5, 600, { color: C.warn, lh: 1.45 })}>Bu oturum ek doğrulamadan geçmedi. Ek doğrulama tamamlanana kadar sunucu platform listelerini ve işlemlerini (onay, ret, atama, yayın) reddeder.</Text>
