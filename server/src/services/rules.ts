@@ -1,3 +1,4 @@
+import { statusText } from '../domain/status-text';
 import { z } from 'zod';
 import type { Tx } from '../db/pool';
 import { decide } from '../domain/applicability';
@@ -131,7 +132,7 @@ async function version(tx: Tx, id: string) {
 export async function submitForReview(tx: Tx, p: Principal, id: string) {
   if (!has(p, 'rule_author')) throw forbidden();
   const rv = await version(tx, id);
-  if (rv.status !== 'draft') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
+  if (rv.status !== 'draft') throw conflict('INVALID_STATE', `Sürüm "${statusText(rv.status)}" durumunda.`);
   needEffectiveConfirmation(rv); // the date is locked once review starts, so it must be set first
   await tx.query(`UPDATE rule_versions SET status = 'in_review' WHERE id = $1`, [id]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.submitted', entityType: 'rule_version', entityId: id, payload: { code: rv.code } });
@@ -143,7 +144,7 @@ export async function submitForReview(tx: Tx, p: Principal, id: string) {
  */
 export async function areaReview(tx: Tx, p: Principal, id: string, area: string, decision: 'approved' | 'changes_requested', notes: string, sourceChecked = false) {
   const rv = await version(tx, id);
-  if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
+  if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm "${statusText(rv.status)}" durumunda.`);
   if (!rv.required_review_areas.includes(area)) throw invalid(`Bu kural "${area}" alanında inceleme gerektirmiyor.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi alan incelemesi yapamaz.');
   const ok = (await tx.query(`SELECT 1 FROM reviewer_areas WHERE user_id = $1 AND area = $2`, [p.userId, area])).rowCount;
@@ -214,7 +215,7 @@ export async function confirmEffective(tx: Tx, p: Principal, id: string, raw: { 
   const basis = typeof raw.basis === 'string' ? raw.basis.trim() : '';
   if (basis.length < 15) throw invalid('Tarihin dayanağını yaz (belge, madde veya bağlantı; en az 15 karakter).');
   const rv = await version(tx, id);
-  if (rv.status !== 'draft') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yürürlük tarihi inceleme başlamadan, taslakta belirlenir (sonra kilitlenir).`);
+  if (rv.status !== 'draft') throw conflict('INVALID_STATE', `Sürüm "${statusText(rv.status)}" durumunda; yürürlük tarihi inceleme başlamadan, taslakta belirlenir (sonra kilitlenir).`);
   await tx.query(`UPDATE rule_versions SET effective_from = $2, effective_confirmed_by = $3, effective_confirmed_at = now(), effective_basis = $4 WHERE id = $1`, [id, date.data, p.userId, basis]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.effective_confirmed', entityType: 'rule_version', entityId: id,
     payload: { code: rv.code, version: rv.version, date: date.data, previousPlaceholder: String(rv.effective_from).slice(0, 10), basis } });
@@ -231,7 +232,7 @@ export async function approve(tx: Tx, p: Principal, id: string, reason: string |
   if (!has(p, 'rule_reviewer')) throw forbidden('Onay yalnızca kural inceleyicisi tarafından verilebilir.');
   const why = needReason(reason, 'Kuralı onaylamak');
   const rv = await version(tx, id);
-  if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda.`);
+  if (rv.status !== 'in_review') throw conflict('INVALID_STATE', `Sürüm "${statusText(rv.status)}" durumunda.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını onaylayamaz.');
   if (!opts.dateSetByLegislationFlow) needEffectiveConfirmation(rv);
   await assertFrequencySet(tx, id);
@@ -402,7 +403,7 @@ export async function returnToDraft(tx: Tx, p: Principal, id: string, reason: st
   if (!has(p, 'rule_reviewer')) throw forbidden('İade yalnızca kural inceleyicisi tarafından yapılabilir.');
   const why = decisionReason(reason, 'Taslağa iade');
   const rv = await version(tx, id);
-  if (rv.status !== 'in_review' && rv.status !== 'approved') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yalnızca incelemedeki veya onaylı (yayımlanmamış) sürüm iade edilir.`);
+  if (rv.status !== 'in_review' && rv.status !== 'approved') throw conflict('INVALID_STATE', `Sürüm "${statusText(rv.status)}" durumunda; yalnızca incelemedeki veya onaylı (yayımlanmamış) sürüm iade edilir.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını iade edemez.');
   await tx.query(`UPDATE rule_versions SET status = 'draft', status_reason = $2, status_changed_by = $3, status_changed_at = now(), returned_at = now(), reviewer_id = NULL, reviewed_at = NULL WHERE id = $1`, [id, why, p.userId]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.returned', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, from: rv.status, reason: why } });
@@ -413,7 +414,7 @@ export async function rejectVersion(tx: Tx, p: Principal, id: string, reason: st
   if (!has(p, 'rule_reviewer')) throw forbidden('Ret yalnızca kural inceleyicisi tarafından verilebilir.');
   const why = decisionReason(reason, 'Reddetmek');
   const rv = await version(tx, id);
-  if (rv.status !== 'in_review' && rv.status !== 'approved') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yalnızca incelemedeki veya onaylı (yayımlanmamış) sürüm reddedilir.`);
+  if (rv.status !== 'in_review' && rv.status !== 'approved') throw conflict('INVALID_STATE', `Sürüm "${statusText(rv.status)}" durumunda; yalnızca incelemedeki veya onaylı (yayımlanmamış) sürüm reddedilir.`);
   if (rv.author_id === p.userId) throw forbidden('Kuralı yazan kişi kendi kuralını reddedemez.');
   await tx.query(`UPDATE rule_versions SET status = 'rejected', status_reason = $2, status_changed_by = $3, status_changed_at = now() WHERE id = $1`, [id, why, p.userId]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.rejected', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, from: rv.status, reason: why } });
@@ -430,7 +431,7 @@ export async function withdrawVersion(tx: Tx, p: Principal, id: string, reason: 
   if (!has(p, 'rule_reviewer') && !has(p, 'platform_admin')) throw forbidden('Geri çekme yetkin yok.');
   const why = decisionReason(reason, 'Yayımlanmış sürümü geri çekmek');
   const rv = await version(tx, id);
-  if (rv.status !== 'published') throw conflict('INVALID_STATE', `Sürüm ${rv.status} durumunda; yalnızca yayımlanmış sürüm geri çekilir.`);
+  if (rv.status !== 'published') throw conflict('INVALID_STATE', `Sürüm "${statusText(rv.status)}" durumunda; yalnızca yayımlanmış sürüm geri çekilir.`);
   await tx.query(`UPDATE rule_versions SET status = 'withdrawn', status_reason = $2, status_changed_by = $3, status_changed_at = now() WHERE id = $1`, [id, why, p.userId]);
   await appendAudit(tx, { companyId: null, actorId: p.userId, eventType: 'rule.withdrawn', entityType: 'rule_version', entityId: id, payload: { code: rv.code, version: rv.version, reason: why } });
 
