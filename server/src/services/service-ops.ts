@@ -72,7 +72,9 @@ export async function suggestServices(tx: Tx, p: Principal, companyId: string, s
       leftOutExpiredApproval: left,
       // No match: the business can still open an open request with location and category only.
       noMatch: found.length === 0,
-      openRequest: found.length === 0 ? { siteId, categoryCode: code, city, note: 'Eşleşen onaylı uzman yok. Konum ve kategori bilgisiyle açık talep oluşturabilirsiniz; işletme adı teklif kabul edilene kadar paylaşılmaz.' } : null,
+      openRequest: found.length === 0 ? { siteId, categoryCode: code, city, note: city ? 'Eşleşen onaylı uzman yok. Konum ve kategori bilgisiyle açık talep oluşturabilirsiniz; işletme adı teklif kabul edilene kadar paylaşılmaz.'
+        // Without a province nothing was searched; saying "no provider" would be false.
+        : 'Şubenin ili profilde kayıtlı değil, bu yüzden uzman eşleştirmesi yapılmadı. İli yanıtla ya da açık talep oluştur; işletme adı teklif kabul edilene kadar paylaşılmaz.' } : null,
     });
   }
   out.sort((a, b) => Number(b.urgency === 'case') - Number(a.urgency === 'case'));

@@ -60,7 +60,7 @@ export function AdminHome() {
           <Card testID="home-table" style={{ padding: 0, gap: 0, overflow: 'hidden' } as never} radius={16}>
             {desktop ? (
               <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.bd }}>
-                {COLS.map(([l, wd]) => <Text key={l} style={[type(10, 700, { ls: 0.06, color: C.t3 }), wd ? { width: wd } : { flex: 1 }]}>{l.toUpperCase()}</Text>)}
+                {COLS.map(([l, wd]) => <Text key={l} style={[type(10, 700, { ls: 0.06, color: C.t3 }), wd ? { width: wd } : { flex: 1 }]}>{l.toLocaleUpperCase('tr')}</Text>)}
               </View>
             ) : null}
             {rows.length === 0 ? (
@@ -71,7 +71,7 @@ export function AdminHome() {
             {rows.map(r => (
               <View key={r.kind + r.id} testID={`home-row-${r.id}`} style={{ flexDirection: desktop ? 'row' : 'column', gap: desktop ? 10 : 4, paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.bd, alignItems: desktop ? 'center' : 'flex-start' }}>
                 <View style={desktop ? { flex: 1, gap: 2 } : { gap: 2 }}>
-                  <Text style={type(10, 700, { ls: 0.06, color: C.info })}>{r.areaLabel.toUpperCase()}</Text>
+                  <Text style={type(10, 700, { ls: 0.06, color: C.info })}>{r.areaLabel.toLocaleUpperCase('tr')}</Text>
                   <Text numberOfLines={2} style={type(13, 600, { lh: 1.3 })}>{r.title}</Text>
                 </View>
                 <Text testID={`home-wait-${r.id}`} style={[type(12, 600, { color: r.waitingMinutes >= 1440 ? C.warn : C.t1 }), desktop ? { width: 64 } : null]}>{desktop ? '' : 'Bekleme: '}{waitLabel(r.waitingMinutes)}</Text>
@@ -97,7 +97,7 @@ function AreaCard({ a, onRetry, desktop }: { a: Area; onRetry: () => void; deskt
   const border = a.state === 'ok' ? C.bd : a.state === 'error' ? tint.crit(0.4) : C.bd;
   return (
     <Card testID={`home-area-card-${a.area}`} style={{ gap: 8, flexGrow: 1, flexBasis: desktop ? 300 : 260, minWidth: 240 }} radius={16} border={border}>
-      <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>{a.label.toUpperCase()}</Text>
+      <Text style={type(11, 700, { ls: 0.08, color: C.t3 })}>{a.label.toLocaleUpperCase('tr')}</Text>
       {a.state === 'forbidden' ? (
         <View testID={`home-forbidden-${a.area}`} style={{ gap: 3 }}>
           <Text style={type(13, 600, { color: C.t2 })}>Bu alan için yetkin yok</Text>

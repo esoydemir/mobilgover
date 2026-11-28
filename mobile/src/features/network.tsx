@@ -29,7 +29,7 @@ export function Avatar({ userId, has, name, size = 40 }: { userId: string; has: 
   }, [has, url, token]);
   if (has && Platform.OS !== 'web') return <Image source={{ uri: url, headers: { authorization: `Bearer ${token}` } }} style={{ width: size, height: size, borderRadius: size / 3 }} />;
   if (has && uri) return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 3 }} />;
-  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toLocaleUpperCase('tr');
   return <Tile size={size} fontSize={size * 0.38} initials>{initials}</Tile>;
 }
 

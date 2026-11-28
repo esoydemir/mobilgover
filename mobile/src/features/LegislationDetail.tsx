@@ -89,7 +89,7 @@ export function LegislationDetail({ id, embedded = false, onChanged }: { id: str
   const open = ['pending', 'drafted'].includes(d.status);
   const decision = open && d.cannot ? (
     <Card testID="leg-decision" style={{ gap: 8, borderRadius: embedded ? 14 : undefined }}>
-      <Text style={type(10.5, 700, { ls: 0.06, color: C.t3 })}>KARAR · {(d.nextInLine ?? '').toUpperCase()}</Text>
+      <Text style={type(10.5, 700, { ls: 0.06, color: C.t3 })}>KARAR · {(d.nextInLine ?? '').toLocaleUpperCase('tr')}</Text>
       <Field testID="leg-reason" label="Gerekçe (iade, onay ve ret için zorunlu)" value={reason} onChangeText={setReason} placeholder="ör. Resmî kaynak okundu; kapsam LPG kullanan kafeler" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         <View style={{ flexBasis: 150, flexGrow: 1, gap: 3, opacity: 1 }}>

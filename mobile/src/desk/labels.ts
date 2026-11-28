@@ -1,3 +1,4 @@
+import { credentialLabel } from '../features/labels';
 /** Denetim olaylarının ve rollerin Türkçe adları. Bilinmeyen tür ham kodla gösterilir; uydurma ad verilmez. */
 export const EVENT_TR: Record<string, string> = {
   'legislation.detected': 'Taramada bulundu', 'legislation.date_resolved': 'Yürürlük tarihi belirlendi', 'legislation.proposal_saved': 'Öneri yazıldı ya da güncellendi', 'legislation.drafted': 'Kural taslağı hazırlandı',
@@ -22,4 +23,4 @@ export const STATUS_LEG: Record<string, [string, 'warn' | 'info' | 'ok' | undefi
   pending: ['İnceleme bekliyor', 'warn'], drafted: ['Taslak hazır, onay bekliyor', 'info'], scheduled: ['Onaylandı, yürürlük günü bekliyor', 'ok'], applied: ['Uygulandı', 'ok'], rejected: ['Reddedildi', undefined],
 };
 export const CRED_TR: Record<string, string> = { ustalik_belgesi: 'Ustalık belgesi', mesleki_yeterlilik: 'Mesleki yeterlilik belgesi', sigorta: 'Sigorta poliçesi', vergi_levhasi: 'Vergi levhası' };
-export const credTr = (t: string | null | undefined) => (t ? CRED_TR[t] ?? t.replace(/_/g, ' ') : 'Belge');
+export const credTr = (t: string | null | undefined) => (t ? CRED_TR[t] ?? credentialLabel(t).replace(/_/g, ' ') : 'Belge');

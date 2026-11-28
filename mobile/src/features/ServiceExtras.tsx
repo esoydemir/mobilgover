@@ -198,7 +198,7 @@ export function MarketOps() {
       {!q.data && q.loading ? <Loading /> : null}
       {q.data ? (Object.keys(OPS_TR) as (keyof Ops['lists'])[]).map(k => (
         <Card key={k} style={{ padding: 15, gap: 6 }}>
-          <Eyebrow>{OPS_TR[k].toUpperCase()} · {q.data!.lists[k].length}</Eyebrow>
+          <Eyebrow>{OPS_TR[k].toLocaleUpperCase('tr')} · {q.data!.lists[k].length}</Eyebrow>
           {q.data!.lists[k].length === 0 ? <Text style={type(12, 400, { color: C.t3 })}>Bekleyen kayıt yok.</Text> : null}
           {q.data!.lists[k].map(r => (
             <View key={r.id} style={{ gap: 2, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 6 }}>

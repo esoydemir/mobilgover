@@ -39,7 +39,7 @@ export default function SetupRoute() {
         {STEPS.map((_, i) => <View key={i} style={{ flex: 1, height: 3, borderRadius: 999, backgroundColor: i <= step ? C.accent : tint.white(0.09) }} />)}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={type(10.5, 600, { ls: 0.12, color: C.lime })}>ADIM {step + 1} / {STEPS.length} · {STEPS[step]!.toUpperCase()}</Text>
+        <Text style={type(10.5, 600, { ls: 0.12, color: C.lime })}>ADIM {step + 1} / {STEPS.length} · {STEPS[step]!.toLocaleUpperCase('tr')}</Text>
         <EnvBadge />
       </View>
 

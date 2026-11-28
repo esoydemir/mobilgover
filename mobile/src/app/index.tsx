@@ -42,6 +42,8 @@ function HomeScreen() {
   // Same window and same buckets as the task list, so a count here is the length of the list it opens.
   const tasks = useApi<Task[]>(base && siteId ? taskWindowPath(base, siteId) : null);
   const isStaff = role === 'staff';
+  // A quote that can be accepted is a decision waiting for this person; it must not hide in the notification list.
+  const quoted = useApi<{ id: string; title: string; site_id: string; status: string; acceptable_quotes: number }[]>(base && !isStaff ? `${base}/service-requests` : null);
   const gaps = useApi<Gap[]>(base && !isStaff ? `${base}/gaps${role === 'site_manager' && siteId ? `?siteId=${siteId}` : ''}` : null);
   // Staff get only the cases they own or hold an action in (server-side).
   const ncrs = useApi<Ncr[]>(base ? `${base}/nonconformities?status=open` : null);
@@ -110,6 +112,14 @@ function HomeScreen() {
           {!isStaff && needsInfo.length > 0 ? <PrimaryButton testID="home-clear-action" label="Eksik bilgiyi tamamla" height={48} style={{ marginTop: 8 }} onPress={() => router.push(`/profile${firstMissing ? `?focus=${firstMissing}` : ''}` as never)} /> : null}
         </Card>
       ) : null}
+
+      {(quoted.data ?? []).filter(r => r.status === 'open' && r.acceptable_quotes > 0 && r.site_id === siteId).slice(0, 2).map(r => (
+        <Tap key={r.id} testID="home-quote-waiting" onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: tint.lime(0.5), borderRadius: 18, backgroundColor: C.card, padding: 16, gap: 3 }}>
+          <Text style={type(11, 700, { ls: 0.08, color: C.lime })}>SIRA SENDE · {r.acceptable_quotes} TEKLİF KARAR BEKLİYOR</Text>
+          <Text style={type(15, 600)}>{r.title}</Text>
+          <Text style={type(13, 700, { color: C.lime })}>Teklifi incele ›</Text>
+        </Tap>
+      ))}
 
       {isStaff && !critical && (ncrs.data?.length ?? 0) > 0 ? (
         <Tap testID="home-my-ncrs" onPress={() => router.push('/ncrs')} style={{ borderWidth: 1, borderColor: tint.warn(0.45), borderRadius: 18, backgroundColor: C.card, padding: 16 }}>
@@ -271,7 +281,7 @@ function GapCard({ gap, onDone, onOpenSite }: { gap: Gap; onDone: () => void; on
   };
   return (
     <Card testID={`gap-${gap.kind}`} style={{ marginTop: 12, gap: 8 }}>
-      <Eyebrow>{title.toUpperCase()} · {gap.siteName}</Eyebrow>
+      <Eyebrow>{title.toLocaleUpperCase('tr')} · {gap.siteName}</Eyebrow>
       <Text style={type(13, 400, { color: C.t2, lh: 1.45 })}>{gap.message}</Text>
       {gap.action.kind === 'add_equipment' ? (open ? (
         <View style={{ gap: 6 }}>
