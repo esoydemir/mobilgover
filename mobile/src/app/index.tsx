@@ -135,7 +135,7 @@ function HomeScreen() {
           </View>
           {!isStaff ? (
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              {([['critical', 'Kritik görev'], ['todo', 'Yapılacak'], ['service', 'Servis bekleyen']] as const).map(([k, label]) => (
+              {([['critical', 'Kritik görev'], ['todo', 'Açık görev'], ['service', 'Servis bekleyen']] as const).map(([k, label]) => (
                 <Tap key={k} testID={`home-count-${k}`} onPress={() => router.push(`/tasks?filter=${k}`)} style={{ flex: 1, minWidth: 0, paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: k === 'critical' && derived.counts.critical ? tint.crit(0.4) : C.bd, backgroundColor: C.chip }}>
                   <Text style={type(17, 700, { color: k === 'critical' && derived.counts.critical ? C.crit : C.t1 })}>{derived.counts[k]}</Text>
                   <Text style={type(11, 600, { color: C.t2, lh: 1.25 })}>{label}</Text>

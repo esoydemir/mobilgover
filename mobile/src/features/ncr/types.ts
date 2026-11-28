@@ -45,6 +45,9 @@ export type NcrDetail = {
   progress: { done: number; total: number };
   measurement: { value: string; unit: string; limit_min: string | null; limit_max: string | null; measured_at: string; limit_basis?: string | null } | null;
   documents: { id: string; title: string; docType: string }[];
+  /** What the case rests on; only for people who manage or may close it. */
+  proof: { task: { completedBy: string | null; completedAt: string | null; measurements: { value: string | number; unit: string; withinLimit: boolean; measuredAt: string }[]; notes: string[]; files: { evidenceId: string; kind: string; mime: string }[] } | null;
+    reports: { title: string; version: number; report: string; submittedAt: string; decision: string | null; decisionNote: string | null; reviewStatus: string | null; evidenceId: string | null }[] } | null;
   permissions: { act: boolean; manage: boolean; verify: boolean; selfVerify: boolean; verifyBlockedReason: string | null; reopen: boolean; serviceRequest: boolean; inviteVerifier: boolean };
 };
 

@@ -11,7 +11,7 @@ import { SessionProvider, useSession } from '../api/session';
 import { TabBar } from '../components/TabBar';
 import { ToastView } from '../components/ToastView';
 import { DeskShell } from '../desk/Shell';
-import { DESKTOP_MIN, isDeskPath, isShellPath } from '../features/desktop';
+import { DESKTOP_MIN, WIDE_PATHS, WIDE_WIDTH, isDeskPath, isShellPath } from '../features/desktop';
 import { UiProvider } from '../state/app';
 import { C } from '../theme';
 import { useScheme } from '../theme/appearance';
@@ -32,7 +32,8 @@ export default function RootLayout() {
   // Platform yönetim ekranları (mevzuat masası, yönetim) geniş pencerede telefon çerçevesi olmadan, tam genişlikte açılır.
   const desk = Platform.OS === 'web' && win.width >= DESKTOP_MIN && isDeskPath(path);
   const shell = desk && isShellPath(path);
-  const framed = Platform.OS === 'web' && win.width > 520 && !desk;
+  const wide = Platform.OS === 'web' && win.width >= DESKTOP_MIN && WIDE_PATHS.includes(path);
+  const framed = Platform.OS === 'web' && win.width > 520 && !desk && !wide;
   const frame = { width: PHONE.width, height: Math.min(PHONE.height, win.height - 40) };
 
   if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
@@ -43,7 +44,7 @@ export default function RootLayout() {
     </Stack>
   );
   const app = (
-    <View style={framed ? { ...frame, borderRadius: 46, overflow: 'hidden', backgroundColor: C.bg, boxShadow: `0 0 0 1px ${C.bds}, 0 30px 70px ${C.shadow}` } : { flex: 1, backgroundColor: C.bg }}>
+    <View style={framed ? { ...frame, borderRadius: 46, overflow: 'hidden', backgroundColor: C.bg, boxShadow: `0 0 0 1px ${C.bds}, 0 30px 70px ${C.shadow}` } : wide ? { flex: 1, width: WIDE_WIDTH, alignSelf: 'center', backgroundColor: C.bg, borderLeftWidth: 1, borderRightWidth: 1, borderColor: C.bd } : { flex: 1, backgroundColor: C.bg }}>
       <Gate>
         <DeskShell active={shell}>{stack}</DeskShell>
         {desk ? null : <Tabs />}
@@ -57,7 +58,7 @@ export default function RootLayout() {
       <SessionProvider>
         <QueueProvider>
           <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          {framed ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.page }}>{app}</View> : app}
+          {framed ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.page }}>{app}</View> : wide ? <View style={{ flex: 1, backgroundColor: C.page }}>{app}</View> : app}
         </QueueProvider>
       </SessionProvider>
     </UiProvider>

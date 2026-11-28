@@ -9,7 +9,7 @@ import { ErrorBox, Field, Loading, StaleNote } from '../../components/states';
 import { Callout, Card, Eyebrow, GhostButton, Pill, PrimaryButton, shortWhy } from '../../components/ui';
 import { fmtDateTime } from '../../features/dates';
 import { SEVERITY_LABEL } from '../../features/labels';
-import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, ServiceLinkCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
+import { ActionsCard, AssignmentCard, CaseSummary, CauseCard, CriticalFirst, FlowStepper, HistoryCard, LinkedRecords, ProofCard, ServiceLinkCard, SupportCard, TrainingCard, VerificationCard } from '../../features/ncr/parts';
 import { ProductCard } from '../../features/ncr/ProductCard';
 import { HAZARDS, type NcrDetail } from '../../features/ncr/types';
 import { useUi } from '../../state/app';
@@ -89,7 +89,7 @@ export default function NcrRoute() {
           : <Text style={type(12.5, 400, { color: C.t2 })}>Henüz kaydedilmedi.</Text>}
       </Card>
 
-      {n.product ? <ProductCard product={n.product} base={base} reload={q.reload} closed={n.status === 'closed'} /> : null}
+      {n.product ? <ProductCard product={n.product} base={base} reload={q.reload} closed={n.status === 'closed'} can={n.permissions} /> : null}
 
       <AssignmentCard key={`a${assignNudge}-${n.owner?.id}-${n.due_at}`} n={n} base={base} reload={q.reload} initialOpen={assignNudge > 0} />
       <CauseCard n={n} base={base} reload={q.reload} />
@@ -116,6 +116,7 @@ export default function NcrRoute() {
         <View testID="ncr-effectiveness-record"><Callout tone="info" title="Etkinlik kontrolü" body={effectivenessText(effectiveness, n.measurement)} /></View>
       ) : null}
 
+      <ProofCard n={n} />
       <VerificationCard n={n} base={base} reload={q.reload} />
       <ServiceLinkCard n={n} base={base} reload={q.reload} />
       {n.status !== 'closed' && n.permissions.serviceRequest ? (

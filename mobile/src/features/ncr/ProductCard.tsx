@@ -19,7 +19,7 @@ const DECISIONS:[string, string][] = [['hold', 'Beklet (karantina)'], ['destroy'
  * The fate of the affected product, kept apart from the device fix. Only shown where a product can be affected.
  * The device can be repaired and measuring normal while this stays open; an open decision blocks closing the case.
  */
-export function ProductCard({ product, base, reload, closed }: { product: ProductState; base: string; reload: () => void; closed: boolean }) {
+export function ProductCard({ product, base, reload, closed, can }: { product: ProductState; base: string; reload: () => void; closed: boolean; can: { act: boolean; manage: boolean } }) {
   const { me, call } = useSession();
   const [form, setForm] = useState(false);
   const [name, setName] = useState(''); const [qty, setQty] = useState(''); const [unit, setUnit] = useState(''); const [unknown, setUnknown] = useState(false); const [first, setFirst] = useState('');
@@ -48,7 +48,10 @@ export function ProductCard({ product, base, reload, closed }: { product: Produc
           {a.decision ? (
             <Text style={type(13, 600, { color: a.state === 'held' ? C.t1 : C.lime, lh: 1.4 })}>{a.state === 'held' ? 'Geçici karar' : 'Karar'}: {a.decision.label} · {a.decision.by} · {a.decision.at ? fmtDateTime(a.decision.at) : ''}{'\n'}Gerekçe: {a.decision.rationale}</Text>
           ) : null}
-          {a.state !== 'decided' && !closed ? (
+          {a.state !== 'decided' && !closed && !(can.act && (can.manage || a.assessor.id === me?.userId)) ? (
+            <Text testID="product-waiting" style={type(13, 700, { color: C.warn, lh: 1.4 })}>Son kararı {a.assessor.name} ya da vakayı yöneten yetkili verir.</Text>
+          ) : null}
+          {a.state !== 'decided' && !closed && can.act && (can.manage || a.assessor.id === me?.userId) ? (
             <View style={{ gap: 8 }}>
               <Text style={type(13, 700, { color: C.warn })}>{a.state === 'held' ? 'Arıza giderilince bu ürün için son karar ver' : 'Karar açık'}{a.assessor.id === me?.userId ? ' · sende' : ` · ${a.assessor.name}`}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -71,7 +74,7 @@ export function ProductCard({ product, base, reload, closed }: { product: Produc
               </>)}
             </View>
           ))}
-          {a.decision && (a.state === 'decided' || closed) ? (fix === a.id ? (
+          {can.act && can.manage && a.decision && (a.state === 'decided' || closed) ? (fix === a.id ? (
             <View style={{ gap: 6 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {DECISIONS.map(([code, label]) => <FilterChip key={code} testID={`product-fix-pick-${code}`} label={label} px={12} active={fixPick === code} onPress={() => setFixPick(code)} />)}
@@ -86,7 +89,7 @@ export function ProductCard({ product, base, reload, closed }: { product: Produc
           ) : <GhostButton testID="product-fix" label="Kararı düzelt" height={34} size={11.5} onPress={() => { setFix(a.id); setFixPick(a.decision!.code); setFixNew(a.decision!.rationale ?? ''); }} />) : null}
         </View>
       ))}
-      {!closed && !product.unknown ? (form ? (
+      {can.act && !closed && !product.unknown ? (form ? (
         <View style={{ gap: 6 }}>
           <Field label="Ürün / parti" testID="product-name" value={name} onChangeText={setName} />
           <Field label="Miktar" testID="product-qty" value={unknown ? '' : qty} onChangeText={setQty} keyboardType="decimal-pad" editable={!unknown} />

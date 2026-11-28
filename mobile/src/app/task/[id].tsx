@@ -418,6 +418,11 @@ Sonraki kontrol: ${t.nextDueAt ? fmtDateTime(t.nextDueAt) : 'planlanmış sonrak
   );
 }
 
+/** What the server already holds for this requirement, shown where it was entered. */
+function Recorded({ text, bad }: { text: string; bad?: boolean }) {
+  return <Text testID="req-recorded" style={[type(12.5, 700, { color: bad ? C.crit : C.lime, lh: 1.4 }), { marginTop: 8 }]}>{bad ? '⚠' : '✓'} {text}</Text>;
+}
+
 const labelOf = (k: string) => ({ photo: 'Fotoğraf', document: 'Belge', note: 'Not', checklist: 'Kontrol listesi', approval: 'Onay', device_record: 'Cihaz kaydı' } as Record<string, string>)[k] ?? k;
 
 function RequirementCard({ r, t, instruments, role, onAdd, base }: {
@@ -430,6 +435,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
   const [answers, setAnswers] = useState<Record<string, 'pass' | 'fail' | 'na'>>({});
   const [error, setError] = useState<string | null>(null);
   const path = `${base}/tasks/${t.id}`;
+  const stored = (kind: string) => t.evidence.filter(e => e.kind === kind && e.status === 'stored').length;
 
   if (r.kind === 'measurement') {
     const limit = t.limits.find(l => l.quantity === r.quantity && l.equipmentType === t.equipment?.type);
@@ -439,6 +445,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>ÖLÇÜM · ZORUNLU</Eyebrow>
+        {t.measurements.filter(m => m.quantity === r.quantity).map(m => <Recorded key={m.id} bad={!m.within_limit} text={`Kaydedildi: ${String(m.value).replace('.', ',')} ${m.unit} · ${m.within_limit ? 'limit içinde' : 'LİMİT DIŞI'}`} />)}
         <Text style={[type(13, 600), { marginTop: 10 }]}>Ölçülen {quantityLabel(r.quantity)} ({r.unit})</Text>
         <Text style={[type(11.5, 400, { color: C.t3 }), { marginTop: 3 }]}>
           {limit ? `Kabul aralığı: ${limit.min ?? '—'} … ${limit.max ?? '—'} ${limit.unit}${LIMIT_BASIS[limit.basis] ?? ''}` : 'Bu ekipman için limit tanımlı değil; sunucu kaydı reddeder.'}
@@ -495,6 +502,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>{r.kind === 'photo' ? 'FOTOĞRAF' : 'BELGE'} · EN AZ {r.min}</Eyebrow>
+        {stored(r.kind) > 0 ? <Recorded text={`Kaydedildi: ${stored(r.kind)} ${r.kind === 'photo' ? 'fotoğraf' : 'belge'}`} /> : null}
         <Tap testID="photo-add" onPress={pick} style={{ height: 96, marginTop: 10, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: C.bds, backgroundColor: C.chip, alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <CameraIcon />
           <Text style={type(12.5, 600, { color: C.t2 })}>{Platform.OS === 'web' ? 'Fotoğraf seç' : 'Fotoğraf çek'}</Text>
@@ -511,6 +519,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>KONTROL LİSTESİ</Eyebrow>
+        {stored('checklist') > 0 ? <Recorded text="Kontrol listesi kaydedildi" /> : null}
         <View style={{ gap: 10, marginTop: 12 }}>
           {r.items.map(i => (
             <View key={i.id} style={{ gap: 6 }}>
@@ -539,6 +548,7 @@ function RequirementCard({ r, t, instruments, role, onAdd, base }: {
     return (
       <Card>
         <Eyebrow>AÇIKLAMA {r.requiredWhen === 'nonconforming' ? '· SONUÇ UYGUNSUZSA ZORUNLU' : '· ZORUNLU'}</Eyebrow>
+        {stored('note') > 0 ? <Recorded text="Not kaydedildi" /> : null}
         <View style={{ marginTop: 10 }}><Field testID="note-text" value={note} onChangeText={setNote} multiline placeholder="Ne gördün, ne yaptın?" /></View>
         <GhostButton testID="note-save" label="Notu kaydet" disabled={note.trim().length < 3} why={shortWhy(note, 3, 'Not')} style={{ marginTop: 10 }} onPress={() => { onAdd('not', `${path}/evidence`, { kind: 'note', text: note.trim() }); setNote(''); }} />
       </Card>
