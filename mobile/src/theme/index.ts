@@ -1,36 +1,32 @@
 import type { TextStyle } from 'react-native';
 
-/** Uyum dark/lime design tokens, taken 1:1 from the Claude Design prototype. */
-export const C = {
-  bg: '#050505',
-  page: '#080808',
-  lime: '#C6FF3D',
-  limeHover: '#CFFF04',
-  ink: '#0A1500',
-  t1: '#F5F5F2',
-  t2: 'rgba(245,245,242,0.55)',
-  t3: 'rgba(245,245,242,0.32)',
-  bd: 'rgba(255,255,255,0.07)',
-  bds: 'rgba(255,255,255,0.13)',
-  crit: '#F87171',
-  warn: '#FCD34D',
-  info: '#93C5FD',
-  card: '#111111',
-  sheet: '#0F0F0F',
-  chip: '#161616',
-  tile: '#1E1E1E',
-  track: 'rgba(255,255,255,0.08)',
-  ringIdle: 'rgba(255,255,255,0.18)',
-} as const;
+import { Platform } from 'react-native';
+import { nativeScheme } from './appearance';
+import { DARK, LIGHT, type ColorName } from './palette';
 
-/** Tinted fills used for status chips and callouts. */
-export const tint = {
-  lime: (a: number) => `rgba(198,255,61,${a})`,
-  crit: (a: number) => `rgba(248,113,113,${a})`,
-  warn: (a: number) => `rgba(252,211,77,${a})`,
-  info: (a: number) => `rgba(147,197,253,${a})`,
-  white: (a: number) => `rgba(255,255,255,${a})`,
+/**
+ * Renk belirteçleri. Web'de her biri bir CSS değişkenidir (açık ve koyu görünüm `appearance.ts` içinde tanımlanır);
+ * native derlemede açılıştaki cihaz görünümünün değeridir.
+ */
+const web = Platform.OS === 'web';
+const palette: Record<ColorName, string> = web || nativeScheme() === 'light' ? LIGHT : DARK;
+export const C = Object.fromEntries((Object.keys(LIGHT) as ColorName[]).map(k => [k, web ? `var(--m-${k})` : palette[k]])) as Record<ColorName, string>;
+
+const mix = (name: ColorName) => (a: number) => {
+  // react-native-web yalnız `var(` ile başlayan değerleri olduğu gibi geçirir; karışım bu yüzden yedek değer olarak yazılır.
+  if (web) return `var(--m-mix,color-mix(in srgb,var(--m-${name}) ${Math.round(a * 100)}%,transparent))`;
+  const n = parseInt(palette[name].slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
 };
+
+/** Tinted fills used for status chips and callouts. `white` is the neutral overlay: dark on light, light on dark. */
+export const tint = { lime: mix('lime'), crit: mix('crit'), warn: mix('warn'), info: mix('info'), white: mix('t1') };
+
+/** Buzlu cam: yalnız araç çubuğu ve gezinme yüzeylerinde; arkasından kayan içerik hafifçe seçilir. Metin alanları opaktır. */
+export const glass = (web
+  ? { backgroundColor: C.glass, backdropFilter: 'blur(18px) saturate(1.5)', WebkitBackdropFilter: 'blur(18px) saturate(1.5)' }
+  : { backgroundColor: palette.card }) as { backgroundColor: string };
+export const lift = { boxShadow: `0 10px 30px ${C.shadow}` } as const;
 
 export const SEV = {
   crit: { fg: C.crit, bg: tint.crit(0.14), label: 'KRİTİK' },
@@ -48,9 +44,7 @@ export const STATUS = {
 } as const;
 export type Status = keyof typeof STATUS;
 
-export const limeGlow = '0 4px 24px rgba(198,255,61,0.25)';
-
-type Family = 'inter' | 'outfit' | 'mono';
+type Family = 'inter' | 'mono';
 type Weight = 400 | 500 | 600 | 700 | 800 | 900;
 
 const FAMILIES: Record<Family, Partial<Record<Weight, string>>> = {
@@ -61,13 +55,6 @@ const FAMILIES: Record<Family, Partial<Record<Weight, string>>> = {
     700: 'Inter_700Bold',
     800: 'Inter_800ExtraBold',
     900: 'Inter_900Black',
-  },
-  outfit: {
-    400: 'Outfit_400Regular',
-    500: 'Outfit_500Medium',
-    600: 'Outfit_600SemiBold',
-    700: 'Outfit_700Bold',
-    800: 'Outfit_800ExtraBold',
   },
   mono: {
     400: 'JetBrainsMono_400Regular',
@@ -83,9 +70,11 @@ const FAMILIES: Record<Family, Partial<Record<Weight, string>>> = {
 export function type(
   size: number,
   weight: Weight = 400,
-  opts: { family?: Family; ls?: number; lh?: number; color?: string } = {},
+  opts: { family?: Family | 'outfit'; ls?: number; lh?: number; color?: string } = {},
 ): TextStyle {
-  const family = opts.family ?? 'inter';
+  // Başlıklar da gövde ailesini kullanır (gazete tipi başlık ailesi kaldırıldı); en küçük punto 11'dir.
+  const family = opts.family === 'mono' ? 'mono' : 'inter';
+  size = Math.max(size, 11);
   return {
     fontFamily: FAMILIES[family][weight] ?? FAMILIES[family][600],
     fontSize: size,

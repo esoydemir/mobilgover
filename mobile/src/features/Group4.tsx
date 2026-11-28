@@ -24,7 +24,7 @@ export function QrCard({ kind, refId }: { kind: 'equipment' | 'document'; refId:
   const run = async (f: () => Promise<unknown>) => { setBusy(true); setError(null); try { await f(); setOff(false); setReason(''); await list.reload(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } };
   if (list.error && /403|404/.test(list.error)) return null;
   return (
-    <Card radius={22} style={{ padding: 15, gap: 8 }}>
+    <Card style={{ padding: 15, gap: 8 }}>
       <View testID="qr-card"><Eyebrow>QR KODU</Eyebrow></View>
       {!list.data && list.loading ? <Loading /> : null}
       {live ? (
@@ -91,7 +91,7 @@ export function ExtractionCard({ documentId, versionId, reviewed, onApplied }: {
   };
   if (!versionId) return null;
   return (
-    <Card radius={22} style={{ padding: 15, gap: 8 }}>
+    <Card style={{ padding: 15, gap: 8 }}>
       <View testID="extract-card"><Eyebrow>BELGE METNİNDEN ALAN OKU</Eyebrow></View>
       <Text testID="extract-ocr-note" style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>{q.data?.ocr.note ?? 'Yüklenen dosyadan okunur ya da metin yapıştırılır; sistem yalnızca öneri çıkarır.'}</Text>
       {pending ? (

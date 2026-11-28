@@ -76,7 +76,7 @@ function Experts() {
       {cat && !providers.data && providers.loading ? <Loading /> : null}
       {cat && providers.data?.length === 0 ? <Empty title="Bu kategoride henüz onaylı uzman yok" body="Talep yine de açılabilir; onaylı bir uzman çıkınca bildirim alır." /> : null}
       {(providers.data ?? []).map(p => (
-        <View key={p.id} testID={`market-provider-${p.id}`} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 9 }}>
+        <View key={p.id} testID={`market-provider-${p.id}`} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 9 }}>
           <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
             <Tile size={44} fontSize={15} initials>{p.display_name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase()}</Tile>
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -107,7 +107,7 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
           {([['Açık talep', reqs.data.filter(r => r.status === 'open').length], ['Karşılaştır', reqs.data.filter(r => r.status === 'open' && r.acceptable_quotes > 0).length], ['İş verildi', reqs.data.filter(r => r.status === 'awarded').length], ['Tamamlanan', reqs.data.filter(r => r.status === 'completed').length]] as const).map(([l, n]) => (
             <View key={l} style={{ flex: 1, borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 10, gap: 3 }}>
               <Text style={type(9, 700, { ls: 0.06, color: C.t3 })}>{String(l).toUpperCase()}</Text>
-              <Text style={type(20, 600, { family: 'outfit', ls: -0.03 })}>{n}</Text>
+              <Text style={type(20, 600, { ls: -0.03 })}>{n}</Text>
             </View>
           ))}
         </View>
@@ -116,7 +116,7 @@ function Quotes({ reqs }: { reqs: ReturnType<typeof useApi<Req[]>> }) {
       {!reqs.data && reqs.loading ? <Loading /> : null}
       {reqs.data?.length === 0 ? <Empty title="Henüz talep yok" body="Bir uzmandan teklif istediğinde talepler ve gelen teklifler burada toplanır." /> : null}
       {(reqs.data ?? []).map(r => (
-        <Tap key={r.id} testID={`market-req-${r.id}`} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: r.status === 'open' && r.acceptable_quotes > 0 ? tint.lime(0.3) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
+        <Tap key={r.id} testID={`market-req-${r.id}`} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: r.status === 'open' && r.acceptable_quotes > 0 ? tint.lime(0.3) : C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <Pill label={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[0]} fg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[1]} bg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[2]} />
             <Text style={type(11, 500, { color: C.t3 })}>{r.category_name}</Text>

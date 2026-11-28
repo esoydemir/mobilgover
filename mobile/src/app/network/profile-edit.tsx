@@ -21,7 +21,7 @@ type Profile = { hasPhoto: boolean; declared: { displayName: string; title: stri
 function Check({ on, label, onPress, testID }: { on: boolean; label: string; onPress: () => void; testID: string }) {
   return (
     <Tap testID={testID} onPress={onPress} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-      <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: on ? C.lime : C.t3, backgroundColor: on ? C.lime : 'transparent' }} />
+      <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: on ? C.lime : C.t3, backgroundColor: on ? C.accent : 'transparent' }} />
       <Text style={[type(12.5, 500, { lh: 1.4 }), { flex: 1 }]}>{label}</Text>
     </Tap>
   );

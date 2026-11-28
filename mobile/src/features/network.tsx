@@ -72,7 +72,7 @@ export function Reactions({ p }: { p: Post }) {
 
 export function PostCard({ p, onPress }: { p: Post; onPress?: () => void }) {
   return (
-    <Tap testID={`net-post-${p.id}`} onPress={onPress ?? (() => router.push(`/network/post/${p.id}`))} style={{ borderWidth: 1, borderColor: p.status === 'draft' ? tint.warn(0.35) : C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 9 }}>
+    <Tap testID={`net-post-${p.id}`} onPress={onPress ?? (() => router.push(`/network/post/${p.id}`))} style={{ borderWidth: 1, borderColor: p.status === 'draft' ? tint.warn(0.35) : C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 9 }}>
       <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
         <Tap testID={`net-author-${p.id}`} accessibilityLabel={`${p.authorName} profili`} onPress={() => router.push(`/network/p/${p.authorId}`)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flex: 1 }}>
         <Avatar userId={p.authorId} has={p.authorPhoto} name={p.authorName} size={36} />

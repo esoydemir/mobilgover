@@ -47,7 +47,7 @@ export default function ObligationRoute() {
             <Pill label={DECISION[e.obligation.decision][0]} fg={DECISION[e.obligation.decision][1]} bg={DECISION[e.obligation.decision][2]} />
             {e.rule.isExample ? <ExampleBadge /> : null}
           </View>
-          <Text style={type(23, 600, { family: 'outfit', ls: -0.03, lh: 1.15 })}>{e.rule.title}</Text>
+          <Text style={type(23, 600, { ls: -0.03, lh: 1.15 })}>{e.rule.title}</Text>
           {e.obligation.siteName ? <Text testID="obl-detail-site" style={type(13, 600, { color: C.t2 })}>Şube: {e.obligation.siteName}</Text> : null}
           <Text style={type(14, 400, { lh: 1.5, color: C.t2 })}>{e.obligation.reason}</Text>
           {!e.obligation.isCurrent ? (
@@ -58,7 +58,7 @@ export default function ObligationRoute() {
           ) : e.pendingReview ? <ReviewCard e={e} onDone={newId => (newId === id ? q.reload() : router.replace(`/obligation/${newId}`))} />
             : e.obligation.canOverride ? <DecisionCard e={e} onDone={newId => (newId === id ? q.reload() : router.replace(`/obligation/${newId}`))} /> : null}
           {e.reviews.filter(r => r.status !== 'pending').length ? (
-            <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+            <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
               <Eyebrow>"UYGULANMAZ" İNCELEMELERİ</Eyebrow>
               {e.reviews.filter(r => r.status !== 'pending').map(r => (
                 <View key={r.id} style={{ gap: 2 }}>
@@ -164,7 +164,7 @@ function DecisionCard({ e, onDone }: { e: Explanation; onDone: (newId: string) =
 
   if (e.obligation.manual && e.obligation.decision === 'not_applicable') {
     return (
-      <Card radius={22} border={tint.warn(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Card border={tint.warn(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
         <Eyebrow color={C.warn}>ELLE VERİLMİŞ KARAR</Eyebrow>
         <Text style={type(12.5, 500, { lh: 1.5 })}>{e.obligation.decidedByName ?? 'Yetkili kişi'} · {fmtDateTime(e.obligation.decidedAt)}</Text>
         <Text style={type(12, 400, { color: C.t2, lh: 1.5 })}>Geri alınırsa kural motoru güncel işletme bilgilerine göre yeniden karar verir; uygulanıyorsa kontroller yeniden oluşturulur.</Text>
@@ -185,7 +185,7 @@ function DecisionCard({ e, onDone }: { e: Explanation; onDone: (newId: string) =
   }
   if (e.obligation.decision === 'not_applicable') return null;
   return (
-    <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+    <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
       {!open ? (
         <>
           <Text style={type(13, 600)}>Bu yükümlülük işletmene uymuyor mu?</Text>
@@ -265,7 +265,7 @@ function ReviewCard({ e, onDone }: { e: Explanation; onDone: (newId: string) => 
     try { await fn(); } catch (x) { setError(errorText(x)); } finally { setBusy(false); }
   };
   return (
-    <Card radius={22} border={tint.warn(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+    <Card border={tint.warn(0.3)} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
       <Eyebrow color={C.warn}>"UYGULANMAZ" İSTEĞİ · İNCELEME BEKLİYOR</Eyebrow>
       <Text style={type(13, 500, { lh: 1.45 })}>{r.reason}</Text>
       <Text style={type(11, 400, { color: C.t3 })}>{r.requestedByName} · {fmtDateTime(r.requestedAt)}</Text>

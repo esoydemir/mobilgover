@@ -1,12 +1,11 @@
 import { router, usePathname } from 'expo-router';
-import type { ComponentType } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useState, type ComponentType } from 'react';
+import { Keyboard, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { goRoot } from '../state/app';
-import { C } from '../theme';
-import { GradientFill } from './Gradient';
+import { C, glass, lift, type } from '../theme';
 import { useSession } from '../api/session';
-import { BellIcon, DocsIcon, GridIcon, HomeIcon, ScanIcon, TasksIcon } from './Icons';
+import { BellIcon, DocsIcon, GridIcon, HomeIcon, PeopleIcon, ScanIcon, TasksIcon, TrainingIcon, UserIcon } from './Icons';
 import { Tap } from './ui';
 
 const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/sync', '/account', '/equipment', '/profile', '/admin', '/team', '/report', '/market', '/notifications', '/network', '/trainings', '/training', '/verif', '/board'];
@@ -14,33 +13,35 @@ const MORE_PREFIXES = ['/more', '/obligation', '/ncr', '/service', '/pro', '/syn
 type Tab = {
   key: string;
   label: string;
+  /** Text under the icon when the full label does not fit. The accessibility label stays `label`. */
+  short?: string;
   Icon: ComponentType<{ size?: number; color?: string }>;
-  big?: boolean;
   isActive: (path: string) => boolean;
   go: () => void;
 };
 
 const TABS: Tab[] = [
-  { key: 'home', label: 'Ana Sayfa', Icon: HomeIcon, isActive: p => p === '/' || p === '/risk', go: () => goRoot('/') },
+  { key: 'home', label: 'Ana Sayfa', short: 'Bugün', Icon: HomeIcon, isActive: p => p === '/' || p === '/risk', go: () => goRoot('/') },
   { key: 'tasks', label: 'Görevler', Icon: TasksIcon, isActive: p => p === '/tasks' || p.startsWith('/task/'), go: () => goRoot('/tasks') },
   {
     // Centre action: open the next check that is due.
-    key: 'next', label: 'Sıradaki kontrol', Icon: ScanIcon, big: true, isActive: p => p === '/next',
+    key: 'next', label: 'Sıradaki kontrol', short: 'Sıradaki', Icon: ScanIcon, isActive: p => p === '/next',
     go: () => { goRoot('/'); router.push('/next'); },
   },
   { key: 'docs', label: 'Belgeler', Icon: DocsIcon, isActive: p => p === '/documents' || p.startsWith('/documents/'), go: () => goRoot('/documents') },
   { key: 'more', label: 'Daha', Icon: GridIcon, isActive: p => MORE_PREFIXES.some(m => p === m || p.startsWith(m + '/') || p.startsWith(m + 's')), go: () => goRoot('/more') },
 ];
 
+const isTraining = (p: string) => p.startsWith('/training');
 /** Staff see their own work only: the fourth tab is their trainings (the vault is for managers). */
-const STAFF_TABS: Tab[] = TABS.map(t => t.key === 'docs'
-  ? { key: 'training', label: 'Eğitim', Icon: DocsIcon, isActive: p => p.startsWith('/training'), go: () => goRoot('/trainings') } : t);
+const STAFF_TABS: Tab[] = TABS.map(t => t.key === 'docs' ? { key: 'training', label: 'Eğitim', Icon: TrainingIcon, isActive: isTraining, go: () => goRoot('/trainings') }
+  : t.key === 'more' ? { ...t, isActive: (p: string) => !isTraining(p) && t.isActive(p) } : t);
 
 /** A specialist without a business: provider area, professional network, account. */
 const PROVIDER_TABS: Tab[] = [
-  { key: 'pro', label: 'Uzman alanı', Icon: HomeIcon, isActive: p => p === '/pro' || p.startsWith('/pro/') || p.startsWith('/service'), go: () => goRoot('/pro') },
-  { key: 'network', label: 'Ağ', Icon: DocsIcon, isActive: p => p.startsWith('/network'), go: () => goRoot('/network') },
-  { key: 'account', label: 'Hesap', Icon: GridIcon, isActive: p => p === '/account', go: () => goRoot('/account') },
+  { key: 'pro', label: 'Uzman alanı', short: 'İşlerim', Icon: HomeIcon, isActive: p => p === '/pro' || p.startsWith('/pro/') || p.startsWith('/service'), go: () => goRoot('/pro') },
+  { key: 'network', label: 'Ağ', short: 'Mesleki ağ', Icon: PeopleIcon, isActive: p => p.startsWith('/network'), go: () => goRoot('/network') },
+  { key: 'account', label: 'Hesap', Icon: UserIcon, isActive: p => p === '/account', go: () => goRoot('/account') },
 ];
 
 /** Platform staff without a business: management and account. */
@@ -55,50 +56,53 @@ const VERIFIER_TABS: Tab[] = [
   { key: 'notes', label: 'Bildirimler', Icon: BellIcon, isActive: p => p === '/notifications', go: () => goRoot('/notifications') },
 ];
 
+const TYPED = ['text', 'email', 'number', 'search', 'tel', 'url', 'password', 'date', ''];
+/** While a touch keyboard is open the bar would cover the form being filled in, so it steps aside. */
+function useTyping() {
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      const a = Keyboard.addListener('keyboardDidShow', () => setTyping(true)), b = Keyboard.addListener('keyboardDidHide', () => setTyping(false));
+      return () => { a.remove(); b.remove(); };
+    }
+    if (!globalThis.matchMedia?.('(pointer: coarse)').matches) return;
+    const field = (t: unknown) => t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && TYPED.includes(t.getAttribute('type') ?? ''));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = () => { clearTimeout(timer); timer = setTimeout(() => setTyping(field(document.activeElement)), 120); };
+    document.addEventListener('focusin', check); document.addEventListener('focusout', check); check();
+    return () => { clearTimeout(timer); document.removeEventListener('focusin', check); document.removeEventListener('focusout', check); };
+  }, []);
+  return typing;
+}
+
 export function TabBar() {
   const path = usePathname();
   const insets = useSafeAreaInsets();
   const { company, role, me } = useSession();
+  const typing = useTyping();
   const tabs = company && !role && company.grants?.some(g => g.scopes.includes('ncr_verify')) ? VERIFIER_TABS
     : !company ? ((me?.platformRoles.length ?? 0) > 0 ? PLATFORM_TABS : PROVIDER_TABS)
     : role === 'staff' ? STAFF_TABS : TABS;
-  const bottom = Math.max(26, insets.bottom);
+  if (typing) return null;
   return (
-    <>
-      <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 86 + bottom }}>
-        <GradientFill angle={0} stops={[[0, C.bg], [0.42, C.bg], [0.72, 'rgba(5,5,5,0.8)'], [1, 'rgba(5,5,5,0)']]} />
-      </View>
-      <View accessibilityRole="tablist" style={[styles.bar, { bottom }]}>
-        {tabs.map(({ key, label, Icon, big, isActive, go }) => {
-          const active = isActive(path);
-          const d = big ? 60 : 52;
-          return (
-            <Tap
-              key={key}
-              accessibilityRole="tab"
-              accessibilityLabel={label}
-              accessibilityState={{ selected: active }}
-              onPress={go}
-              style={{
-                width: d, height: d, borderRadius: 999, alignItems: 'center', justifyContent: 'center',
-                backgroundColor: active ? C.lime : 'transparent',
-                boxShadow: active ? '0 4px 20px rgba(198,255,61,0.35)' : undefined,
-              }}
-            >
-              <Icon size={big ? 24 : 21} color={active ? C.ink : 'rgba(245,245,242,0.5)'} />
-            </Tap>
-          );
-        })}
-      </View>
-    </>
+    <View accessibilityRole="tablist" testID="tab-bar" style={[styles.bar, { bottom: Math.max(10, insets.bottom) }, glass, lift]}>
+      {tabs.map(({ key, label, short, Icon, isActive, go }) => {
+        const active = isActive(path);
+        return (
+          <Tap key={key} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected: active }} onPress={go}
+            style={{ flex: 1, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 2, backgroundColor: active ? C.accent : 'transparent' }}>
+            <Icon size={21} color={active ? C.ink : C.t2} />
+            <Text numberOfLines={1} style={type(11, active ? 700 : 600, { color: active ? C.ink : C.t2 })}>{short ?? label}</Text>
+          </Tap>
+        );
+      })}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   bar: {
-    position: 'absolute', left: 16, right: 16, height: 68, paddingHorizontal: 8,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: 'rgba(18,18,18,0.94)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderRadius: 999,
-    boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+    position: 'absolute', left: 10, right: 10, height: 64, paddingHorizontal: 6, gap: 2,
+    flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.bd, borderRadius: 16,
   },
 });

@@ -1,17 +1,16 @@
 import { Fragment, createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { useApi } from '../api/useApi';
+import { setThemePref, useScheme } from '../theme/appearance';
 import { Icon } from './icons';
 
 /* ───────── tema ve bildirim ───────── */
 type Mode = 'light' | 'dark';
 const Ctx = createContext<{ mode: Mode; setMode: (m: Mode) => void; toast: (m: string) => void }>({ mode: 'light', setMode: () => undefined, toast: () => undefined });
 export const useDesk = () => useContext(Ctx);
-const readMode = (): Mode => { try { const v = globalThis.localStorage?.getItem('gh.desk.theme'); if (v === 'dark' || v === 'light') return v; } catch { /* tarayıcı depolaması yok */ } return 'light'; };
 export function DeskProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeS] = useState<Mode>('light'); const [msg, setMsg] = useState<string | null>(null); const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { setModeS(readMode()); }, []);
-  const setMode = useCallback((m: Mode) => { setModeS(m); try { globalThis.localStorage?.setItem('gh.desk.theme', m); } catch { /* sessiz */ } }, []);
+  const mode = useScheme(); const [msg, setMsg] = useState<string | null>(null); const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setMode = useCallback((m: Mode) => setThemePref(m), []);
   const toast = useCallback((m: string) => { setMsg(m); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => setMsg(null), 4200); }, []);
   const v = useMemo(() => ({ mode, setMode, toast }), [mode, setMode, toast]);
   return <Ctx.Provider value={v}>{children}<div role="status" aria-live="polite">{msg ? <div className="gh-toast" data-testid="desk-toast">{msg}</div> : null}</div></Ctx.Provider>;
@@ -128,8 +127,9 @@ export function useScrollKeep(ws: string, ref: React.RefObject<HTMLElement | nul
 
 /* ───────── liste + sağ ayrıntı paneli ───────── */
 export type Col<R> = { key: string; label: string; w: string; render: (r: R) => ReactNode; dim?: boolean; opt?: boolean };
-export function ListDetail<R>({ ws, label, rows, rowId, cols, selId, onSelect, panel, panelTitle, ready, empty, footer }: {
+export function ListDetail<R>({ ws, label, rows, rowId, cols, selId, onSelect, panel, panelTitle, ready, empty, footer, queue }: {
   ws: string; label: string; rows: R[]; rowId: (r: R) => string; cols: Col<R>[]; selId: string; onSelect: (id: string) => void; panel: ReactNode; panelTitle?: string; ready: boolean; empty: ReactNode; footer?: ReactNode;
+  /** Geniş masaüstünde dar kuyruk + geniş çalışma alanı (liste, kayıt ve işlem birlikte okunur). */ queue?: boolean;
 }) {
   const grid = cols.map(c => c.w).join(' '); const gridC = cols.filter(c => !c.opt).map(c => c.w).join(' ');
   const gstyle = { ['--cols' as string]: grid, ['--colsc' as string]: gridC, gridTemplateColumns: 'var(--cols)' } as React.CSSProperties; const listRef = useRef<HTMLDivElement>(null); const panelRef = useRef<HTMLDivElement>(null); const save = useScrollKeep(ws, listRef, ready && rows.length > 0);
@@ -148,7 +148,7 @@ export function ListDetail<R>({ ws, label, rows, rowId, cols, selId, onSelect, p
     document.addEventListener('keydown', h); return () => document.removeEventListener('keydown', h);
   }, [selId]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="gh-work" data-testid={`${ws}-work`} data-panel={selId ? 'open' : 'closed'}>
+    <div className={queue ? 'gh-work queue' : 'gh-work'} data-testid={`${ws}-work`} data-panel={selId ? 'open' : 'closed'}>
       <div className="gh-listwrap">
         <div className="gh-rowhead" style={gstyle} aria-hidden="true">{cols.map(c => <div key={c.key} data-opt={c.opt ? '1' : undefined}>{c.label}</div>)}</div>
         <div className="gh-list" ref={listRef} onScroll={save} role="listbox" aria-label={label} aria-activedescendant={undefined} onKeyDown={onKey} data-testid={`${ws}-list`}>

@@ -4,13 +4,13 @@
  * Cam, büyük gölge ve süs yok. Odak, seçim ve üzerine gelme üç ayrı görünümdür.
  */
 export const DESK_CSS = `
-.gh{--bg:#F7F6F2;--surface:#FDFCFA;--sunk:#EFEDE6;--ink:#1A1D18;--ink2:#4F544A;--ink3:#686D61;--line:#E1DED4;--line2:#CFCBBF;
+.gh{--bg:#F3F4EF;--surface:#FFFFFF;--sunk:#E9EBE3;--ink:#171B12;--ink2:#454B3D;--ink3:#5C6353;--line:#E0E3D8;--line2:#C6CBBB;
   --accent:#C6FF3D;--accent-ink:#101A00;--accent-line:#A5D61F;--green:#3B7608;--sel:rgba(198,255,61,.30);--sel-bar:#4E9A0B;--hover:rgba(26,29,24,.05);
-  --crit:#AE2117;--crit-bg:#FBE9E7;--warn:#835000;--warn-bg:#FFF1D6;--info:#1B5C98;--info-bg:#E6F0FA;--ok:#2D6508;--ok-bg:#E8F3D9;--focus:#1B5C98;--shadow:0 1px 0 rgba(0,0,0,.03);
+  --crit:#AE2117;--crit-bg:#FBE9E7;--warn:#835000;--warn-bg:#FFF1D6;--info:#1B5C98;--info-bg:#E6F0FA;--ok:#2D6508;--ok-bg:#E8F3D9;--focus:#1B5C98;--shadow:0 1px 0 rgba(0,0,0,.03);--glass:rgba(255,255,255,.76);
   color-scheme:light;}
-.gh[data-theme=dark]{--bg:#0F100D;--surface:#151612;--sunk:#0B0C09;--ink:#ECEDE6;--ink2:#B0B5A6;--ink3:#8D9283;--line:#272923;--line2:#383B33;
+.gh[data-theme=dark]{--bg:#0F110D;--surface:#191C16;--sunk:#090A08;--ink:#F2F4EC;--ink2:#C2C8B8;--ink3:#9AA18E;--line:#2A2F24;--line2:#3D4434;
   --accent:#C6FF3D;--accent-ink:#101A00;--accent-line:#C6FF3D;--green:#C6FF3D;--sel:rgba(198,255,61,.11);--sel-bar:#C6FF3D;--hover:rgba(236,237,230,.055);
-  --crit:#FF9088;--crit-bg:rgba(255,144,136,.13);--warn:#FFC95E;--warn-bg:rgba(255,201,94,.13);--info:#8FC3F4;--info-bg:rgba(143,195,244,.13);--ok:#B7EA5C;--ok-bg:rgba(183,234,92,.13);--focus:#8FC3F4;--shadow:none;
+  --crit:#FF9088;--crit-bg:rgba(255,144,136,.13);--warn:#FFC95E;--warn-bg:rgba(255,201,94,.13);--info:#8FC3F4;--info-bg:rgba(143,195,244,.13);--ok:#B7EA5C;--ok-bg:rgba(183,234,92,.13);--focus:#8FC3F4;--shadow:none;--glass:rgba(22,25,19,.74);
   color-scheme:dark;}
 .gh,.gh *{box-sizing:border-box}
 .gh{position:fixed;inset:0;z-index:5;display:grid;grid-template-columns:236px minmax(0,1fr);background:var(--bg);color:var(--ink);
@@ -50,7 +50,7 @@ export const DESK_CSS = `
 .gh-page{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--bg)}
 .gh-work{flex:1;min-height:0;display:flex;position:relative;background:var(--bg)}
 .gh-cell .gh-badge{white-space:normal;border-radius:8px}
-.gh-search input{width:190px}
+.gh-search input{width:170px}
 .gh-select{max-width:150px;height:34px;padding:0 8px;border:1px solid var(--line2);border-radius:9px;background:var(--surface);font-size:13px}
 .gh-now{border:1px solid var(--line2);border-radius:10px;padding:12px 14px;margin:12px 0;background:var(--bg)}
 .gh-now h3{margin:0 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
@@ -65,7 +65,7 @@ export const DESK_CSS = `
 .gh-actbar{border-top:1px solid var(--line);background:var(--surface);padding:10px 22px 12px;display:flex;flex-direction:column;gap:7px;max-height:46%;overflow:auto;flex:none}
 .gh-actbar .gh-field{margin:0}
 .gh-actbar .gh-field textarea{min-height:52px}
-.gh-tools .gh-seg button{padding:0 10px}
+.gh-tools .gh-seg button{padding:0 9px}
 .gh-empty-panel{margin:auto;max-width:360px;padding:30px;text-align:center;color:var(--ink2)}
 .gh-pre{padding:20px 22px}
 
@@ -169,8 +169,39 @@ export const DESK_CSS = `
 
 /* ayrıntı paneli açıkken liste dar kalır: ikincil sütunlar gizlenir, kritik sütunlar (başlık, durum, bekleme) kalır */
 @media (min-width:1181px){.gh-work[data-panel=open] .gh-row,.gh-work[data-panel=open] .gh-rowhead{grid-template-columns:var(--colsc)!important}.gh-work[data-panel=open] [data-opt]{display:none}}
+/* Mevzuat: kayıt (okuma) ve işlem sütunu. Dar pencerede tek akış: başlık, neden bekliyor ve dayanak, metin, karar. */
+.gh-leg{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
+.gh-leg>div,.gh-leg-actscroll{display:contents}
+.gh-leg .gh-panel-head{order:1}.gh-leg-top{order:2;padding:0 22px}.gh-leg .gh-panel-scroll{order:3;flex:none;overflow:visible}.gh-leg-decide{order:4;padding:0 22px 18px}
+.gh-leg .gh-actbar{order:5;position:sticky;bottom:0;max-height:none}
+.gh-basis{border:1px solid var(--line);border-radius:10px;padding:10px 14px 12px;margin:12px 0;background:var(--bg)}
+.gh-basis h3{margin:0 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.gh-basis .gh-kv{grid-template-columns:76px minmax(0,1fr);font-size:13px}
+@media (min-width:1280px){
+  .gh-work.queue .gh-listwrap{flex:none;width:clamp(300px,25%,420px)}
+  .gh-work.queue[data-panel=closed] .gh-listwrap{flex:1;width:auto}
+  .gh-work.queue[data-panel=open] .gh-panel{flex:1;width:auto}
+  .gh-work.queue[data-panel=open] .gh-rowhead{display:none}
+  .gh-work.queue[data-panel=open] .gh-row{grid-template-columns:minmax(0,1fr)!important;gap:5px;padding:11px 16px}
+  .gh-work.queue[data-panel=open] .gh-kbd{display:none}
+  .gh-leg{display:grid;grid-template-columns:minmax(0,1fr) clamp(320px,36%,440px);grid-template-rows:minmax(0,1fr);overflow:hidden}
+  .gh-leg>.gh-leg-doc{display:block;overflow:auto;min-height:0;overscroll-behavior:contain;scroll-padding-top:110px}
+  .gh-leg>.gh-leg-act{display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--line);background:var(--sunk)}
+  .gh-work.queue .gh-panel{position:relative}
+  .gh-work.queue .gh-panel>div:first-child:not(.gh-leg){position:absolute;right:4px;top:4px;z-index:5;padding:0!important}
+  .gh-leg .gh-basis{margin:36px 0 8px}.gh-leg .gh-now{margin:8px 0;padding:10px 12px}.gh-leg .gh-now p,.gh-leg .gh-now ul{font-size:13px}
+  .gh-leg .gh-actbar .gh-field textarea{min-height:40px}.gh-leg .gh-actbar .gh-why{font-size:12px;margin-top:0;line-height:1.35}
+  .gh-leg-actscroll{display:block;flex:1;min-height:0;overflow:auto}
+  .gh-leg-top,.gh-leg-decide{padding:0 16px}.gh-leg-decide{padding-bottom:16px}
+  .gh-leg .gh-panel-head{position:sticky;top:0;z-index:3;background:var(--glass);-webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);padding-top:14px!important}
+  .gh-leg .gh-panel-scroll{padding:0 22px 24px}
+  .gh-leg .gh-actbar{position:static;max-height:50%;padding:6px 16px 10px;gap:5px}
+  .gh-leg .gh-diff{grid-template-columns:1fr}
+}
+@media (min-width:1700px){.gh-leg .gh-diff{grid-template-columns:1fr 1fr}}
+
 /* geniş masaüstü: satırlar gereksiz uzamasın */
-@media (min-width:1800px){.gh-panel{width:clamp(520px,36%,760px)}.gh-listwrap .gh-list>*{max-width:1280px}}
+@media (min-width:1800px){.gh-work:not(.queue) .gh-panel{width:clamp(520px,36%,760px)}.gh-listwrap .gh-list>*{max-width:1280px}}
 /* dar pencere: kenar çubuğu simge şeridi, ayrıntı tam sayfa */
 @media (max-width:1180px){.gh{grid-template-columns:64px minmax(0,1fr)}.gh-brand b,.gh-brand small,.gh-nav a span.l,.gh-navlabel,.gh-user,.gh-roles,.gh-nav .gh-cnt{display:none}
   .gh-nav a{justify-content:center;padding:0}.gh-brand{justify-content:center;padding:14px 0}.gh-mini{flex-direction:column}.gh-mini button span{display:none}

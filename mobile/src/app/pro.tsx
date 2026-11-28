@@ -62,7 +62,7 @@ function PublicProfile({ id }: { id: string }) {
 function ProfileCard({ v }: { v: ProfileView }) {
   return (
     <>
-      <Text style={type(22, 600, { family: 'outfit', ls: -0.03 })}>{v.profile.display_name}</Text>
+      <Text style={type(22, 700, { ls: -0.02 })}>{v.profile.display_name}</Text>
       <Text style={type(13, 400, { color: C.t2 })}>{[v.profile.headline, v.profile.city, v.profile.district].filter(Boolean).join(' · ')}</Text>
       <Card>
         <Eyebrow>HAKKINDA · HİZMET BÖLGESİ</Eyebrow>
@@ -163,11 +163,9 @@ function MyProfessionalArea() {
   const credentialTypes = [...new Set((cats.data ?? []).flatMap(c => c.required_credentials))];
   const requested = new Map([...me.data.authorizedCategories.map(a => [a.category_code, 'approved'] as const), ...me.data.otherCategoryRequests.map(a => [a.category_code, a.status] as const)]);
 
-  return (
-    <Screen title="Uzman alanı" titleEn="Professional" onRefresh={() => { void me.reload(); void inbox.reload(); }} refreshing={me.loading}>
-      {companies.length === 0 ? <Invitations onAccepted={() => goRoot('/')} /> : null}
+  const profile = (
+    <>
       <ProfileCard v={me.data} />
-      {error ? <ErrorBox message={error} /> : null}
 
       <SectionLabel>DOĞRULAMA İÇİN BELGE GÖNDER</SectionLabel>
       <Card style={{ gap: 10 }}>
@@ -214,6 +212,10 @@ function MyProfessionalArea() {
         );
       })}
 
+    </>
+  );
+  const work = (
+    <>
       {me.data ? <ProNotifications onChange={() => inbox.reload()} /> : null}
       <SectionLabel>AÇIK TALEPLER (ONAYLI KATEGORİLERİNDE)</SectionLabel>
       {inbox.data?.requests.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Şu an açık talep yok. Talepler yalnızca onaylı olduğun kategorilerde görünür; işletme adı teklifin kabul edilince görünür.</Text> : null}
@@ -223,6 +225,15 @@ function MyProfessionalArea() {
       {inbox.data && inbox.data.jobs.length === 0 ? <Text style={type(12.5, 400, { color: C.t2 })}>Henüz işin yok. Teklifin kabul edilince iş burada görünür.</Text> : null}
       <ProCalendar />
       {(inbox.data?.jobs ?? []).map(j => <JobCard key={j.id} j={j} onDone={() => inbox.reload()} />)}
+    </>
+  );
+
+  return (
+    <Screen title="Uzman alanı" titleEn="Professional" onRefresh={() => { void me.reload(); void inbox.reload(); }} refreshing={me.loading}>
+      {companies.length === 0 ? <Invitations onAccepted={() => goRoot('/')} /> : null}
+      {error ? <ErrorBox message={error} /> : null}
+      {/* Onaylı uzman önce sıradaki işini görür; onayı olmayan önce profilini ve belgelerini. */}
+      {me.data.authorizedCategories.length > 0 ? <>{work}{profile}</> : <>{profile}{work}</>}
       {companies.length === 0 ? <GhostButton testID="pro-to-setup" label="Kendi işletmemi de kurmak istiyorum" onPress={() => router.push('/setup')} /> : null}
     </Screen>
   );

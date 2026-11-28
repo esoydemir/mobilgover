@@ -33,7 +33,7 @@ export function AppointmentCard({ jobId, provider, editable }: { jobId: string; 
   const v = q.data;
   const startsAt = toIso(day, from), endsAt = toIso(day, to);
   return (
-    <Card radius={22} style={{ padding: 15, gap: 8 }}>
+    <Card style={{ padding: 15, gap: 8 }}>
       <View testID="appt-card"><Eyebrow>RANDEVU</Eyebrow></View>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!v && q.loading ? <Loading /> : null}
@@ -91,7 +91,7 @@ export function MessageThread({ requestId, profileId, provider }: { requestId: s
     try { await call('POST', path, provider ? { body: text } : { profileId, body: text }); setText(''); q.reload(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };
   return (
-    <Card radius={22} style={{ padding: 15, gap: 8 }}>
+    <Card style={{ padding: 15, gap: 8 }}>
       <View testID="msg-thread"><Eyebrow>YAZIŞMA{q.data?.providerName ? ` · ${q.data.providerName}` : ''}</Eyebrow></View>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
@@ -126,7 +126,7 @@ export function ComplaintCard({ jobId, provider }: { jobId: string; provider?: b
   const run = async (f: () => Promise<unknown>) => { setBusy(true); setError(null); try { await f(); setText(''); setAnswer(''); q.reload(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } };
   const mineOpen = (q.data ?? []).some(c => c.opened_side === side && c.status !== 'resolved');
   return (
-    <Card radius={22} style={{ padding: 15, gap: 8 }}>
+    <Card style={{ padding: 15, gap: 8 }}>
       <View testID="complaint-card"><Eyebrow>ŞİKÂYET</Eyebrow></View>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
@@ -168,7 +168,7 @@ export function ServiceSuggestions({ onOpen }: { onOpen: (categoryCode: string) 
     <View testID="service-suggestions" style={{ gap: 8 }}>
       <Eyebrow>İHTİYACINA GÖRE ÖNERİLER</Eyebrow>
       {q.data.suggestions.map(s => (
-        <Card key={s.category.code} radius={22} style={{ padding: 15, gap: 6 }}>
+        <Card key={s.category.code} style={{ padding: 15, gap: 6 }}>
           <Text style={type(14, 700)}>{s.category.name}{s.urgency === 'case' ? ' · açık kayıt var' : ''}</Text>
           <Text style={type(12.5, 400, { color: C.t2, lh: 1.45 })}>{s.reason}</Text>
           <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>
@@ -197,7 +197,7 @@ export function MarketOps() {
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
       {q.data ? (Object.keys(OPS_TR) as (keyof Ops['lists'])[]).map(k => (
-        <Card key={k} radius={22} style={{ padding: 15, gap: 6 }}>
+        <Card key={k} style={{ padding: 15, gap: 6 }}>
           <Eyebrow>{OPS_TR[k].toUpperCase()} · {q.data!.lists[k].length}</Eyebrow>
           {q.data!.lists[k].length === 0 ? <Text style={type(12, 400, { color: C.t3 })}>Bekleyen kayıt yok.</Text> : null}
           {q.data!.lists[k].map(r => (

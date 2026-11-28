@@ -1,6 +1,5 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, Inter_900Black } from '@expo-google-fonts/inter';
 import { JetBrainsMono_400Regular, JetBrainsMono_500Medium, JetBrainsMono_600SemiBold } from '@expo-google-fonts/jetbrains-mono';
-import { Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold, Outfit_800ExtraBold } from '@expo-google-fonts/outfit';
 import { useFonts } from 'expo-font';
 import { Stack, router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +14,7 @@ import { DeskShell } from '../desk/Shell';
 import { DESKTOP_MIN, isDeskPath, isShellPath } from '../features/desktop';
 import { UiProvider } from '../state/app';
 import { C } from '../theme';
+import { useScheme } from '../theme/appearance';
 
 /** On a wide browser window the app is shown inside a phone-sized frame. */
 const PHONE = { width: 390, height: 844 };
@@ -24,10 +24,10 @@ const NO_TABS = ['/login', '/setup'];
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, Inter_900Black,
-    Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold, Outfit_800ExtraBold,
     JetBrainsMono_400Regular, JetBrainsMono_500Medium, JetBrainsMono_600SemiBold,
   });
   const win = useWindowDimensions();
+  const scheme = useScheme();
   const path = usePathname();
   // Platform yönetim ekranları (mevzuat masası, yönetim) geniş pencerede telefon çerçevesi olmadan, tam genişlikte açılır.
   const desk = Platform.OS === 'web' && win.width >= DESKTOP_MIN && isDeskPath(path);
@@ -43,7 +43,7 @@ export default function RootLayout() {
     </Stack>
   );
   const app = (
-    <View style={framed ? { ...frame, borderRadius: 46, overflow: 'hidden', backgroundColor: C.bg, boxShadow: '0 0 0 11px #0a0a0a, 0 0 0 13px #1c1c1c, 0 60px 120px rgba(0,0,0,0.7)' } : { flex: 1, backgroundColor: C.bg }}>
+    <View style={framed ? { ...frame, borderRadius: 46, overflow: 'hidden', backgroundColor: C.bg, boxShadow: `0 0 0 1px ${C.bds}, 0 30px 70px ${C.shadow}` } : { flex: 1, backgroundColor: C.bg }}>
       <Gate>
         <DeskShell active={shell}>{stack}</DeskShell>
         {desk ? null : <Tabs />}
@@ -56,7 +56,7 @@ export default function RootLayout() {
     <UiProvider>
       <SessionProvider>
         <QueueProvider>
-          <StatusBar style="light" />
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
           {framed ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.page }}>{app}</View> : app}
         </QueueProvider>
       </SessionProvider>

@@ -62,7 +62,7 @@ export default function BulkAssign() {
   return (
     <Screen title="Toplu görev atama" titleEn="Bulk assignment" gap={12}>
       <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>Önce kime, hangi şubelere ve ne kadar süreye atanacağını seç. Değişiklik, etkilenecek şube ve kişiler gösterilip onayladıktan sonra yapılır.</Text>
-      <Card radius={22} style={{ padding: 15, gap: 10 }}>
+      <Card style={{ padding: 15, gap: 10 }}>
         <Eyebrow>KİME</Eyebrow>
         {people.error ? <ErrorBox message={people.error} onRetry={people.reload} /> : null}
         {!people.data && !people.error ? <Loading label="Ekip yükleniyor…" /> : null}
@@ -86,7 +86,7 @@ export default function BulkAssign() {
       </Card>
       {error ? <ErrorBox message={error} /> : null}
       {pre ? (
-        <Card radius={22} style={{ padding: 15, gap: 9 }}>
+        <Card style={{ padding: 15, gap: 9 }}>
           <Eyebrow>ONAYDAN ÖNCE</Eyebrow>
           <Text testID="bulk-total" style={type(15, 700, { lh: 1.35 })}>{pre.total} görev {pre.assignee.name} kişisine atanacak</Text>
           {pre.sites.map(s => (

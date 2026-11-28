@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useWindowDimensions } from 'react-native';
 import { errorText } from '../api/client';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
@@ -56,7 +57,11 @@ export function Legislation() {
   const unreadable = useMemo(() => (ov.data?.recentSkipped ?? []).filter(k => k.status === 'unreadable'), [ov.data]);
   const rows = useMemo(() => { if (quick === 'unreadable') return [] as Row[]; const all = [...(qa.data ?? []), ...(both ? qb.data ?? [] : [])]; const seen = new Set<string>(); const u = all.filter(r => !seen.has(r.id) && seen.add(r.id)); return (quick === 'unowned' ? u.filter(r => !r.assigned_to) : u).sort((a, b) => +new Date(a.detected_at) - +new Date(b.detected_at)); }, [qa.data, qb.data, quick, both]);
   const o = ov.data; const failing = (o?.sources ?? []).filter(s => s.last_error); const total = (o?.pendingReview ?? 0);
-  const setView = (v: string) => set({ quick: v, sel: '' });
+  const setView = (v: string) => { autoRef.current = ''; set({ quick: v, sel: '' }); };
+  // Geniş ekranda kuyruk açılınca ilk dosya seçilir; kapatılırsa ya da karar verilirse kendiliğinden başka dosyaya geçilmez.
+  const wide = useWindowDimensions().width >= 1280; const autoRef = useRef('');
+  const settled = !qa.loading && (!both || !qb.loading) && rows.every(r => (both ? ['pending', 'drafted'] : [sA]).includes(r.status));
+  useEffect(() => { if (st.sel) { autoRef.current = quick; return; } if (wide && settled && rows[0] && autoRef.current !== quick) { autoRef.current = quick; set({ sel: rows[0].id }); } }, [wide, settled, rows, st.sel, quick, set]);
 
   const cols: Col<Row>[] = [
     { key: 'doc', label: 'Yayın', w: 'minmax(0,1fr)', render: r => (
@@ -89,14 +94,14 @@ export function Legislation() {
       </>}
       tools={<>
         <Seg label="Durum" testid="leg-view" value={view} onChange={setView} items={VIEWS.map(([k, l]) => ({ key: k, label: l }))} />
-        {view === 'open' ? <Seg label="Açık kayıtlar" testid="leg-sub" value={quick === 'unreadable' ? '' : quick} onChange={v => set({ quick: v, sel: '' })} items={SUBS.map(([k, l]) => ({ key: k, label: l }))} /> : null}
+        {view === 'open' ? <Seg label="Açık kayıtlar" testid="leg-sub" value={quick === 'unreadable' ? '' : quick} onChange={setView} items={SUBS.map(([k, l]) => ({ key: k, label: l }))} /> : null}
         {view === 'open' && unreadable.length ? <Btn size="sm" onClick={() => set({ quick: 'unreadable', sel: '' })} testid="leg-quick-unreadable">{`Metni okunamadı (${unreadable.length})`}</Btn> : null}
         <Search label="Yayınlarda ara: belge, madde, başlık" placeholder="Belge, madde, başlık ara" value={st.q} onChange={v => set({ q: v })} testid="leg-search" />
         <select className="gh-select" aria-label="Kaynak" data-testid="leg-src" value={st.src} onChange={e => set({ src: e.target.value })}><option value="">Tüm kaynaklar</option>{(o?.sources ?? []).map(s => <option key={s.code} value={s.code}>{SOURCE_TR[s.code] ?? s.name}</option>)}</select>
       </>}>
       {st.health && o ? <Health o={o} /> : null}
       {ov.error && !o ? <Failed what="Mevzuat özeti" message={ov.error} onRetry={reloadAll} /> : null}
-      <ListDetail ws="leg" label="Mevzuat yayınları" rows={rows} rowId={r => r.id} cols={cols} selId={st.sel ?? ''} onSelect={id => set({ sel: id })} ready={!qa.loading || !!qa.data}
+      <ListDetail queue ws="leg" label="Mevzuat yayınları" rows={rows} rowId={r => r.id} cols={cols} selId={st.sel ?? ''} onSelect={id => set({ sel: id })} ready={!qa.loading || !!qa.data}
         empty={quick === 'unreadable' ? (unreadable.length ? <>{unreadable.map((k, i) => (
           <div key={k.key} data-testid={`leg-unreadable-${i}`} className="gh-pre" style={{ borderBottom: '1px solid var(--line)' }}><Badge tone="warn">Metni okunamadı</Badge><div className="t" style={{ fontWeight: 600, margin: '6px 0 2px' }}>{k.title}</div>
             <div className="gh-note">{k.why} · {k.firstDay === k.lastDay ? dayTr(k.firstDay) : `${dayTr(k.firstDay)} → ${dayTr(k.lastDay)}`} · {k.scans} taramada. Erişim gelince kuyruğa kendiliğinden bir kez girer.</div>{k.url ? <div style={{ marginTop: 4 }}><Ext href={k.url}>Kaynağı aç</Ext></div> : null}</div>))}</>
@@ -168,16 +173,13 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
 
   return (
     <>
+      <div className="gh-leg">
+      <div className="gh-leg-doc">
       <PanelHead eyebrow={<><Badge tone="info">{SOURCE_TR[d.sourceCode] ?? d.sourceCode}</Badge>{d.isExample ? <Badge tone="ex">SENTETİK ÖRNEK · gerçek yayın değil</Badge> : <Badge tone="ok">Gerçek resmî yayın</Badge>}</>}
         title={`${d.docTitle}${d.articleRef ? ` · md. ${d.articleRef}` : ''}`}
         badges={<><span data-testid="leg-status"><Badge tone={stT}>{stL}</Badge></span>{d.dateStatus === 'unclear' ? <Badge tone="warn">Yürürlük tarihi belirsiz</Badge> : <Badge>Yürürlük {dayTr(d.effectiveFrom)}</Badge>}</>} />
       <div className="gh-panel-scroll" data-testid="leg-detail">
-        <NowBox testid="leg-now" title={open ? 'Neden bekliyor' : 'Durum'} why={`${d.nextInLine ? trText(d.nextInLine) : stL}${open && !d.assignment ? ' Dosya sorumlusu atanmamış; bu, yukarıdaki inceleme sırasından ayrıdır.' : ''}`} can={open ? now : null}
-          note={open && !isReviewer ? 'Onay, ret ve iade bu hesapta kapalı: kararı yalnız kural inceleyici verir.' : null}>
-          {open ? <p data-testid="leg-now-impact"><b>Etki: </b>{imp ? `${imp.affectedSites} şube etkilenir, ${imp.outOfScopeSites} şube kapsam dışı (${dayTr(imp.onDate)}).` : 'henüz hesaplanamıyor (kapsam koşulu yazılmadı).'}</p> : null}
-          {open && d.cannot?.assign === null ? <div style={{ marginTop: 6 }}><Btn size="sm" kind="pri" testid="leg-goto-assign" onClick={jumpAssign}>Atamaya git</Btn></div> : null}
-        </NowBox>
-        {d.exampleNote ? <p className="gh-note" style={{ margin: '0 0 6px' }}>{d.exampleNote}</p> : null}
+        {d.exampleNote ? <p className="gh-note" style={{ margin: '10px 0 6px' }}>{d.exampleNote}</p> : null}
 
         <Section no={1} title="Yayın" testid="leg-sec-yayin">
           <Kv rows={[['Yayımlayan', SOURCE_TR[d.sourceCode] ?? d.sourceCode], ['Belge', `${d.docRef}${d.articleRef ? ` · madde ${d.articleRef}` : ''}`], ['Yayın tarihi', dayTr(d.publishedOn)], ['Değişiklik türü', <span data-testid="leg-type">{d.typeLabel}</span>],
@@ -232,6 +234,30 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
           {limits.length ? <div style={{ marginTop: 8 }} data-testid="leg-limits"><b style={{ fontSize: 13 }}>Kabul aralıkları</b>{limits.map((l, i) => <div key={i} className="gh-note"><Tag b={l.basis} /> {l.t}: {l.min ?? '…'} – {l.max ?? '…'} {l.unit}{l.note ? ` (${l.note})` : ''}</div>)}</div> : null}
         </Section>
 
+        <Section no={6} title="Geçmiş" testid="leg-sec-gecmis">
+          {d.history.length === 0 ? <div className="gh-note">Henüz kayıt yok.</div> : (
+            <ul className="gh-hist" data-testid="leg-history">{[...d.history].reverse().map(h => { const r = (h.payload?.reason ?? h.payload?.notes ?? h.payload?.note) as string | undefined; return (
+              <li key={h.seq}><span className="w">{dateTimeTr(h.occurred_at)}</span><span><b>{eventTr(h.event_type)}</b> · {h.actor ?? 'sistem'}{h.payload?.ruleVersion ? ` · kural sürümü ${String(h.payload.ruleVersion)}` : ''}{r ? <div className="gh-note">Gerekçe: {r}</div> : null}</span></li>); })}</ul>)}
+          <Btn size="sm" kind="ghost" onClick={() => router.push(`/denetim?entity=${id}` as never)} testid="leg-audit-link">Denetim kaydında aç ›</Btn>
+        </Section>
+      </div>
+      </div>
+      <div className="gh-leg-act" data-testid="leg-actions">
+        <div className="gh-leg-actscroll">
+        <div className="gh-leg-top">
+        <div className="gh-basis" data-testid="leg-basis">
+          <h3>Resmî dayanak</h3>
+          <Kv rows={[['Kaynak', <><Ext href={d.sourceUrl}>{SOURCE_TR[d.sourceCode] ?? d.sourceCode}</Ext> · {d.docRef}{d.articleRef ? ` md. ${d.articleRef}` : ''}</>],
+            ['Yürürlük', d.dateStatus === 'known' ? dayTr(d.effectiveFrom) : <span style={{ color: 'var(--warn)' }}>Belirsiz: tarih belirlenmedi</span>],
+            ['Kapsam', <span data-testid="leg-now-impact">{imp ? `${imp.affectedSites} şube etkilenir · ${imp.outOfScopeSites} şube kapsam dışı (${dayTr(imp.onDate)})` : 'Etki henüz hesaplanamıyor (kapsam koşulu yazılmadı)'}</span>],
+            ['Sıklık', d.proposal && d.frequency ? (d.frequency.checks.length ? d.frequency.checks.map(c => `${c.title}: ${c.unset ? 'seçilmedi' : c.text}`).join(' · ') : 'Bu kural görev üretmez') : 'Kural önerisi yazılmadı']]} />
+        </div>
+        <NowBox testid="leg-now" title={open ? 'Neden bekliyor' : 'Durum'} why={`${d.nextInLine ? trText(d.nextInLine) : stL}${open && !d.assignment ? ' Dosya sorumlusu atanmamış; bu, yukarıdaki inceleme sırasından ayrıdır.' : ''}`} can={open ? now : null}
+          note={open && !isReviewer ? 'Onay, ret ve iade bu hesapta kapalı: kararı yalnız kural inceleyici verir.' : null}>
+          {open && d.cannot?.assign === null ? <div style={{ marginTop: 6 }}><Btn size="sm" kind="pri" testid="leg-goto-assign" onClick={jumpAssign}>Atamaya git</Btn></div> : null}
+        </NowBox>
+        </div>
+        <div className="gh-leg-decide">
         <Section no={5} title="Karar" testid="leg-sec-karar">
           {d.reviewAreas?.required.length ? d.reviewAreas.required.map(a => (
             <div key={a.area} className="gh-site" data-testid={`leg-area-${a.area}`}>
@@ -272,13 +298,8 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
           {error ? <Callout tone="crit" testid="leg-error"><b>İşlem yapılamadı: </b>{error} <div>Kayıt yeniden yüklendi; başka bir yönetici bu kaydı değiştirmiş olabilir. Güncel durum yukarıda.</div></Callout> : null}
         </Section>
 
-        <Section no={6} title="Geçmiş" testid="leg-sec-gecmis">
-          {d.history.length === 0 ? <div className="gh-note">Henüz kayıt yok.</div> : (
-            <ul className="gh-hist" data-testid="leg-history">{[...d.history].reverse().map(h => { const r = (h.payload?.reason ?? h.payload?.notes ?? h.payload?.note) as string | undefined; return (
-              <li key={h.seq}><span className="w">{dateTimeTr(h.occurred_at)}</span><span><b>{eventTr(h.event_type)}</b> · {h.actor ?? 'sistem'}{h.payload?.ruleVersion ? ` · kural sürümü ${String(h.payload.ruleVersion)}` : ''}{r ? <div className="gh-note">Gerekçe: {r}</div> : null}</span></li>); })}</ul>)}
-          <Btn size="sm" kind="ghost" onClick={() => router.push(`/denetim?entity=${id}` as never)} testid="leg-audit-link">Denetim kaydında aç ›</Btn>
-        </Section>
-      </div>
+        </div>
+        </div>
 
       {open && d.cannot && (isReviewer || isAuthor) ? (
         <div className="gh-actbar" data-testid="leg-decision">
@@ -292,6 +313,8 @@ function LegPanel({ id, sources, total, onChanged }: { id: string; sources: Sour
           {([['approve', 'Onayla', true], ['reject', 'Reddet', true], ['return', 'İade', true], ['prepare', 'Taslak', false]] as const).map(([k, l, n]) => { const w = (k === 'prepare' ? isAuthor : isReviewer) ? why(k, n) : null; return w ? <div key={k} className="gh-why" data-testid={`leg-why-${k}`}>Pasif · {l}: {w}</div> : null; })}
         </div>
       ) : null}
+      </div>
+      </div>
     </>
   );
 }

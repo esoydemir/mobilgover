@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
@@ -23,18 +23,17 @@ export default function DocumentsRoute() {
   return (
     <Screen title="Belge kasası" titleEn="Document vault" gap={11} onRefresh={q.reload} refreshing={q.loading}>
       <PrimaryButton testID="doc-new" label="Belge ekle" onPress={() => router.push('/documents/new')} />
-      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Durumlar ayrı tutulur: inceleme bekliyor, kurum içi incelendi, düzenleyen kurumdan doğrulandı, reddedildi, süresi doldu. Yükleme ya da kurum içi inceleme resmî geçerlilik doğrulaması değildir; GoverHub kurumu kendisi sorgulamaz.</Text>
-      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }} style={{ flexGrow: 0 }}>
         {([[null, 'Tümü'], ['expiring', 'Yakında bitecek'], ['expired', 'Süresi doldu'], ['pending_review', 'İnceleme bekliyor'], ['rejected', 'Reddedildi'], ['no_file', 'Eksik (dosya yok)'], ['info_needed', 'Bilgi tamamlama']] as const).map(([k, l]) =>
           <FilterChip key={k ?? 'all'} testID={`doc-filter-${k ?? 'all'}`} label={l} px={11} active={filter === k} onPress={() => setFilter(k)} />)}
-      </View>
+      </ScrollView>
       {q.error ? <ErrorBox message={q.error} onRetry={q.reload} /> : null}
       {!q.data && q.loading ? <Loading /> : null}
       {q.data?.length === 0 ? <Empty title={filter ? 'Bu filtreye uyan belge yok' : 'Henüz belge yok'} /> : null}
       {docs.map(d => {
         const st = DOC_STATUS[d.status] ?? DOC_STATUS.no_file!;
         return (
-          <Tap key={d.id} testID={`doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
+          <Tap key={d.id} testID={`doc-${d.id}`} onPress={() => router.push(`/documents/${d.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 14, gap: 8 }}>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Pill label={st[0]} fg={st[1]} bg={st[2]} />
               {d.expiring ? <Pill label="SÜRESİ YAKLAŞIYOR" fg={C.warn} bg={C.chip} /> : null}
@@ -57,6 +56,7 @@ export default function DocumentsRoute() {
           </Tap>
         );
       })}
+      <Text style={type(11.5, 400, { color: C.t3, lh: 1.45 })}>Durumlar ayrı tutulur: inceleme bekliyor, kurum içi incelendi, düzenleyen kurumdan doğrulandı, reddedildi, süresi doldu. Yükleme ya da kurum içi inceleme resmî geçerlilik doğrulaması değildir; GoverHub kurumu kendisi sorgulamaz.</Text>
     </Screen>
   );
 }

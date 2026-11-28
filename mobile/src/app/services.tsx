@@ -35,7 +35,7 @@ export default function ServicesRoute() {
       {!q.data && q.loading ? <Loading /> : null}
       {q.data?.length === 0 ? <Empty title="Henüz talep yok" /> : null}
       {(q.data ?? []).map(r => (
-        <Tap key={r.id} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
+        <Tap key={r.id} onPress={() => router.push(`/service/${r.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 15, gap: 8 }}>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
             <Pill label={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[0]} fg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[1]} bg={reqStatus(r.status, r.acceptable_quotes, r.open_quotes)[2]} />
             <Text style={type(11, 500, { color: C.t3 })}>{r.category_name}</Text>

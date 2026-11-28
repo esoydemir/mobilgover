@@ -60,7 +60,7 @@ export default function ShareCaseRoute() {
           <Text style={type(11.5, 500, { color: C.warn, lh: 1.45 })}>{preview.permissionNote}</Text>
           {preview.canPermit ? (
             <Tap testID="case-permit" onPress={() => setPermit(x => !x)} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-              <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: permit ? C.lime : C.t3, backgroundColor: permit ? C.lime : 'transparent' }} />
+              <View style={{ width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: permit ? C.lime : C.t3, backgroundColor: permit ? C.accent : 'transparent' }} />
               <Text style={[type(12.5, 500, { lh: 1.4 }), { flex: 1 }]}>İşletme adına yukarıdaki önizlemenin mesleki ağda paylaşılmasına izin veriyorum.</Text>
             </Tap>
           ) : <Text style={type(12, 600, { color: C.crit })}>Paylaşım iznini yalnız işletme sahibi ya da merkez yöneticisi verebilir.</Text>}

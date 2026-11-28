@@ -1,18 +1,17 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, type ReactNode } from 'react';
-import { RefreshControl, ScrollView, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Platform, RefreshControl, ScrollView, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueue } from '../api/queue';
 import { useSession } from '../api/session';
 import { goBack } from '../state/app';
-import { C, tint, type } from '../theme';
-import { GradientFill } from './Gradient';
+import { C, glass, tint, type } from '../theme';
 import { useApi } from '../api/useApi';
 import { BackIcon, BellIcon } from './Icons';
 import { Tap } from './ui';
 
 /** Bottom padding that keeps content clear of the floating tab bar. */
-export const TAB_CLEARANCE = 142;
+export const TAB_CLEARANCE = 108;
 
 type Props = {
   children: ReactNode;
@@ -29,20 +28,25 @@ type Props = {
 
 export function Screen({ children, title, titleEn, gap = 12, contentStyle, onRefresh, refreshing = false, siteId }: Props) {
   const insets = useSafeAreaInsets();
+  // The glass header floats over the content, so the content starts below its measured height and scrolls under it.
+  const [head, setHead] = useState(insets.top + 68);
+  // A focused field or a scrolled-to control must never end up behind the header or the tab bar.
+  const scrollPad = Platform.OS === 'web' ? ({ scrollPaddingTop: head + 8, scrollPaddingBottom: TAB_CLEARANCE } as unknown as ViewStyle) : null;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <View style={{ paddingTop: insets.top + 8 }}>
-        {title === undefined ? <BrandHeader /> : <SubHeader title={title} titleEn={titleEn} siteId={siteId} />}
-      </View>
       <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[{ paddingHorizontal: 22, paddingBottom: TAB_CLEARANCE + insets.bottom, gap }, contentStyle]}
+        style={[{ flex: 1 }, scrollPad]}
+        contentContainerStyle={[{ paddingTop: head + 10, paddingHorizontal: 16, paddingBottom: TAB_CLEARANCE + insets.bottom, gap }, contentStyle]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.lime} /> : undefined}
+        refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.lime} progressViewOffset={head} /> : undefined}
       >
         {children}
       </ScrollView>
+      <View onLayout={e => setHead(Math.round(e.nativeEvent.layout.height))}
+        style={[{ position: 'absolute', top: 0, left: 0, right: 0, paddingTop: insets.top + 8, borderBottomWidth: 1, borderBottomColor: C.bd, zIndex: 5 }, glass]}>
+        {title === undefined ? <BrandHeader /> : <SubHeader title={title} titleEn={titleEn} siteId={siteId} />}
+      </View>
     </View>
   );
 }
@@ -53,8 +57,8 @@ export function EnvBadge() {
   if (!env) return null;
   const demo = env.mode === 'demo';
   return (
-    <View accessibilityLabel={demo ? 'Demo ortamı: örnek veri' : 'Pilot ortamı'} style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, borderWidth: 1, borderColor: demo ? tint.warn(0.45) : tint.info(0.45) }}>
-      <Text style={type(8.5, 700, { ls: 0.08, color: demo ? C.warn : C.info })}>{demo ? 'DEMO · ÖRNEK VERİ' : 'PİLOT'}</Text>
+    <View accessibilityLabel={demo ? 'Demo ortamı: örnek veri' : 'Pilot ortamı'} style={{ alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, borderWidth: 1, borderColor: demo ? tint.warn(0.45) : tint.info(0.45) }}>
+      <Text numberOfLines={1} style={type(11, 700, { color: demo ? C.warn : C.info })}>{demo ? 'DEMO · ÖRNEK VERİ' : 'PİLOT'}</Text>
     </View>
   );
 }
@@ -62,41 +66,39 @@ export function EnvBadge() {
 /** Shows how many records are still only on this device. */
 export function SyncChip() {
   const { ops, online, syncing } = useQueue();
-  // Narrow phone: the status shows as a dot (its label stays in the accessibility label) so the business name has room.
-  const narrow = useWindowDimensions().width < 360;
   const waiting = ops.length;
   const problem = ops.some(o => o.status === 'failed' || o.status === 'conflict');
   const label = problem ? `${waiting} kayıt sorunlu` : waiting ? `${waiting} kayıt cihazda` : online === false ? 'Çevrimdışı' : syncing ? 'Eşitleniyor' : 'Eşitlendi';
   const color = problem ? C.crit : waiting || online === false ? C.warn : C.lime;
+  // Words only when there is something to know; when everything is saved a dot is enough (the label stays for screen readers).
+  const quiet = !problem && !waiting && online !== false && !syncing;
+  const narrow = useWindowDimensions().width < 360;
   return (
-    <Tap accessibilityLabel={`Eşitleme durumu: ${label}`} onPress={() => router.push('/sync')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: narrow ? 10 : 11, borderRadius: 999, borderWidth: 1, borderColor: tint.white(0.09), backgroundColor: '#141414' }}>
-      <View style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: color }} />
-      {narrow && !problem && !waiting ? null : <Text style={type(11, 600, { color: C.t2 })}>{narrow && waiting ? String(waiting) : label}</Text>}
+    <Tap accessibilityLabel={`Eşitleme durumu: ${label}`} onPress={() => router.push('/sync')}
+      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, minWidth: quiet ? 28 : 44, paddingHorizontal: quiet ? 0 : 10 }}>
+      <View style={{ width: 9, height: 9, borderRadius: 999, backgroundColor: color }} />
+      {quiet || (narrow && !problem && !waiting) ? null : <Text style={type(12, 700, { color: problem ? C.crit : C.warn })}>{narrow && waiting ? String(waiting) : label}</Text>}
     </Tap>
   );
 }
 
 function BrandHeader() {
-  const { me, company, siteId, sites } = useSession();
+  const { company, siteId, sites } = useSession();
   const siteName = sites.find(s => s.id === siteId)?.name;
   const full = company ? `${company.name}${siteName ? ` · ${siteName}` : ''}` : 'GoverHub';
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, paddingTop: 4, paddingHorizontal: 22, paddingBottom: 14 }}>
-      <View style={{ width: 44, height: 44, borderRadius: 15, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 22px rgba(198,255,61,0.28)' }}>
-        <GradientFill angle={150} stops={[[0, C.lime], [1, '#9BD718']]} />
-        <Text style={type(20, 800, { family: 'outfit', color: C.ink })}>G</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 2, paddingHorizontal: 16, paddingBottom: 10 }}>
+      <View style={{ width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: C.accent }}>
+        <Text style={type(18, 800, { color: C.ink })}>G</Text>
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text numberOfLines={1} style={[type(11, 500, { color: C.t2 }), { flexShrink: 1 }]}>Merhaba, {me?.displayName ?? ''}</Text>
+      {/* The whole business and site name stays reachable on a narrow phone: two lines, then the site line; tap = switch site / account. */}
+      <Tap testID="header-context" accessibilityLabel={full} onPress={() => router.push('/more')} style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+        <Text numberOfLines={2} style={type(16, 700, { ls: -0.015, lh: 1.2 })}>{company?.name ?? 'GoverHub'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1, flexWrap: 'wrap' }}>
+          {siteName ? <Text testID="header-site" numberOfLines={1} style={[type(13, 600, { color: C.t2 }), { flexShrink: 1 }]}>{siteName}{sites.length > 1 ? ' ▾' : ''}</Text> : null}
           <EnvBadge />
         </View>
-        {/* The whole business and site name stays reachable on a narrow phone: two lines, then the site line; tap = switch site / account. */}
-        <Tap testID="header-context" accessibilityLabel={full} onPress={() => router.push('/more')}>
-          <Text numberOfLines={2} style={[type(16, 700, { ls: -0.015, lh: 1.15 }), { marginTop: 2 }]}>{company?.name ?? 'GoverHub'}</Text>
-          {siteName ? <Text testID="header-site" numberOfLines={1} style={type(11, 500, { color: C.t3 })}>{siteName}</Text> : null}
-        </Tap>
-      </View>
+      </Tap>
       <SyncChip />
       {company ? <NotificationBell companyId={company.id} /> : null}
     </View>
@@ -122,11 +124,11 @@ function NotificationBell({ companyId }: { companyId: string }) {
   const unread = q.data?.unread ?? 0;
   return (
     <Tap testID="home-bell" accessibilityLabel={unread ? `${unread} okunmamış bildirim` : 'Bildirimler'} onPress={() => router.push('/notifications')}
-      style={{ width: 36, height: 36, borderRadius: 999, borderWidth: 1, borderColor: tint.white(0.09), backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center' }}>
-      <BellIcon size={17} color={unread ? C.t1 : C.t2} />
+      style={{ width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: C.bd, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' }}>
+      <BellIcon size={19} color={unread ? C.t1 : C.t2} />
       {unread ? (
-        <View style={{ position: 'absolute', top: -3, right: -3, minWidth: 17, height: 17, borderRadius: 999, paddingHorizontal: 4, backgroundColor: C.lime, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={type(9.5, 800, { color: C.ink })}>{unread > 9 ? '9+' : unread}</Text>
+        <View style={{ position: 'absolute', top: -4, right: -4, minWidth: 19, height: 19, borderRadius: 999, paddingHorizontal: 4, backgroundColor: C.accent, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={type(11, 800, { color: C.ink })}>{unread > 9 ? '9+' : unread}</Text>
         </View>
       ) : null}
     </Tap>
@@ -138,14 +140,14 @@ function SubHeader({ title, titleEn, siteId }: { title: string; titleEn?: string
   const siteName = siteId ? company?.sites.find(s => s.id === siteId)?.name : null;
   const where = company ? `${company.name}${siteName ? ` · ${siteName}` : ''}` : null;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 4, paddingHorizontal: 22, paddingBottom: 14 }}>
-      <Tap accessibilityLabel="Geri" onPress={goBack} style={{ width: 36, height: 36, borderRadius: 999, borderWidth: 1, borderColor: C.bd, backgroundColor: C.chip, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 2, paddingHorizontal: 16, paddingBottom: 10 }}>
+      <Tap accessibilityLabel="Geri" onPress={goBack} style={{ width: 44, height: 44, borderRadius: 14, borderWidth: 1, borderColor: C.bd, backgroundColor: C.card, alignItems: 'center', justifyContent: 'center' }}>
         <BackIcon />
       </Tap>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={type(16, 700, { ls: -0.015 })}>{title}</Text>
+        <Text style={type(17, 700, { ls: -0.015 })}>{title}</Text>
         {/* B-16: Türkçe ekranda İngilizce alt başlık gösterilmez (titleEn yalnızca geriye uyumluluk için kabul edilir). */}
-        {where ? <Text testID="subheader-context" numberOfLines={2} style={[type(11, 600, { color: C.t2, lh: 1.3 }), { marginTop: 2 }]}>{where}</Text> : null}
+        {where ? <Text testID="subheader-context" numberOfLines={2} style={[type(12, 600, { color: C.t2, lh: 1.3 }), { marginTop: 1 }]}>{where}</Text> : null}
       </View>
       <EnvBadge />
     </View>

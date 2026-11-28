@@ -42,13 +42,13 @@ export default function NewNcrRoute() {
       <Text style={type(13, 400, { color: C.t2, lh: 1.5 })}>Planlı bir kontrol dışında fark ettiğin sorunu kaydet. Risk düzeyi ve gereken adımlar seçtiğin önem ve tekrar sayısına göre hesaplanır.</Text>
       <Field label="Kısa başlık" testID="ncr-new-title" value={title} onChangeText={setTitle} placeholder="ör. Soğutucu kapısı tam kapanmıyor" />
       <Field label="Ne gördün?" testID="ncr-new-desc" value={description} onChangeText={setDescription} multiline placeholder="Yer, zaman, gördüğün durum" />
-      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+      <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
         <Eyebrow>KONU</Eyebrow>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
           {HAZARDS.map(([k, l]) => <FilterChip key={k} label={l} px={12} active={hazard === k} onPress={() => setHazard(k)} />)}
         </View>
       </Card>
-      <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
+      <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 8 }}>
         <Eyebrow>ÖNEM</Eyebrow>
         {SEVERITIES.map(([k, l, d]) => (
           <Tap key={k} testID={`ncr-new-sev-${k}`} onPress={() => setSeverity(k)} accessibilityRole="radio" accessibilityState={{ selected: severity === k }}
@@ -59,7 +59,7 @@ export default function NewNcrRoute() {
         ))}
       </Card>
       {eq.data && eq.data.filter(e => e.active).length ? (
-        <Card radius={22} style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
+        <Card style={{ paddingVertical: 15, paddingHorizontal: 16, gap: 10 }}>
           <Eyebrow>EKİPMAN (VARSA)</Eyebrow>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
             <FilterChip label="Yok" px={12} active={equipmentId === null} onPress={() => setEquipmentId(null)} />

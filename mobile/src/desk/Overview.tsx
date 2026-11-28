@@ -48,6 +48,23 @@ export function Overview() {
         {!work && !error ? <Loading what="Bekleyen işler" /> : null}
         {work ? (
           <>
+            {top.length ? (
+              <section className="gh-prio" aria-labelledby="prio-h" data-testid="home-priority">
+                <h2 id="prio-h">İlk bunu aç</h2>
+                {top.map(({ row, why }, i) => (
+                  <div key={row.id} className={`gh-prio-item ${i === 0 ? 'first' : ''}`} data-testid={`home-prio-${i}`}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}><Badge tone="info">{row.areaLabel}</Badge>{row.mine ? <Badge tone="ok">Sana atanmış</Badge> : null}</div>
+                      <div className="t" style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{row.title}</div>
+                      <div className="why" data-testid={`home-prio-why-${i}`}><b style={{ fontWeight: 600, color: 'var(--ink)' }}>Neden: </b>{why}</div>
+                    </div>
+                    <Btn kind={i === 0 ? 'pri' : undefined} onClick={() => goto(row.href)} testid={`home-prio-open-${i}`}>{row.action} <Icon name="chevron" size={14} /></Btn>
+                  </div>
+                ))}
+                <p className="rule">Sıra: önce sana atananlar, sonra okunamayan kaynaklar, sonra en uzun bekleyenler. Süre eşiği tanımlı olmadığı için “gecikti” denmez; yalnız bekleme süresi gösterilir.</p>
+              </section>
+            ) : null}
+
             <div className="gh-areas" data-testid="home-areas">
               {work.areas.map(a => {
                 const go = (href: string) => (e: React.MouseEvent) => { e.preventDefault(); goto(href); };
@@ -65,23 +82,6 @@ export function Overview() {
                 );
               })}
             </div>
-
-            {top.length ? (
-              <section className="gh-prio" aria-labelledby="prio-h" data-testid="home-priority">
-                <h2 id="prio-h">İlk bunu aç</h2>
-                <p className="rule">Sıra: önce sana atananlar, sonra okunamayan kaynaklar, sonra en uzun bekleyenler. Süre eşiği tanımlı olmadığı için “gecikti” denmez; yalnız bekleme süresi gösterilir.</p>
-                {top.map(({ row, why }, i) => (
-                  <div key={row.id} className={`gh-prio-item ${i === 0 ? 'first' : ''}`} data-testid={`home-prio-${i}`}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}><Badge tone="info">{row.areaLabel}</Badge>{row.mine ? <Badge tone="ok">Sana atanmış</Badge> : null}</div>
-                      <div className="t" style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{row.title}</div>
-                      <div className="why" data-testid={`home-prio-why-${i}`}><b style={{ fontWeight: 600, color: 'var(--ink)' }}>Neden: </b>{why}</div>
-                    </div>
-                    <Btn kind={i === 0 ? 'pri' : undefined} onClick={() => goto(row.href)} testid={`home-prio-open-${i}`}>{row.action} <Icon name="chevron" size={14} /></Btn>
-                  </div>
-                ))}
-              </section>
-            ) : null}
 
             <div style={{ padding: '18px 22px 6px', display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
               <h2 style={{ margin: 0, fontSize: 15 }}>Bekleyen tüm işler</h2>

@@ -58,7 +58,7 @@ export default function DocumentRoute() {
             {d.expiring ? <Pill label="SÜRESİ YAKLAŞIYOR" fg={C.warn} bg={tint.warn(0.14)} /> : null}
             {d.notYetValid ? <Pill label="HENÜZ YÜRÜRLÜKTE DEĞİL" fg={C.info} bg={tint.info(0.14)} /> : null}
           </View>
-          <Text style={type(23, 600, { family: 'outfit', ls: -0.03, lh: 1.15 })}>{d.title}</Text>
+          <Text style={type(23, 600, { ls: -0.03, lh: 1.15 })}>{d.title}</Text>
           <Text style={type(12.5, 400, { color: C.t2, lh: 1.5 })}>
             {DOC_TYPE[d.docType] ?? d.docType} · {d.equipmentName ? `Ekipman: ${d.equipmentName}` : d.siteName ? `Şube: ${d.siteName}` : 'İşletme geneli'}
             {d.issuer ? ` · ${d.issuer}` : ''}{d.documentNo ? ` · no ${d.documentNo}` : ''}

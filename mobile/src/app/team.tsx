@@ -5,7 +5,7 @@ import { useSession } from '../api/session';
 import { useApi } from '../api/useApi';
 import { Screen } from '../components/Screen';
 import { ErrorBox, Field } from '../components/states';
-import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, s, shortWhy } from '../components/ui';
+import { Card, Eyebrow, FilterChip, GhostButton, PrimaryButton, s } from '../components/ui';
 import { ROLE_LABEL as ROLE } from '../features/labels';
 import { useUi } from '../state/app';
 import { C, tint, type } from '../theme';
@@ -33,6 +33,7 @@ export default function TeamRoute() {
   };
   return (
     <Screen title="Ekip" titleEn="Team">
+      {(q.data ?? []).some(m => m.status === 'active' && m.role !== 'owner' && m.id !== me?.userId) ? <Field label="Pasifleştirme gerekçesi (en az 5 karakter; yazınca düğmeler açılır)" value={reason} onChangeText={setReason} placeholder="ör. İşten ayrıldı" /> : null}
       {(q.data ?? []).map(m => (
         <View key={m.membership_id} style={[s.row, { borderRadius: 18, padding: 14, flexWrap: 'wrap', gap: 8 }]}>
           <View style={{ flex: 1, minWidth: 160 }}>
@@ -40,14 +41,13 @@ export default function TeamRoute() {
             <Text style={[type(11.5, 400, { color: m.status === 'suspended' ? C.crit : C.t3 }), { marginTop: 2 }]}>{ROLE[m.role]}{(company?.sites.length ?? 0) > 1 ? ` · ${m.site_id ? company!.sites.find(s => s.id === m.site_id)?.name ?? 'Şube' : 'Tüm şubeler'}` : ''}{STATUS(m)}</Text>
           </View>
           {m.role !== 'owner' && m.id !== me?.userId ? (
-            m.status === 'active' ? <GhostButton label="Pasifleştir" height={32} size={11} disabled={reason.trim().length < 5} why={shortWhy(reason, 5, 'Gerekçe')} color={C.crit} border={tint.crit(0.35)} onPress={() => act(m, 'suspend')} />
+            m.status === 'active' ? <GhostButton label="Pasifleştir" height={32} size={11} disabled={reason.trim().length < 5} color={C.crit} border={tint.crit(0.35)} onPress={() => act(m, 'suspend')} />
             : m.status === 'suspended' ? <GhostButton label="Yeniden etkinleştir" height={32} size={11} onPress={() => act(m, 'reactivate')} />
             : <GhostButton label="Daveti iptal et" height={32} size={11} onPress={() => act(m, 'cancel_invite')} />
           ) : null}
         </View>
       ))}
       {q.error ? <ErrorBox message={q.error} /> : null}
-      <Field label="Pasifleştirme gerekçesi (pasifleştirmek için gerekli)" value={reason} onChangeText={setReason} placeholder="ör. İşten ayrıldı" />
       {error ? <ErrorBox message={error} /> : null}
       <Card style={{ gap: 10 }}>
         <Eyebrow>KİŞİ DAVET ET</Eyebrow>

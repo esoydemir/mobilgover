@@ -3,13 +3,13 @@ import { Text, View } from 'react-native';
 import { errorText } from '../../api/client';
 import { useSession } from '../../api/session';
 import { ErrorBox, Field } from '../../components/states';
-import { Callout, Card, Eyebrow, GhostButton, missingWhy, PrimaryButton, shortWhy } from '../../components/ui';
-import { C, type } from '../../theme';
+import { Callout, Card, Eyebrow, FilterChip, GhostButton, missingWhy, Pill, PrimaryButton } from '../../components/ui';
+import { C, tint, type } from '../../theme';
 import { fmtDateTime } from '../dates';
 
 export type ProductAssessment = { id: string; product: string; quantity: number | null; unit: string | null; quantityUnknown: boolean; firstAction: string; assessor: { id: string; name: string };
-  state: 'open' | 'decided'; decision: { code: string; label: string; rationale: string | null; by: string | null; at: string | null } | null;
-  corrections?: { previous: { code: string; label: string; rationale: string; by: string; at: string }; now: { code: string; label: string; rationale: string }; reason: string; correctedBy: string; correctedAt: string; caseWasClosed: boolean }[] };
+  state: 'open' | 'held' | 'decided'; decision: { code: string; label: string; rationale: string | null; by: string | null; at: string | null } | null;
+  corrections?: { kind?: 'correction' | 'final_after_hold'; previous: { code: string; label: string; rationale: string; by: string; at: string }; now: { code: string; label: string; rationale: string }; reason: string; correctedBy: string; correctedAt: string; caseWasClosed: boolean }[] };
 export type ProductState = { applies: boolean; unknown?: boolean; needsAnswer?: string; required: boolean; suggested: boolean; suggestionText: string | null; assessments: ProductAssessment[]; openCount: number; unknownQuantity: boolean; closureBlocker: string | null };
 
 const NL = String.fromCharCode(10);
@@ -30,40 +30,51 @@ export function ProductCard({ product, base, reload, closed }: { product: Produc
   const q = Number(qty.replace(',', '.'));
   const qtyOk = unknown || (qty.trim() !== '' && Number.isFinite(q) && q >= 0);
   return (
-    <Card radius={22} style={{ padding: 15, gap: 8 }}>
+    <Card style={{ gap: 10 }}>
       <View testID="product-card"><Eyebrow>ÜRÜN KARARI · cihazın düzelmesinden ayrı</Eyebrow></View>
       {product.unknown ? <View testID="product-needs-answer"><Callout tone="warn">{product.suggestionText}</Callout></View> : product.suggestionText ? <Callout tone="warn">{product.suggestionText}</Callout> : null}
       {product.closureBlocker && !closed ? <Text testID="product-blocker" style={type(12.5, 600, { color: C.warn, lh: 1.4 })}>Kapatmayı engelliyor: {product.closureBlocker}</Text> : null}
       {product.unknownQuantity ? <Text style={type(12, 600, { color: C.warn })}>Miktarı bilinmeyen ürün var.</Text> : null}
       {product.assessments.map(a => (
         <View key={a.id} style={{ gap: 4, borderTopWidth: 1, borderTopColor: C.bd, paddingTop: 8 }}>
-          <Text style={type(13.5, 600)}>{a.product} · {a.quantityUnknown ? 'MİKTAR BİLİNMİYOR' : `${a.quantity}${a.unit ? ' ' + a.unit : ''}`}</Text>
+          <Text style={type(14.5, 700)}>{a.product} · {a.quantityUnknown ? 'MİKTAR BİLİNMİYOR' : `${a.quantity}${a.unit ? ' ' + a.unit : ''}`}</Text>
+          <View testID={`product-state-${a.id}`} style={{ alignSelf: 'flex-start' }}>
+            {a.state === 'open' ? <Pill label="KARAR BEKLİYOR" fg={C.warn} bg={tint.warn(0.16)} />
+              : a.state === 'held' ? <Pill label="BEKLETMEDE · SON KARAR BEKLİYOR" fg={C.warn} bg={tint.warn(0.16)} />
+                : <Pill label={`SON KARAR: ${a.decision!.label.toLocaleUpperCase('tr')}`} fg={C.lime} bg={tint.lime(0.14)} />}
+          </View>
           <Text style={type(12, 400, { color: C.t2, lh: 1.4 })}>İlk önlem: {a.firstAction}</Text>
           <Text style={type(11.5, 400, { color: C.t3 })}>Değerlendiren: {a.assessor.name}</Text>
           {a.decision ? (
-            <Text style={type(12.5, 600, { color: C.lime, lh: 1.4 })}>Karar: {a.decision.label} · {a.decision.by} · {a.decision.at ? fmtDateTime(a.decision.at) : ''}{'\n'}Gerekçe: {a.decision.rationale}</Text>
-          ) : !closed ? (
-            <View style={{ gap: 6 }}>
-              <Text style={type(12, 600, { color: C.warn })}>Karar açık{a.assessor.id === me?.userId ? ' · sende' : ''}</Text>
+            <Text style={type(13, 600, { color: a.state === 'held' ? C.t1 : C.lime, lh: 1.4 })}>{a.state === 'held' ? 'Geçici karar' : 'Karar'}: {a.decision.label} · {a.decision.by} · {a.decision.at ? fmtDateTime(a.decision.at) : ''}{'\n'}Gerekçe: {a.decision.rationale}</Text>
+          ) : null}
+          {a.state !== 'decided' && !closed ? (
+            <View style={{ gap: 8 }}>
+              <Text style={type(13, 700, { color: C.warn })}>{a.state === 'held' ? 'Arıza giderilince bu ürün için son karar ver' : 'Karar açık'}{a.assessor.id === me?.userId ? ' · sende' : ` · ${a.assessor.name}`}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {DECISIONS.map(([code, label]) => <GhostButton key={code} testID={`product-pick-${code}`} label={(pick[a.id] === code ? '● ' : '') + label} height={34} size={11.5} onPress={() => setPick(s => ({ ...s, [a.id]: code }))} />)}
+                {DECISIONS.filter(([code]) => a.state !== 'held' || code !== 'hold').map(([code, label]) => <FilterChip key={code} testID={`product-pick-${code}`} label={label} px={12} active={pick[a.id] === code} onPress={() => setPick(s => ({ ...s, [a.id]: code }))} />)}
               </View>
               <Field label="Kararın gerekçesi" testID="product-why" value={why[a.id] ?? ''} onChangeText={t => setWhy(s => ({ ...s, [a.id]: t }))} multiline />
-              <PrimaryButton testID="product-decide" label="Kararı kaydet" glow={false} height={40} size={12.5} disabled={busy || !pick[a.id] || (why[a.id] ?? '').trim().length < 10}
+              <PrimaryButton testID="product-decide" label={a.state === 'held' ? 'Son kararı kaydet' : 'Kararı kaydet'} glow={false} height={40} size={12.5} disabled={busy || !pick[a.id] || (why[a.id] ?? '').trim().length < 10}
                 why={missingWhy([[!pick[a.id], 'karar'], [(why[a.id] ?? '').trim().length < 10, `gerekçe (en az 10 karakter, şu an ${(why[a.id] ?? '').trim().length})`]])}
-                onPress={() => run(() => call('POST', `${base}/product-assessments/${a.id}/decision`, { decision: pick[a.id], rationale: why[a.id] }))} />
+                onPress={() => run(async () => { await call('POST', `${base}/product-assessments/${a.id}/decision`, { decision: pick[a.id], rationale: why[a.id] }); setPick(s => ({ ...s, [a.id]: '' })); setWhy(s => ({ ...s, [a.id]: '' })); })} />
             </View>
           ) : null}
           {(a.corrections ?? []).map((c, i) => (
             <View key={i} testID="product-correction" style={{ gap: 2, borderLeftWidth: 2, borderLeftColor: C.warn, paddingLeft: 8 }}>
-              <Text style={type(12, 600, { color: C.warn })}>Karar düzeltildi · {c.correctedBy} · {fmtDateTime(c.correctedAt)}{c.caseWasClosed ? ' · kapalı vaka yeniden açıldı' : ''}</Text>
-              <Text style={type(11.5, 400, { color: C.t2, lh: 1.4 })}>Önceki karar: {c.previous.label} · {c.previous.by} · {fmtDateTime(c.previous.at)}{NL}Önceki gerekçe: {c.previous.rationale}{NL}Düzeltme nedeni: {c.reason}</Text>
+              {c.kind === 'final_after_hold' ? (<>
+                <Text style={type(12, 600, { color: C.t2 })}>Önceki geçici karar: {c.previous.label} · {c.previous.by} · {fmtDateTime(c.previous.at)}</Text>
+                <Text style={type(12, 400, { color: C.t2, lh: 1.4 })}>Gerekçe: {c.previous.rationale}</Text>
+              </>) : (<>
+                <Text style={type(12, 600, { color: C.warn })}>Karar düzeltildi · {c.correctedBy} · {fmtDateTime(c.correctedAt)}{c.caseWasClosed ? ' · kapalı vaka yeniden açıldı' : ''}</Text>
+                <Text style={type(12, 400, { color: C.t2, lh: 1.4 })}>Önceki karar: {c.previous.label} · {c.previous.by} · {fmtDateTime(c.previous.at)}{NL}Önceki gerekçe: {c.previous.rationale}{NL}Düzeltme nedeni: {c.reason}</Text>
+              </>)}
             </View>
           ))}
-          {a.decision ? (fix === a.id ? (
+          {a.decision && (a.state === 'decided' || closed) ? (fix === a.id ? (
             <View style={{ gap: 6 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {DECISIONS.map(([code, label]) => <GhostButton key={code} testID={`product-fix-pick-${code}`} label={(fixPick === code ? '● ' : '') + label} height={34} size={11.5} onPress={() => setFixPick(code)} />)}
+                {DECISIONS.map(([code, label]) => <FilterChip key={code} testID={`product-fix-pick-${code}`} label={label} px={12} active={fixPick === code} onPress={() => setFixPick(code)} />)}
               </View>
               <Field label="Yeni kararın gerekçesi" testID="product-fix-new" value={fixNew} onChangeText={setFixNew} multiline />
               <Field label="Önceki karar neden yanlıştı? (düzeltme nedeni)" testID="product-fix-why" value={fixWhy} onChangeText={setFixWhy} multiline />

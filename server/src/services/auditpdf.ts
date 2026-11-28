@@ -6,7 +6,7 @@ import { forbidden, invalid, notFound } from '../domain/errors';
 import { can, type Principal } from '../domain/permissions';
 import { appendAudit } from './audit';
 import { listDocuments } from './documents';
-import { DECISION_TR, type ProductDecision } from './product-decisions';
+import { DECISION_TR, FINAL_AFTER_HOLD, type ProductDecision } from './product-decisions';
 
 /**
  * Audit file (6D) for a site (or all sites the person may see) and a date range: open critical cases,
@@ -143,8 +143,10 @@ export async function auditReport(tx: Tx, p: Principal, companyId: string, q: Re
   const productOf = (id: string) => prodRows.filter(x => x.ncr_id === id).map(x => ({
     product: x.product_ref as string, quantity: x.quantity_unknown ? 'MİKTAR BİLİNMİYOR' : `${Number(x.quantity).toLocaleString('tr-TR')}${x.quantity_unit ? ' ' + x.quantity_unit : ''}`,
     firstAction: x.first_action as string, assessor: x.assessor as string,
-    decision: x.decision ? `${DECISION_TR[x.decision as ProductDecision]} · ${x.decider ?? '—'} · ${tr(x.decided_at)} · gerekçe: ${clip(x.rationale, 200)}` : 'KARAR AÇIK',
-    previous: revRows.filter(v => v.assessment_id === x.id).map(v => `Önceki karar (düzeltildi ${tr(v.corrected_at)}, düzelten ${v.corrector}): ${DECISION_TR[v.prev_decision as ProductDecision]} · ${v.prev_by} · ${tr(v.prev_decided_at)} · gerekçe: ${clip(v.prev_rationale, 200)} · düzeltme nedeni: ${clip(v.reason, 200)}`) }));
+    decision: x.decision ? `${x.decision === 'hold' ? 'SON KARAR AÇIK · ' : ''}${DECISION_TR[x.decision as ProductDecision]} · ${x.decider ?? '—'} · ${tr(x.decided_at)} · gerekçe: ${clip(x.rationale, 200)}` : 'KARAR AÇIK',
+    previous: revRows.filter(v => v.assessment_id === x.id).map(v => v.reason === FINAL_AFTER_HOLD && v.prev_decision === 'hold'
+      ? `Geçici karar (son karar ${tr(v.corrected_at)}, veren ${v.corrector}): ${DECISION_TR.hold} · ${v.prev_by} · ${tr(v.prev_decided_at)} · gerekçe: ${clip(v.prev_rationale, 200)}`
+      : `Önceki karar (düzeltildi ${tr(v.corrected_at)}, düzelten ${v.corrector}): ${DECISION_TR[v.prev_decision as ProductDecision]} · ${v.prev_by} · ${tr(v.prev_decided_at)} · gerekçe: ${clip(v.prev_rationale, 200)} · düzeltme nedeni: ${clip(v.reason, 200)}`) }));
   const example = company.is_demo || sources.some(s => s.is_example);
   const generatedAt = new Date().toISOString();
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'audit.report_generated', entityType: 'company', entityId: companyId,

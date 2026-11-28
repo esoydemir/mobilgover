@@ -34,7 +34,7 @@ export default function ObligationsRoute() {
         <View key={sid} testID={`obl-site-${sid}`} style={{ gap: 11 }}>
           {grouped ? <Text testID={`obl-site-name-${sid}`} style={[type(10.5, 600, { ls: 0.12, color: C.t3 }), { marginTop: 8 }]}>{nameOf(sid).toLocaleUpperCase('tr')} · {rows.filter(o => o.siteId === sid && o.decision === 'applies').length} uygulanıyor</Text> : null}
           {rows.filter(o => o.siteId === sid).map(o => (
-        <Tap key={o.id} testID={`obl-${o.rule}`} onPress={() => router.push(`/obligation/${o.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 22, backgroundColor: C.card, padding: 15, gap: 8 }}>
+        <Tap key={o.id} testID={`obl-${o.rule}`} onPress={() => router.push(`/obligation/${o.id}`)} style={{ borderWidth: 1, borderColor: C.bd, borderRadius: 16, backgroundColor: C.card, padding: 14, gap: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Pill label={DECISION[o.decision][0]} fg={DECISION[o.decision][1]} bg={DECISION[o.decision][2]} />
             {o.isExample ? <ExampleBadge /> : null}
@@ -44,7 +44,7 @@ export default function ObligationsRoute() {
             <Text style={[type(14, 600, { ls: -0.01 }), { flex: 1 }]}>{o.title}</Text>
             <Chevron />
           </View>
-          <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{o.rule} · sürüm {o.version}{o.missingFacts.length ? ` · eksik: ${factLabels(o.missingFacts)}` : ''}</Text>
+          <Text style={type(11.5, 400, { color: C.t3, lh: 1.4 })}>{o.missingFacts.length ? `Eksik bilgi: ${factLabels(o.missingFacts)} · ` : ''}kural sürümü {o.version} · kayıt kodu {o.rule}</Text>
         </Tap>
           ))}
         </View>

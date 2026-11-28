@@ -9,8 +9,8 @@ import { loadNonconformity, reopen } from './nonconformities';
 /**
  * GH-07: the fate of the product, separate from the fix of the device. The device can be repaired and measure normally while the
  * product decision is still open. Only sectors where a product can be affected get these fields; a case with a product effect
- * cannot be closed until every product assessment that was opened has a decision with a reason (a written "no product effect" assessment by an
- * authorized person counts as a decision).
+ * cannot be closed until every product assessment that was opened has a final decision with a reason (a written "no product effect" assessment by an
+ * authorized person counts as a decision). A hold is a recorded decision but an interim one: the case stays open until the product's fate is decided.
  */
 export const PRODUCT_DECISIONS = ['release', 'rework', 'hold', 'destroy', 'return_supplier', 'no_product_effect'] as const;
 export type ProductDecision = (typeof PRODUCT_DECISIONS)[number];
@@ -19,6 +19,9 @@ export const DECISION_TR: Record<ProductDecision, string> = { release: 'Satışa
 /** Hazards that, in a product sector, suggest the product may be affected. Closure needs a product decision (or an authorized written "no product effect" assessment). */
 const PRODUCT_HAZARDS = new Set(['cold_chain_temperature']);
 const NO_EFFECT_MIN_REASON = 20;
+
+/** Reason written on the history row when the final decision follows a hold; it is not a correction of a mistake. */
+export const FINAL_AFTER_HOLD = 'Geçici bekletme sonrasında son karar verildi.';
 
 /**
  * Product fields exist where product that can be affected is kept: cold storage of product, or food preparation. What the site really does
@@ -40,12 +43,13 @@ type Row = { id: string; product_ref: string; quantity: string | null; quantity_
 type Rev = { assessment_id: string; prev_decision: ProductDecision; prev_rationale: string; prev_decided_at: Date; prev_by: string; new_decision: ProductDecision; new_rationale: string;
   reason: string; corrected_at: Date; corrector: string; case_was_closed: boolean };
 const revView = (r: Rev) => ({ previous: { code: r.prev_decision, label: DECISION_TR[r.prev_decision], rationale: r.prev_rationale, by: r.prev_by, at: r.prev_decided_at },
-  now: { code: r.new_decision, label: DECISION_TR[r.new_decision], rationale: r.new_rationale }, reason: r.reason, correctedBy: r.corrector, correctedAt: r.corrected_at, caseWasClosed: r.case_was_closed });
+  now: { code: r.new_decision, label: DECISION_TR[r.new_decision], rationale: r.new_rationale }, reason: r.reason, correctedBy: r.corrector, correctedAt: r.corrected_at, caseWasClosed: r.case_was_closed,
+  kind: r.reason === FINAL_AFTER_HOLD && r.prev_decision === 'hold' ? 'final_after_hold' as const : 'correction' as const });
 
 const view = (r: Row) => ({
   id: r.id, product: r.product_ref, quantity: r.quantity_unknown ? null : Number(r.quantity), unit: r.quantity_unit, quantityUnknown: r.quantity_unknown,
   firstAction: r.first_action, assessor: { id: r.assessor_id, name: r.assessor }, openedBy: r.opener, openedAt: r.opened_at,
-  state: r.decision ? 'decided' as const : 'open' as const,
+  state: !r.decision ? 'open' as const : r.decision === 'hold' ? 'held' as const : 'decided' as const,
   decision: r.decision ? { code: r.decision, label: DECISION_TR[r.decision], rationale: r.rationale, by: r.decider, at: r.decided_at, evidenceIds: r.evidence_ids } : null,
 });
 
@@ -67,9 +71,9 @@ export async function productState(tx: Tx, n: { id: string; company_id: string; 
   if (!applies && !rows.length) return null; // sites with no product effect do not see these fields
   const required = applies && (rows.length > 0 || PRODUCT_HAZARDS.has(n.hazard_type));
   const suggested = applies && rows.length === 0 && PRODUCT_HAZARDS.has(n.hazard_type);
-  const open = rows.filter(r => r.state === 'open');
+  const open = rows.filter(r => r.state !== 'decided');
   const blocker = !required ? null : !rows.length ? 'Ürün etkisi olabilecek kayıt: etkilenen ürün için değerlendirme başlat ya da yetkili kişi gerekçeli "ürün etkisi yok" kararı versin.'
-    : open.length ? `${open.length} ürün değerlendirmesinin kararı açık.` : null;
+    : open.length ? `${open.length} ürün değerlendirmesinin kararı açık. ${open.map(r => `${r.product}: ${r.state === 'held' ? 'bekletmede, son karar bekliyor' : 'karar verilmedi'}`).join(' · ')}.` : null;
   return { applies, required, suggested, suggestionText: suggested ? 'Bu kayıtta ürün etkilenmiş olabilir; kapatmak için ürün kararı gerekir. Etkilenen ürün için değerlendirme başlat; etkilenmediyse yetkili kişi gerekçeli "ürün etkisi yok" kararı versin.' : null, assessments: withCorrections, openCount: open.length, unknownQuantity: rows.some(r => r.quantityUnknown), closureBlocker: blocker };
 }
 
@@ -111,7 +115,9 @@ export async function decideAssessment(tx: Tx, p: Principal, companyId: string, 
   if (n.status === 'closed') throw conflict('NCR_CLOSED', 'Kapalı kayıtta ürün kararı verilemez; önce yeniden aç.');
   const a = (await tx.query(`SELECT * FROM ncr_product_assessments WHERE id = $1 AND ncr_id = $2 AND company_id = $3 FOR UPDATE`, [assessmentId, ncrId, companyId])).rows[0];
   if (!a) throw notFound('Ürün değerlendirmesi');
-  if (a.decision) throw conflict('PRODUCT_DECIDED', 'Bu değerlendirmenin kararı zaten verildi.');
+  const held = a.decision === 'hold';
+  if (a.decision && !held) throw conflict('PRODUCT_DECIDED', 'Bu değerlendirmenin kararı zaten verildi.');
+  if (held && b.decision === 'hold') throw conflict('PRODUCT_DECIDED', 'Ürün zaten bekletmede; şimdi son kararı ver.');
   const target = { companyId, siteId: n.site_id, recordId: n.id };
   const authorized = can(p, 'ncr.verify_close', target).ok;
   if (a.assessor_id !== p.userId && !authorized && !can(p, 'ncr.manage', target).ok) throw forbidden('Bu değerlendirmeyi atanan kişi ya da kaydı yöneten yetkili karara bağlar.');
@@ -122,6 +128,12 @@ export async function decideAssessment(tx: Tx, p: Principal, companyId: string, 
   if (b.rationale.trim().length < 10) throw invalid('Kararın gerekçesini yaz (en az bir cümle).');
   const ev = [...new Set(b.evidenceIds)];
   if (ev.length && (await tx.query(`SELECT 1 FROM evidence WHERE id = ANY($1) AND ncr_id = $2 AND company_id = $3`, [ev, ncrId, companyId])).rowCount !== ev.length) throw invalid('Kanıt bu kayda ait olmalı.');
+  if (held) {
+    // The interim decision stays on record with who gave it and why.
+    await tx.query(`INSERT INTO ncr_product_decision_revisions (company_id, ncr_id, assessment_id, prev_decision, prev_rationale, prev_evidence_ids, prev_decided_by, prev_decided_at, new_decision, new_rationale, reason, corrected_by, case_was_closed)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,false)`,
+      [companyId, ncrId, assessmentId, a.decision, a.rationale, a.evidence_ids, a.decided_by, a.decided_at, b.decision, b.rationale.trim(), FINAL_AFTER_HOLD, p.userId]);
+  }
   await tx.query(`UPDATE ncr_product_assessments SET decision = $2, rationale = $3, evidence_ids = $4, decided_by = $5, decided_at = clock_timestamp() WHERE id = $1`,
     [assessmentId, b.decision, b.rationale.trim(), ev, p.userId]);
   await appendAudit(tx, { companyId, actorId: p.userId, eventType: 'nonconformity.product_decided', entityType: 'nonconformity', entityId: ncrId,

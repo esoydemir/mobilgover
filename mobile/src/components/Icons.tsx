@@ -37,6 +37,24 @@ export const DocsIcon = ({ size = 21, color = C.t1, stroke = 1.9 }: P) => (
   </Svg>
 );
 
+export const PeopleIcon = ({ size = 21, color = C.t1, stroke = 1.9 }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" {...line(color, stroke)}>
+    <Path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.6-3.4 3.2-5.3 6.5-5.3s5.9 1.9 6.5 5.3M16 4.4a3.5 3.5 0 0 1 0 6.4M17.8 14.9c2 .7 3.3 2.4 3.7 5.1" />
+  </Svg>
+);
+
+export const UserIcon = ({ size = 21, color = C.t1, stroke = 1.9 }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" {...line(color, stroke)}>
+    <Path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20.5c.8-3.8 3.8-5.8 7.5-5.8s6.7 2 7.5 5.8" />
+  </Svg>
+);
+
+export const TrainingIcon = ({ size = 21, color = C.t1, stroke = 1.9 }: P) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" {...line(color, stroke)}>
+    <Path d="M2.5 9 12 4.5 21.5 9 12 13.5zM6.5 11.2V16c1.5 1.5 3.4 2.3 5.5 2.3s4-.8 5.5-2.3v-4.8M21.5 9v5" />
+  </Svg>
+);
+
 export const GridIcon = ({ size = 21, color = C.t1, stroke = 1.9 }: P) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" {...line(color, stroke)}>
     {[5.5, 12, 18.5].flatMap(y => [5.5, 12, 18.5].map(x => <Circle key={`${x}-${y}`} cx={x} cy={y} r={2.2} />))}
